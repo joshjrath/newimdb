@@ -38,7 +38,7 @@ export const SEGMENT_KIND_LABEL: Record<SegmentKind, string> = {
 export const EPISODE_STATES = ["unwatched", "watched", "skipped"] as const;
 export type EpisodeState = (typeof EPISODE_STATES)[number];
 
-export const REVIEW_SOURCES = ["manual", "letterboxd", "backup"] as const;
+export const REVIEW_SOURCES = ["manual", "letterboxd", "backup", "imdb"] as const;
 export type ReviewSource = (typeof REVIEW_SOURCES)[number];
 
 export const PROVIDERS = ["tmdb", "tvmaze", "jikan", "anilist"] as const;

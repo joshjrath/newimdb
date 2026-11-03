@@ -444,3 +444,22 @@ table.manage input[type="checkbox"] { width: 16px; height: 16px; accent-color: v
 .btn.primary:disabled { background: var(--sunk); color: var(--ink3); opacity: 1; filter: none; }
 /* On phones the rail already carries the category tabs. */
 @media (max-width: 860px) { .page-head .seg { display: none; } }
+
+/* ── IMDb import ───────────────────────────────────────────────────────── */
+.steps { margin: 0; padding-left: 20px; display: grid; gap: 6px; color: var(--ink2); font-size: 14px; }
+.steps b { color: var(--ink); }
+.import-totals { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+.import-totals .block { background: var(--cat); color: var(--black); border-radius: var(--r-m); padding: 16px 18px; display: grid; gap: 6px; }
+.import-totals .block .v, .import-totals .stat .v { font-family: var(--display); font-size: 34px; font-weight: 800; letter-spacing: -0.05em; line-height: 1; font-variant-numeric: tabular-nums; }
+.import-totals .block .k { font-size: 10.5px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; opacity: .7; }
+.choice { display: inline-flex; gap: 2px; background: var(--sunk); border-radius: 999px; padding: 3px; }
+.choice button { border: 0; background: transparent; color: var(--ink3); font-size: 12px; font-weight: 600; padding: 5px 10px; border-radius: 999px; cursor: pointer; }
+.choice button:hover { color: var(--ink); }
+.choice button[aria-checked="true"] { color: var(--black); font-weight: 700; }
+.choice .choice-movie[aria-checked="true"] { background: var(--salmon); }
+.choice .choice-tv[aria-checked="true"] { background: var(--yellow); }
+.choice .choice-anime[aria-checked="true"] { background: var(--lilac); }
+.choice .choice-skip[aria-checked="true"] { background: var(--ink3); }
+.plain-list { margin: 10px 0 0; padding-left: 18px; display: grid; gap: 4px; max-height: 260px; overflow: auto; }
+.plain-fieldset { border: 0; margin: 0; padding: 0; display: grid; gap: 8px; }
+details.notice summary { cursor: pointer; font-weight: 600; }

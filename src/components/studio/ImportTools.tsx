@@ -7,6 +7,7 @@ import type { PreviewRow, ImportAction } from "@/lib/repo/imports";
 import { Stars } from "../Stars";
 import { useUnsavedGuard } from "./useUnsavedGuard";
 import { excerpt } from "@/lib/domain/text";
+import { ImdbImport } from "./ImdbImport";
 
 const MATCH_LABEL: Record<PreviewRow["match"], string> = {
   new: "New",
@@ -34,6 +35,7 @@ const ACTION_LABEL: Record<ImportAction, string> = {
 export function ImportTools() {
   return (
     <div className="stack loose">
+      <ImdbImport />
       <LetterboxdImport />
       <Backup />
     </div>

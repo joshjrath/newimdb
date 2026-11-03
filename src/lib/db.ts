@@ -138,6 +138,30 @@ const MIGRATIONS: string[] = [
     user_agent TEXT
   );
   `,
+  // 2 — reviews can come from an IMDb ratings import
+  `
+  CREATE TABLE review_v2 (
+    media_id      INTEGER PRIMARY KEY REFERENCES media(id) ON DELETE CASCADE,
+    rating        REAL CHECK (rating IS NULL OR (rating >= 0.5 AND rating <= 5 AND rating * 2 = CAST(rating * 2 AS INTEGER))),
+    rating_label  TEXT,
+    body          TEXT NOT NULL DEFAULT '',
+    watched_on    TEXT,
+    spoiler       INTEGER NOT NULL DEFAULT 0,
+    status        TEXT CHECK (status IS NULL OR status IN ('watching','completed','dropped','plan','on_hold')),
+    featured      INTEGER NOT NULL DEFAULT 0,
+    visibility    TEXT NOT NULL DEFAULT 'private' CHECK (visibility IN ('private')),
+    source        TEXT NOT NULL DEFAULT 'manual' CHECK (source IN ('manual','letterboxd','backup','imdb')),
+    source_ref    TEXT,
+    last_watched_at TEXT,
+    created_at    TEXT NOT NULL,
+    updated_at    TEXT NOT NULL
+  );
+  INSERT INTO review_v2 SELECT * FROM review;
+  DROP TABLE review;
+  ALTER TABLE review_v2 RENAME TO review;
+  CREATE INDEX review_last_watched ON review(last_watched_at);
+  CREATE INDEX review_status ON review(status);
+  `,
 ];
 
 function migrate(db: DB) {

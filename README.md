@@ -114,6 +114,25 @@ Sources: your username (RSS feed, recent ~50 entries), pasted RSS, or the export
 - Your own manual reviews are never overwritten unless you choose "Replace".
 - Imports are private and never featured.
 
+### IMDb import (one time, all your ratings)
+Studio → Import & backup → **Import from IMDb**.
+
+1. On IMDb open **Your ratings → ⋯ → Export**, then download the CSV from the **Exports** page.
+2. Upload it and choose **Preview import**. Nothing is written yet.
+3. Check the preview, correct anything, then choose **Import**.
+
+How it works:
+- **Same-named titles stay apart.** Every row is matched by IMDb's own ID (`tt…`), never by title.
+- **Ratings convert exactly.** IMDb's 1–10 becomes 0.5–5 stars (8 → 4, 7 → 3.5).
+- **Sorting by IMDb's title type:**
+  - Movie, TV Movie, Short, Video and TV Special become **Movies**.
+  - TV Series and TV Mini Series become **TV Shows**.
+  - Video games, podcasts and music videos are left out.
+- **Anime is a guess.** IMDb has no anime type, so the app suggests Anime for animated titles whose original title differs from the English one. The preview has an "Animated: check these" filter with one-click "→ Anime" / "→ TV" buttons, and every row can be switched to Movie, TV, Anime or Skip.
+- **Episode ratings land in their show and season.** IMDb's free public episode lists (`title.episode`, `title.basics` from datasets.imdbws.com) are downloaded once to `DATA_DIR/cache/imdb` and reused for 30 days. Shows get their full season structure, so episodes you haven't rated appear as `?`. Episodes IMDb has no season/episode number for are listed as not placed.
+- **Re-running is safe.** Titles already in the library (same IMDb ID) are updated, never duplicated. You choose whether ratings you've changed here are kept or replaced.
+- Recently Watched follows the date you rated each title on IMDb. Everything imported is private.
+
 ### Editing safety
 - Saves use optimistic versioning. If an entry was changed in another tab, you get a clear conflict message and your form is kept.
 - "Saved" appears only after the server confirms the save. Failed saves show a persistent error and keep your edits.
@@ -143,7 +162,7 @@ Personal data (`review`, `episode_assessment`, `media_tag`) is stored apart from
 ## Tests
 
 ```bash
-npm test                         # 45 unit/integration tests (domain, repository, import, backup, providers)
+npm test                         # 51 unit/integration tests (domain, repository, import, backup, providers)
 npm run build && npm run test:e2e   # browser tests against the production build
 ```
 
