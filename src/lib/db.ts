@@ -190,7 +190,8 @@ function ensureDir(dir: string): string {
 }
 
 export function dataDir(): string {
-  return ensureDir(path.resolve(process.env.DATA_DIR || path.join(process.cwd(), "data")));
+  // DATA_DIR wins; on Railway, an attached volume is used automatically.
+  return ensureDir(path.resolve(process.env.DATA_DIR || process.env.RAILWAY_VOLUME_MOUNT_PATH || path.join(process.cwd(), "data")));
 }
 
 /** A private folder under DATA_DIR (uploads, poster cache, backups). Created once. */

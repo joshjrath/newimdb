@@ -5,15 +5,29 @@ import { SESSION_DAYS } from "./session-cookie";
 
 /**
  * Single-owner authentication.
- *  - Password is verified against OWNER_PASSWORD_HASH (scrypt), or OWNER_PASSWORD in non-production.
+ *  - Password is verified against OWNER_PASSWORD_HASH (scrypt) when set, otherwise OWNER_PASSWORD
+ *    (a plain secret in the host's variables, e.g. Railway). In production it must be 12+ characters.
  *  - Sessions are random 256-bit tokens; only their SHA-256 is stored.
  *  - Every page and API handler checks the session server-side. Middleware is UX only.
  */
 
-const devPassword = () => (process.env.NODE_ENV !== "production" ? process.env.OWNER_PASSWORD : undefined);
+export const MIN_PRODUCTION_PASSWORD = 12;
+
+/** The plain password, if one is set and long enough for where it's running. */
+const plainPassword = () => {
+  const p = process.env.OWNER_PASSWORD?.trim();
+  if (!p) return undefined;
+  return process.env.NODE_ENV === "production" && p.length < MIN_PRODUCTION_PASSWORD ? undefined : p;
+};
+
+/** Why sign-in can't work yet, or null when a password is configured. */
+export function authProblem(): "missing" | "too_short" | null {
+  if (process.env.OWNER_PASSWORD_HASH || plainPassword()) return null;
+  return process.env.OWNER_PASSWORD?.trim() ? "too_short" : "missing";
+}
 
 export function authConfigured(): boolean {
-  return Boolean(process.env.OWNER_PASSWORD_HASH || devPassword());
+  return authProblem() === null;
 }
 
 const sha = (t: string) => crypto.createHash("sha256").update(t).digest();
@@ -22,7 +36,7 @@ export async function checkOwnerPassword(password: string): Promise<boolean> {
   if (typeof password !== "string" || password.length === 0 || password.length > 1024) return false;
   const hash = process.env.OWNER_PASSWORD_HASH;
   if (hash) return verifyPasswordHash(password, hash);
-  const plain = devPassword();
+  const plain = plainPassword();
   return Boolean(plain) && crypto.timingSafeEqual(sha(password), sha(plain!));
 }
 

@@ -5,7 +5,7 @@ import { HttpError, publicApi, readJson } from "@/lib/guard";
 import { requestIsHttps, SESSION_COOKIE, sessionCookieOptions } from "@/lib/session-cookie";
 
 export const POST = publicApi(async (req) => {
-  if (!authConfigured()) throw new HttpError(503, "No owner password is configured on the server. Set OWNER_PASSWORD_HASH (see README).");
+  if (!authConfigured()) throw new HttpError(503, "No password is set on the server. Add OWNER_PASSWORD (12+ characters) to the host's variables and redeploy.");
   const ip = (req.headers.get("x-forwarded-for") ?? "local").split(",")[0].trim();
   if (loginThrottled(ip)) throw new HttpError(429, "Too many attempts. Wait 15 minutes and try again.");
   const { password } = await readJson(req, z.object({ password: z.string().max(1024) }));

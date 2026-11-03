@@ -10,8 +10,7 @@ Requires Node 22.18 or newer (the `scripts/*.ts` helpers run directly with Node'
 
 ```bash
 npm install
-npm run hash-password            # prints OWNER_PASSWORD_HASH=...
-cp .env.example .env.local       # paste the hash in, set DATA_DIR if you want
+cp .env.example .env.local       # set OWNER_PASSWORD (12+ characters)
 npm run build && npm start       # http://localhost:3000
 ```
 
@@ -21,19 +20,26 @@ Optional sample content (clearly marked "SAMPLE", tagged `Sample`):
 OWNER_PASSWORD='your password' npm run seed
 ```
 
-Development: `npm run dev`. For local dev only, you can set `OWNER_PASSWORD` in plain text instead of a hash. The app ignores it when `NODE_ENV=production`.
+Development: `npm run dev` (any password length is accepted there).
 
 ### Environment
 
 | Variable | Purpose |
 |---|---|
-| `OWNER_PASSWORD_HASH` | **Required.** scrypt hash from `npm run hash-password`. |
-| `DATA_DIR` | Database, uploads, poster cache and backups. Default `./data`. Keep it private and backed up. |
+| `OWNER_PASSWORD` | **Required** (or the hash below). The sign-in password; at least 12 characters on a live site. |
+| `OWNER_PASSWORD_HASH` | Optional instead: a scrypt hash from `npm run hash-password`. Used first when set. |
+| `DATA_DIR` | Database, uploads, poster cache and backups. Default: a Railway volume's mount path when one is attached, else `./data`. Keep it private and backed up. |
 | `TMDB_READ_TOKEN` / `TMDB_API_KEY` | Optional. Enables movie search and the preferred TV provider. |
 | `PROVIDER_TIMEOUT_MS` | Per-provider timeout before falling back. Default 6000. |
 | `COOKIE_SECURE` | Optional. The sign-in cookie is Secure automatically over https; set `true`/`false` only to force it. |
 
 ## Hosting
+
+### Railway (no local setup needed)
+1. Deploy this repo/branch as a service. Railway runs `npm run build` and `npm start` on its own.
+2. **Variables:** add `OWNER_PASSWORD` (12+ characters). Optionally `TMDB_READ_TOKEN`.
+3. **Volume:** add a volume to the service (any mount path, e.g. `/data`). The app stores everything there automatically. Without it, every deploy wipes your library.
+4. Redeploy, open the Railway URL, sign in.
 
 The app uses SQLite on local disk, so it needs a host with a **persistent filesystem**: a VPS, Fly.io with a volume, Railway with a volume, or a home server. Serverless hosting without persistent disk, such as default Vercel, would lose data. Moving to Postgres later only means swapping the repository layer in `src/lib/repo/`.
 
@@ -42,7 +48,7 @@ Back up `DATA_DIR`. `npm run backup` writes a consistent SQLite snapshot to `DAT
 ## Privacy model
 
 - **Server-side checks everywhere.** Every page calls `requireOwnerPage()` and every API route is wrapped in `ownerApi()`. Both check the session token against the database. The middleware redirect is only a convenience; security doesn't depend on it.
-- Sessions are random 256-bit tokens, stored only as SHA-256 hashes, in an httpOnly, SameSite=Lax, Secure (in production) cookie. Failed logins are throttled.
+- Sessions are random 256-bit tokens, stored only as SHA-256 hashes, in an httpOnly, SameSite=Lax cookie, marked Secure whenever the site is served over https. Failed logins are throttled.
 - Writes need a same-origin `Origin` header (CSRF protection) and a JSON body.
 - No static generation: every route is dynamic. Responses send `Cache-Control: private, no-store`, `X-Robots-Tag: noindex`, `Referrer-Policy: no-referrer` and a strict CSP. `robots.txt` blocks everything (courtesy only, not security).
 - Posters are fetched through an authenticated proxy (`/api/poster`) limited to known image hosts. It follows redirects only to those same hosts and checks the actual image bytes. So `img-src 'self'` holds, and the browser never contacts third parties directly.
