@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { authConfigured, checkOwnerPassword, clearFailedLogins, createSession, loginThrottled, recordFailedLogin } from "@/lib/auth";
 import { HttpError, publicApi, readJson } from "@/lib/guard";
-import { SESSION_COOKIE, sessionCookieOptions } from "@/lib/session-cookie";
+import { requestIsHttps, SESSION_COOKIE, sessionCookieOptions } from "@/lib/session-cookie";
 
 export const POST = publicApi(async (req) => {
   if (!authConfigured()) throw new HttpError(503, "No owner password is configured on the server. Set OWNER_PASSWORD_HASH (see README).");
@@ -17,6 +17,6 @@ export const POST = publicApi(async (req) => {
   clearFailedLogins(ip);
   const { token, expires } = createSession(req.headers.get("user-agent"));
   const res = NextResponse.json({ ok: true });
-  res.cookies.set(SESSION_COOKIE, token, sessionCookieOptions(expires));
+  res.cookies.set(SESSION_COOKIE, token, sessionCookieOptions(expires, requestIsHttps(req)));
   return res;
 });

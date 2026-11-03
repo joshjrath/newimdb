@@ -17,8 +17,17 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
           <LoginForm next={safeNext} />
         ) : (
           <div className="notice warn">
-            No owner password is set on the server. Run <code>npm run hash-password</code> and put the result in{" "}
-            <code>OWNER_PASSWORD_HASH</code>, then restart.
+            {process.env.NODE_ENV !== "production" ? (
+              <>
+                The server didn&apos;t find a password. Put <code>OWNER_PASSWORD=your-password</code> in a file called{" "}
+                <code>.env.local</code> in the project folder, saved as plain UTF-8 text, then stop and restart <code>npm run dev</code>.
+              </>
+            ) : (
+              <>
+                The server didn&apos;t find a password. A production build ignores <code>OWNER_PASSWORD</code>: run{" "}
+                <code>npm run hash-password</code>, put the line it prints in your environment, then restart.
+              </>
+            )}
           </div>
         )}
       </div>

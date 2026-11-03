@@ -31,7 +31,7 @@ Development: `npm run dev`. For local dev only, you can set `OWNER_PASSWORD` in 
 | `DATA_DIR` | Database, uploads, poster cache and backups. Default `./data`. Keep it private and backed up. |
 | `TMDB_READ_TOKEN` / `TMDB_API_KEY` | Optional. Enables movie search and the preferred TV provider. |
 | `PROVIDER_TIMEOUT_MS` | Per-provider timeout before falling back. Default 6000. |
-| `COOKIE_SECURE` | Set `false` only when running the production build over plain http on localhost. |
+| `COOKIE_SECURE` | Optional. The sign-in cookie is Secure automatically over https; set `true`/`false` only to force it. |
 
 ## Hosting
 
