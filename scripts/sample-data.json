@@ -1,0 +1,229 @@
+[
+ {
+  "create": {
+   "type": "movie",
+   "metadata": {
+    "title": "Sample Film: The Long Quiet",
+    "year": 2023,
+    "genres": [
+     "Drama"
+    ]
+   },
+   "review": {
+    "rating": 4.5,
+    "ratingLabel": "Excellent",
+    "body": "SAMPLE REVIEW. Replace or delete me.\n\nA slow, patient film that earns its ending. This second paragraph shows that paragraph breaks survive saving, display and image export.",
+    "watchedOn": "2026-10-30",
+    "status": "completed",
+    "spoiler": false,
+    "featured": true,
+    "visibility": "private"
+   },
+   "tags": [
+    "Sample",
+    "Drama"
+   ]
+  }
+ },
+ {
+  "create": {
+   "type": "movie",
+   "metadata": {
+    "title": "Sample Film: Neon Harbour",
+    "year": 2019
+   },
+   "review": {
+    "rating": 3,
+    "body": "SAMPLE REVIEW. Fun, loud, forgettable. Marked as containing spoilers.",
+    "watchedOn": "2026-09-12",
+    "status": "completed",
+    "spoiler": true,
+    "featured": false,
+    "visibility": "private"
+   },
+   "tags": [
+    "Sample"
+   ]
+  }
+ },
+ {
+  "create": {
+   "type": "movie",
+   "metadata": {
+    "title": "Sample Film: No Poster",
+    "year": 2001
+   },
+   "review": {
+    "rating": null,
+    "body": "",
+    "watchedOn": "2026-08-01",
+    "status": "completed",
+    "spoiler": false,
+    "featured": false,
+    "visibility": "private"
+   },
+   "tags": [
+    "Sample"
+   ]
+  }
+ },
+ {
+  "create": {
+   "type": "tv",
+   "metadata": {
+    "title": "Sample Show: Harbour Lights",
+    "year": 2018,
+    "genres": [
+     "Crime"
+    ]
+   },
+   "review": {
+    "rating": 4,
+    "body": "SAMPLE REVIEW. Overall rating set by hand; the episode average is separate.",
+    "status": "watching",
+    "spoiler": false,
+    "featured": false,
+    "visibility": "private"
+   },
+   "tags": [
+    "Sample",
+    "True Crime"
+   ],
+   "segments": [
+    {
+     "kind": "season",
+     "label": "Season 1",
+     "seasonNumber": 1,
+     "courNumber": null,
+     "episodeCount": 10
+    },
+    {
+     "kind": "season",
+     "label": "Season 2",
+     "seasonNumber": 2,
+     "courNumber": null,
+     "episodeCount": 10
+    },
+    {
+     "kind": "season",
+     "label": "Season 3",
+     "seasonNumber": 3,
+     "courNumber": null,
+     "episodeCount": 12
+    },
+    {
+     "kind": "season",
+     "label": "Season 4",
+     "seasonNumber": 4,
+     "courNumber": null,
+     "episodeCount": 8
+    },
+    {
+     "kind": "season",
+     "label": "Season 5",
+     "seasonNumber": 5,
+     "courNumber": null,
+     "episodeCount": 6
+    }
+   ]
+  },
+  "ratings": "S1E1: 5\nS1E2: 4\nS1E3: 2.5\nS1E4: 3\nS1E5: 3.5\nS1E6: 3.5\nS1E7: 5\nS1E8: 3\nS1E9: 4\nS1E10: 3\nS2E1: 3.5\nS2E2: 2.5\nS2E3: 2.5\nS2E4: 3.5\nS2E5: 4\nS2E6: 3.5\nS2E7: 2.5\nS2E8: 3\nS2E9: 3.5\nS2E10: 4\nS3E1: 3\nS3E2: 2.5\nS3E3: 3\nS3E4: 4\nS3E5: 3\nS2E4: skip\nS2E7: 3 filler"
+ },
+ {
+  "create": {
+   "type": "anime",
+   "metadata": {
+    "title": "Sample Anime: Starfall Academy",
+    "year": 2021
+   },
+   "review": {
+    "rating": 4.5,
+    "body": "SAMPLE REVIEW. Shows cours, an OVA watched between cours, a movie and specials.",
+    "status": "watching",
+    "spoiler": false,
+    "featured": false,
+    "visibility": "private"
+   },
+   "tags": [
+    "Sample",
+    "Shonen"
+   ],
+   "segments": [
+    {
+     "kind": "cour",
+     "label": "Season 1 · Cour 1",
+     "seasonNumber": 1,
+     "courNumber": 1,
+     "episodeCount": 12
+    },
+    {
+     "kind": "ova",
+     "label": "OVA",
+     "seasonNumber": null,
+     "courNumber": null,
+     "episodeCount": 1
+    },
+    {
+     "kind": "cour",
+     "label": "Season 1 · Cour 2",
+     "seasonNumber": 1,
+     "courNumber": 2,
+     "episodeCount": 12
+    },
+    {
+     "kind": "movie",
+     "label": "Movie 1",
+     "seasonNumber": null,
+     "courNumber": null,
+     "episodeCount": 1
+    },
+    {
+     "kind": "season",
+     "label": "Season 2",
+     "seasonNumber": 2,
+     "courNumber": null,
+     "episodeCount": 13
+    },
+    {
+     "kind": "special",
+     "label": "Specials",
+     "seasonNumber": null,
+     "courNumber": null,
+     "episodeCount": 3
+    }
+   ]
+  },
+  "ratings": "S1C1E1: 4\nS1C1E2: 4.5\nS1C1E3: 5\nS1C1E4: 4\nS1C1E5: 3.5\nS1C1E6: 4.5\nS1C1E7: 4\nS1C1E8: 3.5\nS1C1E9: 4\nS1C1E10: 4.5\nS1C1E11: 3.5\nS1C1E12: 3.5\n\"OVA\" E1: 4\nS1C2E1: 4.5\nS1C2E2: 3\nS1C2E3: 4.5\nS1C2E4: 3\nS1C2E5: 4\nS1C2E6: 4.5\nS1C2E7: 4.5\nS1C2E5: 2 filler\nS1C2E6: skip"
+ },
+ {
+  "create": {
+   "type": "tv",
+   "metadata": {
+    "title": "Sample Show: Office Hours",
+    "year": 2010
+   },
+   "review": {
+    "rating": 2,
+    "body": "SAMPLE REVIEW. Dropped after a few episodes.",
+    "status": "dropped",
+    "spoiler": false,
+    "featured": false,
+    "visibility": "private"
+   },
+   "tags": [
+    "Sample",
+    "Sitcom"
+   ],
+   "segments": [
+    {
+     "kind": "season",
+     "label": "Season 1",
+     "seasonNumber": 1,
+     "courNumber": null,
+     "episodeCount": 6
+    }
+   ]
+  },
+  "ratings": "S1E1: 2.5\nS1E2: 2\nS1E3: 1.5"
+ }
+]

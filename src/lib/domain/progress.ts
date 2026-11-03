@@ -1,0 +1,108 @@
+import type { EpisodeView, SegmentView } from "./types";
+
+/**
+ * PROGRESS POLICY (documented choice — the source left it open):
+ *  - An episode is "watched" when its state is `watched` (a rating always implies watched).
+ *  - Intentionally skipped episodes (N/A) are removed from the denominator, and reported
+ *    separately as "skipped". They never count as watched.
+ *  - Filler is an independent flag; filler episodes count like any other episode.
+ *  - Padding cells in the heatmap are visual only and are never episodes.
+ */
+export interface Progress {
+  total: number; // real episodes in the structure
+  watched: number;
+  rated: number;
+  skipped: number;
+  remaining: number; // not watched and not skipped
+  denominator: number; // total - skipped
+  percent: number; // 0–100, watched / denominator
+}
+
+export function computeProgress(episodes: EpisodeView[]): Progress {
+  let watched = 0,
+    rated = 0,
+    skipped = 0;
+  for (const e of episodes) {
+    if (e.state === "watched") watched++;
+    if (e.rating != null) rated++;
+    if (e.state === "skipped") skipped++;
+  }
+  const total = episodes.length;
+  const denominator = total - skipped;
+  return {
+    total,
+    watched,
+    rated,
+    skipped,
+    remaining: denominator - watched,
+    denominator,
+    percent: denominator === 0 ? 0 : Math.round((watched / denominator) * 1000) / 10,
+  };
+}
+
+export function average(values: number[]): number | null {
+  if (values.length === 0) return null;
+  return Math.round((values.reduce((a, b) => a + b, 0) / values.length) * 100) / 100;
+}
+
+/** Arithmetic mean of rated episodes. Never used as the owner's overall rating. */
+export function episodeAverage(episodes: EpisodeView[]): number | null {
+  return average(episodes.filter((e) => e.rating != null).map((e) => e.rating as number));
+}
+
+export function allEpisodes(segments: SegmentView[]): EpisodeView[] {
+  return orderedSegments(segments).flatMap((s) => [...s.episodes].sort((a, b) => a.number - b.number));
+}
+
+export function orderedSegments(segments: SegmentView[]): SegmentView[] {
+  return [...segments].sort((a, b) => a.position - b.position || a.id - b.id);
+}
+
+export interface ActivePointer {
+  /** Segment the owner is currently in (by real progress, never "highest number"). */
+  segment: SegmentView | null;
+  /** The next episode to watch, or null if caught up / finished. */
+  nextEpisode: EpisodeView | null;
+  /** Most recently progressed watched episode in watch order. */
+  lastWatched: EpisodeView | null;
+  caughtUp: boolean;
+}
+
+/**
+ * Active season / next episode derived from actual progress:
+ *  - Find the furthest watched episode in chronological watch order.
+ *  - The next episode is the first later episode that is neither watched nor skipped.
+ *  - If that episode lives in the next season (previous one complete), the next season is active.
+ *  - Empty future seasons (no episodes yet) are never chosen.
+ */
+export function activePointer(segments: SegmentView[]): ActivePointer {
+  const ordered = orderedSegments(segments).filter((s) => s.episodes.length > 0);
+  const flat = ordered.flatMap((s) => [...s.episodes].sort((a, b) => a.number - b.number));
+  let lastIdx = -1;
+  flat.forEach((e, i) => {
+    if (e.state === "watched") lastIdx = i;
+  });
+  let next: EpisodeView | null = null;
+  for (let i = lastIdx + 1; i < flat.length; i++) {
+    if (flat[i].state === "unwatched") {
+      next = flat[i];
+      break;
+    }
+  }
+  const lastWatched = lastIdx >= 0 ? flat[lastIdx] : null;
+  const pivot = next ?? lastWatched;
+  const segment = pivot ? ordered.find((s) => s.id === pivot.segmentId) ?? null : ordered[0] ?? null;
+  return { segment, nextEpisode: next, lastWatched, caughtUp: next == null && lastWatched != null };
+}
+
+export function segmentCode(s: Pick<SegmentView, "kind" | "label" | "seasonNumber" | "courNumber">): string {
+  if ((s.kind === "season" || s.kind === "cour") && s.seasonNumber != null) {
+    return `S${s.seasonNumber}${s.courNumber != null ? `C${s.courNumber}` : ""}`;
+  }
+  return s.label;
+}
+
+export function episodeCode(s: SegmentView, e: Pick<EpisodeView, "number">): string {
+  const code = segmentCode(s);
+  return /^S\d+/.test(code) ? `${code}E${e.number}` : `${code} · E${e.number}`;
+}
