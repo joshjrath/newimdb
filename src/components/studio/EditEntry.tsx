@@ -9,10 +9,12 @@ import { StarInput } from "../StarInput";
 import { useUnsavedGuard } from "./useUnsavedGuard";
 import { StructureEditor } from "./StructureEditor";
 import { EpisodeTextPanel } from "./EpisodeTextPanel";
-import type { MediaDetail, SegmentView } from "@/lib/domain/types";
-import { STATUS_LABEL, TYPE_LABEL, TYPE_TO_CATEGORY, WATCH_STATUSES } from "@/lib/domain/types";
+import { SaveState } from "./SaveState";
+import { StatusOptions } from "../Options";
+import { TYPE_LABEL, type MediaDetail, type MediaView, type SegmentView } from "@/lib/domain/types";
 import { suggestedLabel } from "@/lib/domain/rating";
-import { slugify, wordCount } from "@/lib/domain/text";
+import { mediaHref } from "@/lib/domain/links";
+import { wordCount } from "@/lib/domain/text";
 
 type Draft = {
   title: string; originalTitle: string; year: string; overview: string; posterUrl: string; backdropUrl: string; runtimeMin: string;
@@ -22,7 +24,7 @@ type Draft = {
   tags: string;
 };
 
-function toDraft(m: MediaDetail): Draft {
+function toDraft(m: MediaView): Draft {
   const s = (v: unknown) => (v == null ? "" : String(v));
   return {
     title: m.title, originalTitle: s(m.originalTitle), year: s(m.year), overview: s(m.overview), posterUrl: s(m.posterUrl),
@@ -58,7 +60,7 @@ const LOCKABLE: [keyof Draft, string][] = [["title", "Title"], ["year", "Year"],
 export function EditEntry({ initial }: { initial: MediaDetail }) {
   const router = useRouter();
   const toast = useToast();
-  const [media, setMedia] = useState(initial);
+  const { id, type } = initial;
   const [version, setVersion] = useState(initial.version);
   const [saved, setSaved] = useState(() => toDraft(initial));
   const [draft, setDraft] = useState(() => toDraft(initial));
@@ -79,11 +81,9 @@ export function EditEntry({ initial }: { initial: MediaDetail }) {
     setSaving(true);
     setError(null);
     try {
-      const r = await api<{ media: MediaDetail }>(`/api/media/${media.id}`, { method: "PATCH", body: toPatch(draft, version) });
-      const next = { ...r.media, segments };
-      setMedia(next);
+      const r = await api<{ media: MediaView }>(`/api/media/${id}`, { method: "PATCH", body: toPatch(draft, version) });
       setVersion(r.media.version);
-      const d = toDraft(next);
+      const d = toDraft(r.media);
       setSaved(d);
       setDraft(d);
       toast.push("ok", "Saved.");
@@ -94,7 +94,7 @@ export function EditEntry({ initial }: { initial: MediaDetail }) {
     } finally {
       setSaving(false);
     }
-  }, [draft, version, media.id, segments, toast]);
+  }, [draft, version, id, toast]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -111,10 +111,8 @@ export function EditEntry({ initial }: { initial: MediaDetail }) {
     const fd = new FormData();
     fd.append("file", file);
     try {
-      const res = await fetch("/api/uploads", { method: "POST", body: fd });
-      const body = await res.json();
-      if (!res.ok) throw new Error(body.error ?? "Upload failed");
-      set("posterUrl", body.url);
+      const { url } = await api<{ url: string }>("/api/uploads", { body: fd });
+      set("posterUrl", url);
       toast.push("ok", "Poster uploaded. Save to keep it.");
     } catch (e) {
       toast.push("error", (e as Error).message);
@@ -124,13 +122,12 @@ export function EditEntry({ initial }: { initial: MediaDetail }) {
   const refresh = async () => {
     if (dirty && !confirm("Refreshing replaces unsaved metadata edits in this form. Continue?")) return;
     try {
-      const r = await api<{ media: MediaDetail; provider: string; warnings: string[] }>(`/api/media/${media.id}/refresh`, { body: {} });
-      const next = { ...r.media, segments };
-      setMedia(next);
+      const r = await api<{ media: MediaView; provider: string }>(`/api/media/${id}/refresh`, { body: {} });
       setVersion(r.media.version);
-      const d = { ...toDraft(next), body: draft.body, rating: draft.rating };
-      setSaved(toDraft(next));
-      setDraft(dirty ? d : toDraft(next));
+      const fresh = toDraft(r.media);
+      setSaved(fresh);
+      // Keep unsaved review edits; metadata comes from the refresh.
+      setDraft(dirty ? { ...fresh, body: draft.body, rating: draft.rating } : fresh);
       toast.push("ok", `Details refreshed from ${r.provider}. Locked fields, your review and ratings were left alone.`);
     } catch (e) {
       toast.push("error", (e as Error).message);
@@ -138,9 +135,9 @@ export function EditEntry({ initial }: { initial: MediaDetail }) {
   };
 
   const del = async () => {
-    if (prompt(`Delete "${media.title}" with its review and all episode ratings? Type DELETE to confirm.`) !== "DELETE") return;
+    if (prompt(`Delete "${saved.title}" with its review and all episode ratings? Type DELETE to confirm.`) !== "DELETE") return;
     try {
-      await api(`/api/media/${media.id}`, { method: "DELETE" });
+      await api(`/api/media/${id}`, { method: "DELETE" });
       toast.push("ok", "Deleted.");
       router.push("/studio");
     } catch (e) {
@@ -148,15 +145,15 @@ export function EditEntry({ initial }: { initial: MediaDetail }) {
     }
   };
 
-  const viewHref = `/watch/${TYPE_TO_CATEGORY[media.type]}/${media.id}-${slugify(saved.title)}`;
+  const viewHref = mediaHref({ id, type, title: saved.title });
   const words = wordCount(draft.body);
   const isLocked = (k: string) => draft.lockedFields.includes(k);
 
   return (
-    <div style={{ display: "grid", gap: 24 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", gap: 16, alignItems: "end", flexWrap: "wrap", marginTop: 24 }}>
+    <div className="stack loose">
+      <div className="page-head">
         <div>
-          <p className="hint"><Link href="/studio">Studio</Link> · {TYPE_LABEL[media.type]}</p>
+          <p className="hint"><Link href="/studio">Studio</Link> · {TYPE_LABEL[type]}</p>
           <h1>{saved.title}</h1>
         </div>
         <div className="toolbar">
@@ -177,7 +174,7 @@ export function EditEntry({ initial }: { initial: MediaDetail }) {
               <span>Rating label (optional)</span>
               <input className="input" value={draft.ratingLabel} maxLength={40} placeholder={suggestedLabel(draft.rating) ?? "e.g. Perfect"} onChange={(e) => set("ratingLabel", e.target.value)} />
               {draft.rating != null && !draft.ratingLabel && suggestedLabel(draft.rating) && (
-                <button type="button" className="btn small ghost" style={{ justifySelf: "start" }} onClick={() => set("ratingLabel", suggestedLabel(draft.rating)!)}>
+                <button type="button" className="btn small ghost self-start" onClick={() => set("ratingLabel", suggestedLabel(draft.rating)!)}>
                   Use “{suggestedLabel(draft.rating)}”
                 </button>
               )}
@@ -186,11 +183,11 @@ export function EditEntry({ initial }: { initial: MediaDetail }) {
               <span>Status</span>
               <select className="select" value={draft.status} onChange={(e) => set("status", e.target.value)}>
                 <option value="">None</option>
-                {WATCH_STATUSES.map((s) => <option key={s} value={s}>{STATUS_LABEL[s]}</option>)}
+                <StatusOptions />
               </select>
             </label>
             <label className="field">
-              <span>{media.type === "movie" ? "Date watched" : "Date finished / last watched"}</span>
+              <span>{type === "movie" ? "Date watched" : "Date finished / last watched"}</span>
               <input className="input" type="date" value={draft.watchedOn} onChange={(e) => set("watchedOn", e.target.value)} />
             </label>
           </div>
@@ -215,12 +212,12 @@ export function EditEntry({ initial }: { initial: MediaDetail }) {
 
         <aside className="panel" aria-labelledby="poster-h">
           <header><h2 id="poster-h">Poster</h2></header>
-          <div style={{ maxWidth: 220 }}><Poster url={draft.posterUrl || null} title={draft.title || media.title} contain /></div>
+          <div style={{ maxWidth: 220 }}><Poster url={draft.posterUrl || null} title={draft.title || saved.title} contain /></div>
           <label className="field">
             <span>Image URL</span>
             <input className="input" value={draft.posterUrl} onChange={(e) => set("posterUrl", e.target.value)} />
           </label>
-          <label className="btn" style={{ justifySelf: "start" }}>
+          <label className="btn self-start">
             Upload image
             <input type="file" accept="image/jpeg,image/png,image/webp,image/gif,image/avif" className="visually-hidden" onChange={(e) => e.target.files?.[0] && upload(e.target.files[0])} />
           </label>
@@ -240,11 +237,11 @@ export function EditEntry({ initial }: { initial: MediaDetail }) {
           <label className="field wide"><span>Genres</span><input className="input" value={draft.genres} onChange={(e) => set("genres", e.target.value)} /></label>
           <label className="field wide"><span>Overview</span><textarea className="textarea" style={{ minHeight: 90, fontSize: "0.98rem" }} value={draft.overview} onChange={(e) => set("overview", e.target.value)} /></label>
           <label className="field"><span>IMDb ID</span><input className="input" value={draft.imdbId} placeholder="tt0903747" onChange={(e) => set("imdbId", e.target.value)} /></label>
-          {media.type !== "anime" && <label className="field"><span>TMDB ID</span><input className="input" inputMode="numeric" value={draft.tmdbId} onChange={(e) => set("tmdbId", e.target.value)} /></label>}
-          {media.type === "tv" && <label className="field"><span>TVmaze ID</span><input className="input" inputMode="numeric" value={draft.tvmazeId} onChange={(e) => set("tvmazeId", e.target.value)} /></label>}
-          {media.type === "anime" && <label className="field"><span>MyAnimeList ID</span><input className="input" inputMode="numeric" value={draft.malId} onChange={(e) => set("malId", e.target.value)} /></label>}
-          {media.type === "anime" && <label className="field"><span>AniList ID</span><input className="input" inputMode="numeric" value={draft.anilistId} onChange={(e) => set("anilistId", e.target.value)} /></label>}
-          {media.type === "movie" && <label className="field"><span>Letterboxd URL</span><input className="input" value={draft.letterboxdUrl} onChange={(e) => set("letterboxdUrl", e.target.value)} /></label>}
+          {type !== "anime" && <label className="field"><span>TMDB ID</span><input className="input" inputMode="numeric" value={draft.tmdbId} onChange={(e) => set("tmdbId", e.target.value)} /></label>}
+          {type === "tv" && <label className="field"><span>TVmaze ID</span><input className="input" inputMode="numeric" value={draft.tvmazeId} onChange={(e) => set("tvmazeId", e.target.value)} /></label>}
+          {type === "anime" && <label className="field"><span>MyAnimeList ID</span><input className="input" inputMode="numeric" value={draft.malId} onChange={(e) => set("malId", e.target.value)} /></label>}
+          {type === "anime" && <label className="field"><span>AniList ID</span><input className="input" inputMode="numeric" value={draft.anilistId} onChange={(e) => set("anilistId", e.target.value)} /></label>}
+          {type === "movie" && <label className="field"><span>Letterboxd URL</span><input className="input" value={draft.letterboxdUrl} onChange={(e) => set("letterboxdUrl", e.target.value)} /></label>}
         </div>
         <fieldset style={{ border: 0, padding: 0, margin: 0 }}>
           <legend className="label" style={{ marginBottom: 6 }}>Keep my version when refreshing</legend>
@@ -264,28 +261,25 @@ export function EditEntry({ initial }: { initial: MediaDetail }) {
       </section>
 
       <div className="savebar">
-        <span className={`state${error ? " err" : dirty ? " dirty" : ""}`} role="status">
-          {error ? error : saving ? "Saving…" : dirty ? "Unsaved changes" : "All changes saved"}
-        </span>
+        <SaveState error={error} saving={saving} dirty={dirty} />
         {dirty && <button className="btn ghost" onClick={() => { setDraft(saved); setError(null); }}>Discard</button>}
         <button className="btn primary" disabled={!dirty || saving} onClick={save}>Save review and details</button>
       </div>
 
-      {media.type !== "movie" && (
+      {type !== "movie" && (
         <>
           <StructureEditor
-            mediaId={media.id}
-            type={media.type}
+            mediaId={id}
+            type={type}
             segments={segments}
             version={version}
-            onSaved={(segs, v) => {
+            onChange={(segs, v) => {
               setSegments(segs);
-              setVersion(v);
+              if (v != null) setVersion(v);
             }}
-            onSegments={setSegments}
             onDirty={setStructureDirty}
           />
-          <EpisodeTextPanel mediaId={media.id} onApplied={setSegments} />
+          <EpisodeTextPanel mediaId={id} onApplied={setSegments} />
         </>
       )}
 

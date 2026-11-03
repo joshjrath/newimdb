@@ -6,6 +6,7 @@ import { useToast } from "../Toasts";
 import type { PreviewRow, ImportAction } from "@/lib/repo/imports";
 import { Stars } from "../Stars";
 import { useUnsavedGuard } from "./useUnsavedGuard";
+import { excerpt } from "@/lib/domain/text";
 
 const MATCH_LABEL: Record<PreviewRow["match"], string> = {
   new: "New",
@@ -32,7 +33,7 @@ const ACTION_LABEL: Record<ImportAction, string> = {
 
 export function ImportTools() {
   return (
-    <div style={{ display: "grid", gap: 24 }}>
+    <div className="stack loose">
       <LetterboxdImport />
       <Backup />
     </div>
@@ -68,7 +69,7 @@ function LetterboxdImport() {
     setBusy(true);
     try {
       const r = await api<{ counts: Record<string, number> }>("/api/import/letterboxd/commit", {
-        body: { items: rows.map((x) => ({ entry: x.entry, action: x.action, mediaId: x.mediaId && x.mediaId > 0 ? x.mediaId : null })) },
+        body: { items: rows.map((x) => ({ entry: x.entry, action: x.action, mediaId: x.mediaId })) },
       });
       toast.push("ok", `Imported: ${r.counts.created} added, ${r.counts.updated} updated, ${r.counts.linked} linked, ${r.counts.skipped} skipped. All private.`);
       setRows(null);
@@ -98,7 +99,7 @@ function LetterboxdImport() {
         <h2 id="lb-h">Import from Letterboxd</h2>
         <span className="hint">Imports stay private. Nothing is posted anywhere.</span>
       </header>
-      <form onSubmit={preview} style={{ display: "grid", gap: 12 }}>
+      <form onSubmit={preview} className="stack tight">
         <div className="chips" role="radiogroup" aria-label="Source">
           {([["rss_url", "Username (RSS)"], ["rss_text", "Paste RSS"], ["csv_text", "Export CSV"]] as const).map(([k, l]) => (
             <button type="button" key={k} role="radio" aria-checked={source === k} aria-pressed={source === k} className="chip" onClick={() => { setSource(k); setValue(""); }}>{l}</button>
@@ -116,7 +117,7 @@ function LetterboxdImport() {
               <span>{source === "csv_text" ? "reviews.csv, diary.csv or ratings.csv" : "RSS XML"}</span>
               <textarea className="textarea mono" style={{ minHeight: 140 }} value={value} onChange={(e) => setValue(e.target.value)} spellCheck={false} />
             </label>
-            <label className="btn small" style={{ justifySelf: "start" }}>
+            <label className="btn small self-start">
               Choose file
               <input type="file" accept=".csv,.xml,.rss,text/csv,application/xml" className="visually-hidden" onChange={(e) => e.target.files?.[0] && readFile(e.target.files[0])} />
             </label>
@@ -127,9 +128,9 @@ function LetterboxdImport() {
       </form>
 
       {rows && (
-        <div style={{ display: "grid", gap: 12 }}>
+        <div className="stack tight">
           <div className="toolbar">
-            <strong style={{ marginRight: "auto" }}>{rows.length} entries found</strong>
+            <strong className="push-right">{rows.length} entries found</strong>
             <button className="btn small" onClick={() => setAll("new", "skip")}>Skip all new</button>
             <button className="btn small" onClick={() => setAll("new", "create")}>Add all new</button>
             <button className="btn small" onClick={() => setAll("conflict", "skip")}>Skip all already here</button>
@@ -146,7 +147,7 @@ function LetterboxdImport() {
                     <td>{r.entry.rating != null ? <Stars value={r.entry.rating} size={13} /> : <span className="hint">–</span>}</td>
                     <td className="hint">{r.entry.watchedDate ?? ""}</td>
                     <td className="hint" style={{ maxWidth: 280 }}>
-                      {r.entry.reviewText ? `${r.entry.reviewText.slice(0, 90)}${r.entry.reviewText.length > 90 ? "…" : ""}` : "No text"}
+                      {r.entry.reviewText ? excerpt(r.entry.reviewText, 15) : "No text"}
                       {r.entry.spoiler && <div>Spoilers</div>}
                     </td>
                     <td>
@@ -170,7 +171,7 @@ function LetterboxdImport() {
             </table>
           </div>
           <div className="toolbar" style={{ justifyContent: "flex-end" }}>
-            <span className="hint" style={{ marginRight: "auto" }}>
+            <span className="hint push-right">
               {Object.entries(counts ?? {}).map(([k, v]) => `${v} ${ACTION_LABEL[k as ImportAction].toLowerCase()}`).join(" · ")}
             </span>
             <button className="btn ghost" onClick={() => setRows(null)}>Cancel</button>
@@ -228,13 +229,13 @@ function Backup() {
       <header><h2 id="bk-h">Backup</h2></header>
       <p className="hint">Everything: reviews, ratings, every season, cour, OVA and special, episode states, tags and IDs.</p>
       <div><a className="btn primary" href="/api/backup" download>Download backup (JSON)</a></div>
-      <div style={{ display: "grid", gap: 10, borderTop: "1px solid var(--line)", paddingTop: 16 }}>
+      <div className="stack tight" style={{ borderTop: "1px solid var(--line)", paddingTop: 16 }}>
         <h3>Restore</h3>
         <div className="toolbar" style={{ gap: 16 }}>
           <label className="check"><input type="radio" name="mode" checked={mode === "merge"} onChange={() => setMode("merge")} /> Merge into library</label>
           <label className="check"><input type="radio" name="mode" checked={mode === "replace"} onChange={() => setMode("replace")} /> Replace library</label>
         </div>
-        <label className="btn" style={{ justifySelf: "start" }}>
+        <label className="btn self-start">
           Choose backup file
           <input type="file" accept="application/json,.json" className="visually-hidden" onChange={(e) => e.target.files?.[0] && choose(e.target.files[0])} />
         </label>

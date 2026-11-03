@@ -8,36 +8,38 @@ import type { EpisodeView, SegmentView } from "./types";
  *  - Filler is an independent flag; filler episodes count like any other episode.
  *  - Padding cells in the heatmap are visual only and are never episodes.
  */
-export interface Progress {
+export interface ProgressCounts {
   total: number; // real episodes in the structure
   watched: number;
   rated: number;
   skipped: number;
+}
+
+export interface Progress extends ProgressCounts {
   remaining: number; // not watched and not skipped
   denominator: number; // total - skipped
   percent: number; // 0–100, watched / denominator
 }
 
-export function computeProgress(episodes: EpisodeView[]): Progress {
-  let watched = 0,
-    rated = 0,
-    skipped = 0;
-  for (const e of episodes) {
-    if (e.state === "watched") watched++;
-    if (e.rating != null) rated++;
-    if (e.state === "skipped") skipped++;
-  }
-  const total = episodes.length;
-  const denominator = total - skipped;
+/** The only place the progress maths lives; SQL aggregates and in-memory episodes both feed it. */
+export function progressFromCounts(c: ProgressCounts): Progress {
+  const denominator = c.total - c.skipped;
   return {
-    total,
-    watched,
-    rated,
-    skipped,
-    remaining: denominator - watched,
+    ...c,
     denominator,
-    percent: denominator === 0 ? 0 : Math.round((watched / denominator) * 1000) / 10,
+    remaining: denominator - c.watched,
+    percent: denominator === 0 ? 0 : Math.round((c.watched / denominator) * 1000) / 10,
   };
+}
+
+export function computeProgress(episodes: EpisodeView[]): Progress {
+  const c: ProgressCounts = { total: episodes.length, watched: 0, rated: 0, skipped: 0 };
+  for (const e of episodes) {
+    if (e.state === "watched") c.watched++;
+    if (e.rating != null) c.rated++;
+    if (e.state === "skipped") c.skipped++;
+  }
+  return progressFromCounts(c);
 }
 
 export function average(values: number[]): number | null {
@@ -50,12 +52,17 @@ export function episodeAverage(episodes: EpisodeView[]): number | null {
   return average(episodes.filter((e) => e.rating != null).map((e) => e.rating as number));
 }
 
-export function allEpisodes(segments: SegmentView[]): EpisodeView[] {
-  return orderedSegments(segments).flatMap((s) => [...s.episodes].sort((a, b) => a.number - b.number));
-}
-
 export function orderedSegments(segments: SegmentView[]): SegmentView[] {
   return [...segments].sort((a, b) => a.position - b.position || a.id - b.id);
+}
+
+export function sortedEpisodes(s: Pick<SegmentView, "episodes">): EpisodeView[] {
+  return [...s.episodes].sort((a, b) => a.number - b.number);
+}
+
+/** Every episode in watch order. */
+export function allEpisodes(segments: SegmentView[]): EpisodeView[] {
+  return orderedSegments(segments).flatMap(sortedEpisodes);
 }
 
 export interface ActivePointer {
@@ -76,22 +83,15 @@ export interface ActivePointer {
  *  - Empty future seasons (no episodes yet) are never chosen.
  */
 export function activePointer(segments: SegmentView[]): ActivePointer {
-  const ordered = orderedSegments(segments).filter((s) => s.episodes.length > 0);
-  const flat = ordered.flatMap((s) => [...s.episodes].sort((a, b) => a.number - b.number));
+  const flat = allEpisodes(segments);
   let lastIdx = -1;
   flat.forEach((e, i) => {
     if (e.state === "watched") lastIdx = i;
   });
-  let next: EpisodeView | null = null;
-  for (let i = lastIdx + 1; i < flat.length; i++) {
-    if (flat[i].state === "unwatched") {
-      next = flat[i];
-      break;
-    }
-  }
+  const next = flat.slice(lastIdx + 1).find((e) => e.state === "unwatched") ?? null;
   const lastWatched = lastIdx >= 0 ? flat[lastIdx] : null;
-  const pivot = next ?? lastWatched;
-  const segment = pivot ? ordered.find((s) => s.id === pivot.segmentId) ?? null : ordered[0] ?? null;
+  const pivot = next ?? lastWatched ?? flat[0];
+  const segment = pivot ? segments.find((s) => s.id === pivot.segmentId) ?? null : null;
   return { segment, nextEpisode: next, lastWatched, caughtUp: next == null && lastWatched != null };
 }
 

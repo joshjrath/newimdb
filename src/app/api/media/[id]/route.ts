@@ -1,24 +1,22 @@
-import { HttpError, intParam, ownerApi, readJson } from "@/lib/guard";
+import { HttpError, idParams, ownerApi, readJson } from "@/lib/guard";
 import { mediaPatchSchema } from "@/lib/schemas";
-import { deleteMedia, getMediaDetail, updateMedia } from "@/lib/repo/media";
+import { deleteMedia, getMediaDetail, requireMedia, updateMedia } from "@/lib/repo/media";
 
-export const dynamic = "force-dynamic";
 type Ctx = { params: Promise<{ id: string }> };
 
 export const GET = ownerApi<Ctx>(async (_req, { params }) => {
-  const m = getMediaDetail(intParam((await params).id));
-  if (!m) throw new HttpError(404, "Not found.");
-  return { media: m };
+  const { id } = await idParams(params);
+  requireMedia(id);
+  return { media: getMediaDetail(id) };
 });
 
 export const PATCH = ownerApi<Ctx>(async (req, { params }) => {
-  const id = intParam((await params).id);
-  const patch = mediaPatchSchema.parse(await readJson(req));
-  return { media: updateMedia(id, patch) };
+  const { id } = await idParams(params);
+  return { media: updateMedia(id, await readJson(req, mediaPatchSchema)) };
 });
 
 export const DELETE = ownerApi<Ctx>(async (_req, { params }) => {
-  const n = deleteMedia([intParam((await params).id)]);
-  if (!n) throw new HttpError(404, "Not found.");
-  return { deleted: n };
+  const { id } = await idParams(params);
+  if (!deleteMedia([id])) throw new HttpError(404, "Not found.");
+  return { deleted: 1 };
 });

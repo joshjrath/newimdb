@@ -3,75 +3,83 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { api } from "@/lib/client/api";
-import { useToast } from "../Toasts";
+import { useAction } from "../useAction";
 import { Stars } from "../Stars";
 import { StatusPill } from "../StatusPill";
-import { STATUS_LABEL, TYPE_LABEL, WATCH_STATUSES, TYPE_TO_CATEGORY, type MediaType, type WatchStatus } from "@/lib/domain/types";
-import { slugify } from "@/lib/domain/text";
+import { StatusOptions, TypeOptions } from "../Options";
+import { pageCount, Pager } from "../Pager";
+import { TYPE_LABEL, type MediaType, type WatchStatus } from "@/lib/domain/types";
+import { mediaHref } from "@/lib/domain/links";
+import { plural } from "@/lib/domain/text";
 import { formatDate } from "@/lib/format";
+import { SORT_OPTIONS } from "@/lib/domain/sort";
+import type { BulkMediaAction } from "@/lib/schemas";
 
 interface Row {
-  id: number; title: string; year: number | null; type: MediaType; posterUrl: string | null; rating: number | null;
-  status: WatchStatus | null; featured: boolean; updatedAt: string; source: string; tags: string[]; progress: string | null;
+  id: number;
+  title: string;
+  year: number | null;
+  type: MediaType;
+  rating: number | null;
+  status: WatchStatus | null;
+  featured: boolean;
+  updatedAt: string;
+  source: string;
+  tags: string[];
+  progress: string | null;
 }
 
-export function ManageTable({ items, total, page, pageSize, filters }: { items: Row[]; total: number; page: number; pageSize: number; filters: { type: string; status: string; q: string; sort: string } }) {
+export function ManageTable({ items, total, page, pageSize, filters }: { items: Row[]; total: number; page: number; pageSize: number; filters: Record<"type" | "status" | "q" | "sort", string> }) {
   const router = useRouter();
-  const toast = useToast();
+  const { busy, run } = useAction();
   const [selected, setSelected] = useState<Set<number>>(new Set());
-  const [busy, setBusy] = useState(false);
   const [tag, setTag] = useState("");
   const all = items.length > 0 && items.every((i) => selected.has(i.id));
-  const ids = [...selected];
 
-  const run = async (action: string, extra: Record<string, unknown> = {}, ok?: string) => {
-    if (!ids.length) return;
-    setBusy(true);
-    try {
-      const r = await api<{ changed: number }>("/api/media/bulk", { body: { ids, action, ...extra } });
-      toast.push("ok", ok ?? `Updated ${r.changed} ${r.changed === 1 ? "entry" : "entries"}.`);
+  const bulk = async (action: BulkMediaAction, extra: Record<string, unknown> = {}, ok?: string) => {
+    const r = await run(() => api<{ changed: number }>("/api/media/bulk", { body: { ids: [...selected], action, ...extra } }), {
+      ok: (r) => ok ?? `Updated ${plural(r.changed, "entry", "entries")}.`,
+      errorPrefix: "Not saved: ",
+    });
+    if (r) {
       setSelected(new Set());
       router.refresh();
-    } catch (e) {
-      toast.push("error", `Not saved: ${(e as Error).message}`);
-    } finally {
-      setBusy(false);
     }
   };
 
-  const pages = Math.max(1, Math.ceil(total / pageSize));
-  const qs = (patch: Record<string, string>) => {
-    const p = new URLSearchParams(Object.entries({ ...filters, ...patch }).filter(([, v]) => v) as [string, string][]);
-    return `/studio?${p}`;
-  };
+  const toggle = (id: number) =>
+    setSelected((cur) => {
+      const n = new Set(cur);
+      if (!n.delete(id)) n.add(id);
+      return n;
+    });
+
+  const pageHref = (p: number) => `/studio?${new URLSearchParams(Object.entries({ ...filters, page: String(p) }).filter(([, v]) => v))}`;
 
   return (
-    <div style={{ display: "grid", gap: 14, gridTemplateColumns: "minmax(0, 1fr)" }}>
+    <div className="stack">
       <form className="toolbar" method="get" action="/studio" role="search">
         <label>
           <span className="visually-hidden">Type</span>
-          <select className="select" name="type" defaultValue={filters.type} style={{ width: "auto" }}>
+          <select className="select small" name="type" defaultValue={filters.type}>
             <option value="">All types</option>
-            <option value="movie">Movies</option>
-            <option value="tv">TV Shows</option>
-            <option value="anime">Anime</option>
+            <TypeOptions />
           </select>
         </label>
         <label>
           <span className="visually-hidden">Status</span>
-          <select className="select" name="status" defaultValue={filters.status} style={{ width: "auto" }}>
+          <select className="select small" name="status" defaultValue={filters.status}>
             <option value="">Any status</option>
-            {WATCH_STATUSES.map((s) => <option key={s} value={s}>{STATUS_LABEL[s]}</option>)}
+            <StatusOptions />
             <option value="none">No status</option>
           </select>
         </label>
         <label>
           <span className="visually-hidden">Sort</span>
-          <select className="select" name="sort" defaultValue={filters.sort} style={{ width: "auto" }}>
-            <option value="added">Recently added</option>
-            <option value="recent">Recently watched</option>
-            <option value="title">Title</option>
-            <option value="rating">Rating</option>
+          <select className="select small" name="sort" defaultValue={filters.sort}>
+            {SORT_OPTIONS.map((s) => (
+              <option key={s.key} value={s.key}>{s.label}</option>
+            ))}
           </select>
         </label>
         <label className="grow">
@@ -84,28 +92,28 @@ export function ManageTable({ items, total, page, pageSize, filters }: { items: 
       {selected.size > 0 && (
         <div className="bulkbar" role="region" aria-label="Bulk actions">
           <strong>{selected.size} selected</strong>
-          <button className="btn small" disabled={busy} onClick={() => run("feature")}>Feature</button>
-          <button className="btn small" disabled={busy} onClick={() => run("unfeature")}>Unfeature</button>
+          <button className="btn small" disabled={busy} onClick={() => bulk("feature")}>Feature</button>
+          <button className="btn small" disabled={busy} onClick={() => bulk("unfeature")}>Unfeature</button>
           <label>
             <span className="visually-hidden">Set status</span>
-            <select className="select" style={{ width: "auto", padding: "4px 8px" }} disabled={busy} value="" onChange={(e) => e.target.value && run("set_status", { status: e.target.value === "none" ? null : e.target.value })}>
+            <select className="select small" disabled={busy} value="" onChange={(e) => e.target.value && bulk("set_status", { status: e.target.value === "none" ? null : e.target.value })}>
               <option value="">Set status…</option>
-              {WATCH_STATUSES.map((s) => <option key={s} value={s}>{STATUS_LABEL[s]}</option>)}
+              <StatusOptions />
               <option value="none">Clear status</option>
             </select>
           </label>
           <span className="toolbar" style={{ gap: 4 }}>
-            <input className="input" style={{ width: 130, padding: "4px 8px" }} placeholder="Tag" value={tag} onChange={(e) => setTag(e.target.value)} aria-label="Tag name" />
-            <button className="btn small" disabled={busy || !tag.trim()} onClick={() => run("add_tag", { tag: tag.trim() })}>Add tag</button>
-            <button className="btn small" disabled={busy || !tag.trim()} onClick={() => run("remove_tag", { tag: tag.trim() })}>Remove tag</button>
+            <input className="input small" style={{ width: 130 }} placeholder="Tag" value={tag} onChange={(e) => setTag(e.target.value)} aria-label="Tag name" />
+            <button className="btn small" disabled={busy || !tag.trim()} onClick={() => bulk("add_tag", { tag: tag.trim() })}>Add tag</button>
+            <button className="btn small" disabled={busy || !tag.trim()} onClick={() => bulk("remove_tag", { tag: tag.trim() })}>Remove tag</button>
           </span>
           <button
             className="btn small danger"
             disabled={busy}
             onClick={() => {
-              const n = selected.size;
-              if (window.prompt(`Delete ${n} ${n === 1 ? "entry" : "entries"} with all reviews and episode ratings? This can't be undone. Type DELETE to confirm.`) === "DELETE") {
-                run("delete", {}, `Deleted ${n} ${n === 1 ? "entry" : "entries"}.`);
+              const what = plural(selected.size, "entry", "entries");
+              if (window.prompt(`Delete ${what} with all reviews and episode ratings? This can't be undone. Type DELETE to confirm.`) === "DELETE") {
+                bulk("delete", {}, `Deleted ${what}.`);
               }
             }}
           >
@@ -135,16 +143,7 @@ export function ManageTable({ items, total, page, pageSize, filters }: { items: 
             {items.map((m) => (
               <tr key={m.id} aria-selected={selected.has(m.id)}>
                 <td>
-                  <input
-                    type="checkbox"
-                    aria-label={`Select ${m.title}`}
-                    checked={selected.has(m.id)}
-                    onChange={() => {
-                      const n = new Set(selected);
-                      if (n.has(m.id)) n.delete(m.id); else n.add(m.id);
-                      setSelected(n);
-                    }}
-                  />
+                  <input type="checkbox" aria-label={`Select ${m.title}`} checked={selected.has(m.id)} onChange={() => toggle(m.id)} />
                 </td>
                 <td>
                   <Link className="t" href={`/studio/${m.id}`}>{m.title}</Link>
@@ -158,7 +157,7 @@ export function ManageTable({ items, total, page, pageSize, filters }: { items: 
                 <td className="hint">{m.progress ?? ""}</td>
                 <td className="hint">{formatDate(m.updatedAt)}</td>
                 <td style={{ whiteSpace: "nowrap" }}>
-                  <Link className="btn small ghost" href={`/watch/${TYPE_TO_CATEGORY[m.type]}/${m.id}-${slugify(m.title)}`}>View</Link>
+                  <Link className="btn small ghost" href={mediaHref(m)}>View</Link>
                   <Link className="btn small" href={`/studio/${m.id}`}>Edit</Link>
                 </td>
               </tr>
@@ -169,11 +168,7 @@ export function ManageTable({ items, total, page, pageSize, filters }: { items: 
           </tbody>
         </table>
       </div>
-      <nav className="pager" aria-label="Pages">
-        {page > 1 && <Link className="btn small" href={qs({ page: String(page - 1) })}>Previous</Link>}
-        <span>{total} total · page {page} of {pages}</span>
-        {page < pages && <Link className="btn small" href={qs({ page: String(page + 1) })}>Next</Link>}
-      </nav>
+      <Pager page={page} pages={pageCount(total, pageSize)} href={pageHref} label={`${total} total`} />
     </div>
   );
 }

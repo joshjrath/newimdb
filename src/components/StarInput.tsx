@@ -1,5 +1,5 @@
 "use client";
-import { StarIcon } from "./Stars";
+import { StarIcon, starFill } from "./Stars";
 import { formatRating } from "@/lib/domain/rating";
 
 /** Five stars with half steps. Click left/right half; arrow keys step by 0.5; Backspace clears. */
@@ -23,12 +23,10 @@ export function StarInput({ value, onChange, label = "Rating" }: { value: number
         else if (e.key === "Home") { e.preventDefault(); onChange(0.5); }
         else if (e.key === "End") { e.preventDefault(); onChange(5); }
       }}
-      style={{ display: "inline-flex", alignItems: "center", gap: 12 }}
     >
       <span className="star-input">
         {[1, 2, 3, 4, 5].map((i) => {
-          const v = value ?? 0;
-          const fill = v >= i ? "full" : v >= i - 0.5 ? "half" : "empty";
+          const fill = starFill(value, i);
           return (
             <span key={i} className={`star-btn${fill !== "empty" ? " on" : ""}`}>
               <StarIcon fill={fill} />

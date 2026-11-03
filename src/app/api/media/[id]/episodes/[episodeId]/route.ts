@@ -1,12 +1,11 @@
-import { intParam, ownerApi, readJson } from "@/lib/guard";
+import { idParams, ownerApi, readJson } from "@/lib/guard";
 import { assessmentSchema } from "@/lib/schemas";
 import { setAssessment } from "@/lib/repo/media";
 
-export const dynamic = "force-dynamic";
 type Ctx = { params: Promise<{ id: string; episodeId: string }> };
 
+/** Returns only the updated episode; the client already holds the rest of the show. */
 export const PATCH = ownerApi<Ctx>(async (req, { params }) => {
-  const p = await params;
-  const patch = assessmentSchema.parse(await readJson(req));
-  return { segments: setAssessment(intParam(p.id), intParam(p.episodeId), patch) };
+  const { id, episodeId } = await idParams(params);
+  return { episode: setAssessment(id, episodeId, await readJson(req, assessmentSchema)) };
 });

@@ -10,7 +10,12 @@ function Svg({ empty }: { empty?: boolean }) {
   );
 }
 
-export function StarIcon({ fill }: { fill: "full" | "half" | "empty" }) {
+export type StarFill = "full" | "half" | "empty";
+
+/** How star `i` (1–5) is drawn for a rating `value`. */
+export const starFill = (value: number | null, i: number): StarFill => ((value ?? 0) >= i ? "full" : (value ?? 0) >= i - 0.5 ? "half" : "empty");
+
+export function StarIcon({ fill }: { fill: StarFill }) {
   if (fill !== "half") return <Svg empty={fill === "empty"} />;
   return (
     <span className="star-half" aria-hidden="true">
@@ -26,7 +31,7 @@ export function Stars({ value, size = 16 }: { value: number | null; size?: numbe
   return (
     <span className="stars" role="img" aria-label={formatRating(value)} style={{ "--star-size": `${size}px` } as React.CSSProperties}>
       {[1, 2, 3, 4, 5].map((i) => (
-        <StarIcon key={i} fill={value >= i ? "full" : value >= i - 0.5 ? "half" : "empty"} />
+        <StarIcon key={i} fill={starFill(value, i)} />
       ))}
     </span>
   );

@@ -2,7 +2,7 @@ import Link from "next/link";
 import type { WatchingItem } from "@/lib/repo/media";
 import { Poster } from "./Poster";
 import { ProgressBar } from "./ProgressBar";
-import { mediaHref } from "./LibraryCard";
+import { mediaHref } from "@/lib/domain/links";
 import { episodeCode } from "@/lib/domain/progress";
 
 /** Currently Watching: links straight to the active season / next episode. */

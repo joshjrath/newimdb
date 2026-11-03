@@ -1,21 +1,19 @@
 import { notFound } from "next/navigation";
-import { isOwner, requireOwnerPage } from "@/lib/guard";
+import { intParamOrNull, loadOwnerMedia, requireOwnerPage } from "@/lib/guard";
 import { Shell } from "@/components/Shell";
 import { EditEntry } from "@/components/studio/EditEntry";
-import { getMediaDetail } from "@/lib/repo/media";
 
-export const dynamic = "force-dynamic";
+type Params = Promise<{ id: string }>;
 
-export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
-  if (!(await isOwner())) return { title: "Sign in" };
-  const m = getMediaDetail(Number((await params).id));
-  return { title: m ? `Edit ${m.title}` : "Not found" };
+export async function generateMetadata({ params }: { params: Params }) {
+  const m = await loadOwnerMedia(intParamOrNull((await params).id));
+  return { title: m ? `Edit ${m.title}` : "Watch Journal" };
 }
 
-export default async function EditPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function EditPage({ params }: { params: Params }) {
   const { id } = await params;
   await requireOwnerPage(`/studio/${id}`);
-  const m = /^\d+$/.test(id) ? getMediaDetail(Number(id)) : null;
+  const m = await loadOwnerMedia(intParamOrNull(id));
   if (!m) notFound();
   return (
     <Shell active="studio">

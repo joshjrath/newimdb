@@ -2,7 +2,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, ApiError } from "@/lib/client/api";
 import { useToast } from "../Toasts";
-import { SEGMENT_KIND_LABEL, SEGMENT_KINDS, type MediaType, type SegmentKind, type SegmentView } from "@/lib/domain/types";
+import { SaveState } from "./SaveState";
+import { defaultSegmentLabel, EPISODE_PROVIDERS_BY_TYPE, SEGMENT_KIND_LABEL, SEGMENT_KINDS, type MediaType, type SegmentKind, type SegmentView } from "@/lib/domain/types";
 import { computeProgress } from "@/lib/domain/progress";
 
 interface Row {
@@ -17,51 +18,75 @@ interface Row {
   providerRef: string;
 }
 
-let n = 0;
+type NumericField = "seasonNumber" | "courNumber" | "episodeCount";
+const NUMERIC_FIELDS: [NumericField, string][] = [["seasonNumber", "Season #"], ["courNumber", "Cour #"], ["episodeCount", "Episodes"]];
+
+let newKey = 0;
+const str = (v: number | null) => (v == null ? "" : String(v));
+const num = (v: string) => (v === "" ? null : Number(v));
+
 const toRows = (segs: SegmentView[]): Row[] =>
   segs.map((s) => ({
     key: `s${s.id}`,
     id: s.id,
     kind: s.kind,
     label: s.label,
-    seasonNumber: s.seasonNumber == null ? "" : String(s.seasonNumber),
-    courNumber: s.courNumber == null ? "" : String(s.courNumber),
+    seasonNumber: str(s.seasonNumber),
+    courNumber: str(s.courNumber),
     episodeCount: String(s.episodes.length),
     provider: s.provider ?? "",
     providerRef: s.providerRef ?? "",
   }));
 
-function nextDefaults(rows: Row[], kind: SegmentKind): Partial<Row> {
+/** Sensible defaults for a new segment of `kind`, continuing the numbering already in the list. */
+function newRow(rows: Row[], kind: SegmentKind): Row {
   const seasons = rows.map((r) => Number(r.seasonNumber)).filter((x) => x > 0);
   const maxSeason = seasons.length ? Math.max(...seasons) : 0;
-  const countKind = rows.filter((r) => r.kind === kind).length + 1;
-  if (kind === "season") return { label: `Season ${maxSeason + 1}`, seasonNumber: String(maxSeason + 1), episodeCount: "12" };
+  const ordinal = rows.filter((r) => r.kind === kind).length + 1;
+  let season: number | null = null;
+  let cour: number | null = null;
+  if (kind === "season") season = maxSeason + 1;
   if (kind === "cour") {
-    const s = maxSeason || 1;
-    const cours = rows.filter((r) => Number(r.seasonNumber) === s && r.courNumber).length;
-    return { label: `Season ${s} · Cour ${cours + 1}`, seasonNumber: String(s), courNumber: String(cours + 1), episodeCount: "12" };
+    season = maxSeason || 1;
+    cour = rows.filter((r) => Number(r.seasonNumber) === season && r.courNumber).length + 1;
   }
-  if (kind === "movie") return { label: `Movie ${countKind}`, episodeCount: "1" };
-  if (kind === "ova") return { label: countKind > 1 ? `OVA ${countKind}` : "OVA", episodeCount: "1" };
-  return { label: countKind > 1 ? `Special ${countKind}` : "Specials", episodeCount: "1" };
+  return {
+    key: `n${++newKey}`,
+    kind,
+    label: defaultSegmentLabel(kind, { season, cour, ordinal }),
+    seasonNumber: str(season),
+    courNumber: str(cour),
+    episodeCount: kind === "season" || kind === "cour" ? "12" : "1",
+    provider: "",
+    providerRef: "",
+  };
 }
 
-export function StructureEditor({
-  mediaId, type, segments, version, onSaved, onSegments, onDirty,
-}: {
-  mediaId: number; type: MediaType; segments: SegmentView[]; version: number;
-  onSaved: (s: SegmentView[], version: number) => void; onSegments: (s: SegmentView[]) => void; onDirty: (d: boolean) => void;
+export function StructureEditor({ mediaId, type, segments, version, onChange, onDirty }: {
+  mediaId: number;
+  type: MediaType;
+  segments: SegmentView[];
+  version: number;
+  /** New server state; `version` is set when the entry's version changed. */
+  onChange: (s: SegmentView[], version?: number) => void;
+  onDirty: (d: boolean) => void;
 }) {
   const toast = useToast();
   const [rows, setRows] = useState<Row[]>(() => toRows(segments));
-  const [base, setBase] = useState<Row[]>(() => toRows(segments));
+  const [base, setBase] = useState<Row[]>(rows);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fetching, setFetching] = useState<number | null>(null);
   const dirty = useMemo(() => JSON.stringify(rows) !== JSON.stringify(base), [rows, base]);
   useEffect(() => onDirty(dirty), [dirty, onDirty]);
+  const progressById = useMemo(() => new Map(segments.map((s) => [s.id, computeProgress(s.episodes)])), [segments]);
 
-  const byId = new Map(segments.map((s) => [s.id, s]));
+  const reset = (segs: SegmentView[], version?: number) => {
+    onChange(segs, version);
+    const fresh = toRows(segs);
+    setRows(fresh);
+    setBase(fresh);
+  };
   const update = (key: string, patch: Partial<Row>) => setRows((rs) => rs.map((r) => (r.key === key ? { ...r, ...patch } : r)));
   const move = (i: number, d: number) =>
     setRows((rs) => {
@@ -71,37 +96,33 @@ export function StructureEditor({
       [c[i], c[j]] = [c[j], c[i]];
       return c;
     });
-  const add = (kind: SegmentKind) =>
-    setRows((rs) => [...rs, { key: `n${++n}`, kind, label: "", seasonNumber: "", courNumber: "", episodeCount: "1", provider: "", providerRef: "", ...nextDefaults(rs, kind) }]);
 
-  const payload = (confirmLoss?: boolean) => ({
-    version,
-    confirmLoss,
-    segments: rows.map((r) => ({
-      id: r.id,
-      kind: r.kind,
-      label: r.label.trim() || SEGMENT_KIND_LABEL[r.kind],
-      seasonNumber: r.seasonNumber === "" ? null : Number(r.seasonNumber),
-      courNumber: r.courNumber === "" ? null : Number(r.courNumber),
-      episodeCount: Number(r.episodeCount) || 0,
-      provider: r.provider.trim() || null,
-      providerRef: r.providerRef.trim() || null,
-    })),
-  });
-
-  const save = async (confirmLoss?: boolean) => {
+  const save = async (confirmLoss?: boolean): Promise<void> => {
     setSaving(true);
     setError(null);
     try {
-      const r = await api<{ segments: SegmentView[]; version: number }>(`/api/media/${mediaId}/structure`, { method: "PUT", body: payload(confirmLoss) });
-      onSaved(r.segments, r.version);
-      const fresh = toRows(r.segments);
-      setRows(fresh);
-      setBase(fresh);
+      const r = await api<{ segments: SegmentView[]; version: number }>(`/api/media/${mediaId}/structure`, {
+        method: "PUT",
+        body: {
+          version,
+          confirmLoss,
+          segments: rows.map((r) => ({
+            id: r.id,
+            kind: r.kind,
+            label: r.label.trim() || SEGMENT_KIND_LABEL[r.kind],
+            seasonNumber: num(r.seasonNumber),
+            courNumber: num(r.courNumber),
+            episodeCount: Number(r.episodeCount) || 0,
+            provider: r.provider.trim() || null,
+            providerRef: r.providerRef.trim() || null,
+          })),
+        },
+      });
+      reset(r.segments, r.version);
       toast.push("ok", "Seasons saved.");
     } catch (e) {
       if (e instanceof ApiError && e.body.code === "needs_confirmation") {
-        const losses = (e.body.losses as { segment: string; episodes: number; withData: number }[]) ?? [];
+        const losses = (e.body.losses as { segment: string; withData: number }[]) ?? [];
         const msg = losses.map((l) => `• ${l.segment}: ${l.withData} episode(s) with ratings or watch states`).join("\n");
         if (confirm(`This will permanently remove:\n${msg}\n\nSave anyway?`)) return save(true);
         setError("Not saved. Nothing was removed.");
@@ -116,19 +137,13 @@ export function StructureEditor({
 
   const fetchTitles = async (r: Row) => {
     if (!r.id) return;
-    if (dirty) {
-      toast.push("info", "Save the structure first, then fetch episode titles.");
-      return;
-    }
+    if (dirty) return toast.push("info", "Save the structure first, then fetch episode titles.");
     setFetching(r.id);
     try {
       const res = await api<{ added: number; updated: number; segments: SegmentView[] }>(`/api/media/${mediaId}/segments/${r.id}/fetch`, {
         body: { provider: r.provider || undefined, providerRef: r.providerRef || undefined },
       });
-      onSegments(res.segments);
-      const fresh = toRows(res.segments);
-      setRows(fresh);
-      setBase(fresh);
+      reset(res.segments);
       toast.push("ok", `${r.label}: ${res.updated} titles updated, ${res.added} episodes added. Ratings untouched.`);
     } catch (e) {
       toast.push("error", (e as Error).message);
@@ -136,8 +151,6 @@ export function StructureEditor({
       setFetching(null);
     }
   };
-
-  const providers = type === "anime" ? ["", "jikan"] : ["", "tmdb", "tvmaze"];
 
   return (
     <section className="panel" id="structure" aria-labelledby="struct-h">
@@ -147,8 +160,7 @@ export function StructureEditor({
       </header>
       <div className="seg-editor">
         {rows.map((r, i) => {
-          const seg = r.id ? byId.get(r.id) : undefined;
-          const p = seg ? computeProgress(seg.episodes) : null;
+          const p = r.id ? progressById.get(r.id) : undefined;
           return (
             <div className={`seg-row${r.id ? "" : " new"}`} key={r.key}>
               <div className="move">
@@ -165,27 +177,22 @@ export function StructureEditor({
                 <span>Label</span>
                 <input className="input" value={r.label} maxLength={60} onChange={(e) => update(r.key, { label: e.target.value })} />
               </label>
-              <label className="field">
-                <span>Season #</span>
-                <input className="input" inputMode="numeric" value={r.seasonNumber} onChange={(e) => update(r.key, { seasonNumber: e.target.value.replace(/\D/g, "") })} />
-              </label>
-              <label className="field">
-                <span>Cour #</span>
-                <input className="input" inputMode="numeric" value={r.courNumber} onChange={(e) => update(r.key, { courNumber: e.target.value.replace(/\D/g, "") })} />
-              </label>
-              <label className="field">
-                <span>Episodes</span>
-                <input className="input" inputMode="numeric" value={r.episodeCount} onChange={(e) => update(r.key, { episodeCount: e.target.value.replace(/\D/g, "") })} />
-              </label>
+              {NUMERIC_FIELDS.map(([field, label]) => (
+                <label className="field" key={field}>
+                  <span>{label}</span>
+                  <input className="input" inputMode="numeric" value={r[field]} onChange={(e) => update(r.key, { [field]: e.target.value.replace(/\D/g, "") })} />
+                </label>
+              ))}
               <div className="row-actions">
                 {p && p.total > 0 && <span className="hint" style={{ alignSelf: "center" }}>{p.watched}/{p.denominator} watched</span>}
                 <button type="button" className="btn small danger" aria-label={`Remove ${r.label}`} onClick={() => setRows((rs) => rs.filter((x) => x.key !== r.key))}>Remove</button>
               </div>
-              <div style={{ gridColumn: "1 / -1", display: "flex", gap: 8, flexWrap: "wrap", alignItems: "end" }}>
+              <div className="toolbar" style={{ gridColumn: "1 / -1", alignItems: "end" }}>
                 <label className="field" style={{ width: 130 }}>
                   <span>Titles from</span>
                   <select className="select" value={r.provider} onChange={(e) => update(r.key, { provider: e.target.value })}>
-                    {providers.map((p) => <option key={p} value={p}>{p || "None"}</option>)}
+                    <option value="">None</option>
+                    {EPISODE_PROVIDERS_BY_TYPE[type].map((p) => <option key={p} value={p}>{p}</option>)}
                   </select>
                 </label>
                 <label className="field" style={{ width: 170 }}>
@@ -206,13 +213,11 @@ export function StructureEditor({
       <div className="toolbar">
         <span className="label">Add</span>
         {SEGMENT_KINDS.map((k) => (
-          <button key={k} type="button" className="btn small" onClick={() => add(k)}>{SEGMENT_KIND_LABEL[k]}</button>
+          <button key={k} type="button" className="btn small" onClick={() => setRows((rs) => [...rs, newRow(rs, k)])}>{SEGMENT_KIND_LABEL[k]}</button>
         ))}
       </div>
-      <div className="toolbar" style={{ justifyContent: "flex-end" }}>
-        <span className={`hint`} style={{ marginRight: "auto", color: error ? "var(--danger)" : dirty ? "var(--brass)" : undefined }} role="status">
-          {error ?? (saving ? "Saving…" : dirty ? "Unsaved changes to seasons" : "Seasons saved")}
-        </span>
+      <div className="toolbar">
+        <SaveState error={error} saving={saving} dirty={dirty} dirtyText="Unsaved changes to seasons" savedText="Seasons saved" />
         {dirty && <button type="button" className="btn ghost" onClick={() => { setRows(base); setError(null); }}>Discard</button>}
         <button type="button" className="btn primary" disabled={!dirty || saving} onClick={() => save()}>Save seasons</button>
       </div>

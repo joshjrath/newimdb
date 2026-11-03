@@ -155,10 +155,42 @@ function migrate(db: DB) {
   }
 }
 
-export function dataDir(): string {
-  const dir = path.resolve(process.env.DATA_DIR || path.join(process.cwd(), "data"));
-  fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+const madeDirs = new Set<string>();
+
+function ensureDir(dir: string): string {
+  if (!madeDirs.has(dir)) {
+    fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+    madeDirs.add(dir);
+  }
   return dir;
+}
+
+export function dataDir(): string {
+  return ensureDir(path.resolve(process.env.DATA_DIR || path.join(process.cwd(), "data")));
+}
+
+/** A private folder under DATA_DIR (uploads, poster cache, backups). Created once. */
+export function dataSubdir(name: string): string {
+  return ensureDir(path.join(dataDir(), name));
+}
+
+const MAX_CACHED_STATEMENTS = 500;
+
+/**
+ * better-sqlite3 compiles SQL on every `prepare()`. Repository code prepares inline
+ * (often inside loops), so memoize statements per connection by SQL text.
+ */
+function cachePreparedStatements(db: DB) {
+  const prepare = db.prepare.bind(db);
+  const cache = new Map<string, Database.Statement>();
+  db.prepare = ((sql: string) => {
+    let stmt = cache.get(sql);
+    if (!stmt) {
+      stmt = prepare(sql);
+      if (cache.size < MAX_CACHED_STATEMENTS) cache.set(sql, stmt);
+    }
+    return stmt;
+  }) as DB["prepare"];
 }
 
 export function openDatabase(file: string): DB {
@@ -167,13 +199,16 @@ export function openDatabase(file: string): DB {
   db.pragma("foreign_keys = ON");
   db.pragma("busy_timeout = 5000");
   migrate(db);
+  cachePreparedStatements(db);
   return db;
 }
 
 const g = globalThis as unknown as { __watchDb?: DB; __watchDbFile?: string };
 
+const dbFile = () => process.env.DATABASE_FILE || path.join(dataDir(), "watch.db");
+
 export function getDb(): DB {
-  const file = process.env.DATABASE_FILE || path.join(dataDir(), "watch.db");
+  const file = dbFile();
   if (!g.__watchDb || g.__watchDbFile !== file) {
     g.__watchDb = openDatabase(file);
     g.__watchDbFile = file;
@@ -184,7 +219,7 @@ export function getDb(): DB {
 /** For tests: use a fresh database instance. */
 export function setDbForTests(db: DB) {
   g.__watchDb = db;
-  g.__watchDbFile = process.env.DATABASE_FILE || path.join(dataDir(), "watch.db");
+  g.__watchDbFile = dbFile();
 }
 
 export const nowIso = () => new Date().toISOString();

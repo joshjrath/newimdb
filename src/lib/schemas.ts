@@ -1,7 +1,8 @@
 import { z } from "zod";
 import { isValidRating } from "./domain/rating";
+import { EPISODE_STATES, MEDIA_TYPES, PROVIDERS, SEGMENT_KINDS, WATCH_STATUSES } from "./domain/types";
 
-const rating = z
+export const ratingSchema = z
   .number()
   .refine(isValidRating, "Ratings are 0.5–5 in half-star steps.")
   .nullable();
@@ -22,8 +23,11 @@ const httpUrl = z
   .transform((u) => (u === "" ? null : u))
   .nullable();
 
-export const statusSchema = z.enum(["watching", "completed", "dropped", "plan", "on_hold"]).nullable();
-export const mediaTypeSchema = z.enum(["movie", "tv", "anime"]);
+export const mediaTypeSchema = z.enum(MEDIA_TYPES);
+export const statusSchema = z.enum(WATCH_STATUSES).nullable();
+export const segmentKindSchema = z.enum(SEGMENT_KINDS);
+export const episodeStateSchema = z.enum(EPISODE_STATES);
+export const providerSchema = z.enum(PROVIDERS);
 
 /** Every external ID is listed explicitly so validation can never silently strip one. */
 export const metadataSchema = z.object({
@@ -51,9 +55,10 @@ export const metadataSchema = z.object({
   thirdPartyRating: z.number().min(0).max(10).nullable(),
   thirdPartyRatingSource: optText(40),
 });
+export const METADATA_KEYS = metadataSchema.keyof().options;
 
 export const reviewSchema = z.object({
-  rating,
+  rating: ratingSchema,
   ratingLabel: optText(40),
   body: z.string().max(50000),
   watchedOn: date,
@@ -64,24 +69,30 @@ export const reviewSchema = z.object({
   visibility: z.literal("private"),
 });
 
+const tagsSchema = z.array(z.string().trim().min(1).max(40)).max(50);
+
 export const mediaPatchSchema = z
   .object({
     version: z.number().int().positive(),
     metadata: metadataSchema.partial().optional(),
     review: reviewSchema.partial().optional(),
-    tags: z.array(z.string().trim().min(1).max(40)).max(50).optional(),
+    tags: tagsSchema.optional(),
   })
   .strict();
 
-export const segmentInputSchema = z.object({
-  id: z.number().int().positive().optional(),
-  kind: z.enum(["season", "cour", "ova", "movie", "special"]),
+const segmentFields = {
+  kind: segmentKindSchema,
   label: z.string().trim().min(1).max(60),
   seasonNumber: z.number().int().min(0).max(999).nullable(),
   courNumber: z.number().int().min(1).max(99).nullable(),
-  episodeCount: z.number().int().min(0).max(5000),
   provider: optText(20).optional(),
   providerRef: optText(60).optional(),
+};
+
+export const segmentInputSchema = z.object({
+  id: z.number().int().positive().optional(),
+  ...segmentFields,
+  episodeCount: z.number().int().min(0).max(5000),
 });
 
 export const structureSchema = z.object({
@@ -101,37 +112,56 @@ export const providerEpisodeSchema = z.object({
 
 export const createMediaSchema = z.object({
   type: mediaTypeSchema,
-  metadata: metadataSchema.partial().extend({ title: z.string().trim().min(1).max(300) }),
+  metadata: metadataSchema.partial().extend({ title: metadataSchema.shape.title }),
   review: reviewSchema.partial().optional(),
-  tags: z.array(z.string().trim().min(1).max(40)).max(50).optional(),
+  tags: tagsSchema.optional(),
   segments: z
-    .array(
-      segmentInputSchema.omit({ id: true }).extend({
-        episodes: z.array(providerEpisodeSchema).max(5000).optional(),
-      }),
-    )
+    .array(segmentInputSchema.omit({ id: true }).extend({ episodes: z.array(providerEpisodeSchema).max(5000).optional() }))
     .max(500)
     .optional(),
 });
 
 export const assessmentSchema = z.object({
-  state: z.enum(["unwatched", "watched", "skipped"]).optional(),
-  rating: rating.optional(),
+  state: episodeStateSchema.optional(),
+  rating: ratingSchema.optional(),
   filler: z.boolean().optional(),
   title: optText(300).optional(),
 });
 
+export const BULK_ASSESS_ACTIONS = ["watched", "unwatched", "skipped", "rate", "rate_unrated", "filler_on", "filler_off"] as const;
+export type BulkAssessAction = (typeof BULK_ASSESS_ACTIONS)[number];
+
 export const bulkAssessSchema = z.object({
   episodeIds: z.array(z.number().int().positive()).min(1).max(5000),
-  action: z.enum(["watched", "unwatched", "skipped", "rate", "rate_unrated", "filler_on", "filler_off"]),
-  rating: rating.optional(),
+  action: z.enum(BULK_ASSESS_ACTIONS),
+  rating: ratingSchema.optional(),
 });
+
+export const BULK_MEDIA_ACTIONS = ["feature", "unfeature", "delete", "set_status", "add_tag", "remove_tag"] as const;
+export type BulkMediaAction = (typeof BULK_MEDIA_ACTIONS)[number];
 
 export const bulkMediaSchema = z.object({
   ids: z.array(z.number().int().positive()).min(1).max(1000),
-  action: z.enum(["feature", "unfeature", "delete", "set_status", "add_tag", "remove_tag"]),
+  action: z.enum(BULK_MEDIA_ACTIONS),
   status: statusSchema.optional(),
   tag: z.string().trim().min(1).max(40).optional(),
+});
+
+/* ---- backup file: built from the same field schemas as the live API ---- */
+
+export const backupEpisodeSchema = providerEpisodeSchema.omit({ providerRef: true, filler: true }).extend({
+  overview: providerEpisodeSchema.shape.overview.optional(),
+  state: episodeStateSchema,
+  rating: ratingSchema,
+  filler: z.boolean(),
+  watchedAt: z.string().nullable(),
+});
+
+export const backupSegmentSchema = z.object({
+  ...segmentFields,
+  provider: z.string().max(20).nullable(),
+  providerRef: z.string().max(60).nullable(),
+  episodes: z.array(backupEpisodeSchema).max(5000),
 });
 
 export type MetadataInput = z.infer<typeof metadataSchema>;

@@ -1,7 +1,6 @@
 import { authConfigured } from "@/lib/auth";
 import { LoginForm } from "./LoginForm";
 
-export const dynamic = "force-dynamic";
 export const metadata = { title: "Sign in" };
 
 export default async function LoginPage({ searchParams }: { searchParams: Promise<{ next?: string }> }) {
@@ -9,9 +8,9 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
   const safeNext = next && next.startsWith("/") && !next.startsWith("//") ? next : "/watch/movies";
   return (
     <main className="login" id="main">
-      <div style={{ display: "grid", gap: 20, width: "min(380px, 100%)" }}>
+      <div className="stack login-box">
         <h1>Watch Journal</h1>
-        <p style={{ color: "var(--text-muted)" }}>Private. Only the owner can sign in.</p>
+        <p className="muted">Private. Only the owner can sign in.</p>
         {authConfigured() ? (
           <LoginForm next={safeNext} />
         ) : (

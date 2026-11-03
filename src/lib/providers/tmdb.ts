@@ -1,5 +1,6 @@
 import { fetchJson, ProviderError, yearOf } from "./http";
-import type { ProposedSegment, ProviderDetails, SearchResult } from "./types";
+import { defaultSegmentLabel } from "../domain/types";
+import type { DetailsOptions, ProposedSegment, ProviderDetails, SearchResult } from "./types";
 
 const BASE = "https://api.themoviedb.org/3";
 const IMG = "https://image.tmdb.org/t/p/";
@@ -98,7 +99,7 @@ export async function tmdbSeason(tvId: string, season: number) {
     }));
 }
 
-export async function tmdbTv(id: string, opts: { includeSpecials?: boolean } = {}): Promise<ProviderDetails> {
+export async function tmdbTv(id: string, opts: DetailsOptions = {}): Promise<ProviderDetails> {
   const t = await get<{
     id: number;
     name: string;
@@ -114,35 +115,37 @@ export async function tmdbTv(id: string, opts: { includeSpecials?: boolean } = {
     external_ids?: { imdb_id?: string | null; tvdb_id?: number | null };
   }>(`/tv/${encodeURIComponent(id)}`, { append_to_response: "external_ids" });
   const warnings: string[] = [];
-  const seasons = t.seasons.filter((s) => (opts.includeSpecials ? true : s.season_number > 0)).sort((a, b) => a.season_number - b.season_number);
-  const segments: ProposedSegment[] = [];
-  // Fetch episode titles season by season (small concurrency). Failures degrade to counts only.
-  const queue = [...seasons];
+  // Season 0 (specials) is left out; add specials by hand where they fit in the watch order.
+  const seasons = t.seasons.filter((s) => s.season_number > 0).sort((a, b) => a.season_number - b.season_number);
+  // Episode titles season by season (small concurrency). Failures degrade to counts only.
   const results = new Map<number, Awaited<ReturnType<typeof tmdbSeason>>>();
-  await Promise.all(
-    Array.from({ length: 4 }, async () => {
-      for (let s = queue.shift(); s; s = queue.shift()) {
-        try {
-          results.set(s.season_number, await tmdbSeason(id, s.season_number));
-        } catch (e) {
-          warnings.push(`Season ${s.season_number} episode titles unavailable (${(e as Error).message}).`);
+  if (opts.episodes !== false) {
+    const queue = [...seasons];
+    await Promise.all(
+      Array.from({ length: 4 }, async () => {
+        for (let s = queue.shift(); s; s = queue.shift()) {
+          try {
+            results.set(s.season_number, await tmdbSeason(id, s.season_number));
+          } catch (e) {
+            warnings.push(`Season ${s.season_number} episode titles unavailable (${(e as Error).message}).`);
+          }
         }
-      }
-    }),
-  );
-  for (const s of seasons) {
+      }),
+    );
+  }
+  const segments: ProposedSegment[] = seasons.map((s) => {
     const eps = results.get(s.season_number);
-    segments.push({
-      kind: s.season_number === 0 ? "special" : "season",
-      label: s.season_number === 0 ? "Specials" : `Season ${s.season_number}`,
+    return {
+      kind: "season" as const,
+      label: defaultSegmentLabel("season", { season: s.season_number }),
       seasonNumber: s.season_number,
       courNumber: null,
       episodeCount: Math.max(s.episode_count, eps?.length ?? 0),
-      provider: "tmdb",
+      provider: "tmdb" as const,
       providerRef: `${t.id}:${s.season_number}`,
       episodes: eps,
-    });
-  }
+    };
+  });
   return {
     provider: "tmdb",
     metadata: {

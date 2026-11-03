@@ -10,14 +10,16 @@ export class ApiError extends Error {
   }
 }
 
-/** JSON fetch that only resolves on a confirmed 2xx — no false "saved" messages. */
+/** JSON (or FormData) fetch that only resolves on a confirmed 2xx — no false "saved" messages. */
 export async function api<T = unknown>(url: string, init: { method?: string; body?: unknown; signal?: AbortSignal } = {}): Promise<T> {
+  const hasBody = init.body !== undefined;
+  const isForm = init.body instanceof FormData;
   let res: Response;
   try {
     res = await fetch(url, {
-      method: init.method ?? (init.body !== undefined ? "POST" : "GET"),
-      headers: init.body !== undefined ? { "Content-Type": "application/json" } : undefined,
-      body: init.body !== undefined ? JSON.stringify(init.body) : undefined,
+      method: init.method ?? (hasBody ? "POST" : "GET"),
+      headers: hasBody && !isForm ? { "Content-Type": "application/json" } : undefined,
+      body: isForm ? (init.body as FormData) : hasBody ? JSON.stringify(init.body) : undefined,
       credentials: "same-origin",
       cache: "no-store",
       signal: init.signal,
@@ -30,7 +32,7 @@ export async function api<T = unknown>(url: string, init: { method?: string; bod
   try {
     body = await res.json();
   } catch {}
-  if (res.status === 401) {
+  if (res.status === 401 && !url.startsWith("/api/auth/")) {
     throw new ApiError(401, "Your session has ended. Sign in again in another tab, then retry — your edits are still here.", body);
   }
   if (!res.ok) {
@@ -40,8 +42,7 @@ export async function api<T = unknown>(url: string, init: { method?: string; bod
   return body as T;
 }
 
-export function posterSrc(url: string | null | undefined, w?: number): string | null {
+export function posterSrc(url: string | null | undefined): string | null {
   if (!url) return null;
-  if (url.startsWith("/api/uploads/")) return url;
-  return `/api/poster?src=${encodeURIComponent(url)}${w ? `&w=${w}` : ""}`;
+  return url.startsWith("/api/uploads/") ? url : `/api/poster?src=${encodeURIComponent(url)}`;
 }

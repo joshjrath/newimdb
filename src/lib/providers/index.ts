@@ -1,74 +1,83 @@
-import type { MediaType } from "../domain/types";
+import { EPISODE_PROVIDERS_BY_TYPE, PROVIDERS_BY_TYPE, type MediaType, type ProviderName } from "../domain/types";
+import type { ProviderEpisode } from "../schemas";
 import { firstSuccessful, ProviderError } from "./http";
 import { anilistDetails, anilistSearch, jikanDetails, jikanEpisodes, jikanSearch } from "./anime";
 import { tmdbConfigured, tmdbMovie, tmdbSearch, tmdbSeason, tmdbTv } from "./tmdb";
 import { tvmazeSearch, tvmazeSeason, tvmazeShow } from "./tvmaze";
-import type { ProviderDetails, ProviderName, SearchResult } from "./types";
-import type { ProviderEpisode } from "../schemas";
+import type { DetailsOptions, ProviderDetails, SearchResult } from "./types";
 
 export * from "./types";
 
 /**
- * Routing is by media type, so an anime can never be sent to a TMDB TV endpoint
- * and TMDB/MAL ids are never mixed (regressions #3 and #4 from the old site).
- *   movie → TMDB
- *   tv    → TMDB, then TVmaze
- *   anime → Jikan (MyAnimeList), then AniList
+ * What each provider can do. Routing order per media type comes from PROVIDERS_BY_TYPE,
+ * so an anime is never sent to a TMDB TV endpoint (regressions #3 and #4 of the old site).
  */
+interface ProviderImpl {
+  configured: () => boolean;
+  search: Partial<Record<MediaType, (q: string) => Promise<SearchResult[]>>>;
+  details: Partial<Record<MediaType, (id: string, opts: DetailsOptions) => Promise<ProviderDetails>>>;
+  /** Episodes for one segment; `ref` is "showId:season" for TV, a MAL id for anime. */
+  episodes?: (ref: string) => Promise<ProviderEpisode[]>;
+}
+
+function seasonRef(provider: string, ref: string): [string, number] {
+  const [showId, season] = ref.split(":");
+  if (!showId || !/^\d+$/.test(season ?? "")) throw new ProviderError(provider, "segment reference should look like showId:season");
+  return [showId, Number(season)];
+}
+
+const PROVIDER_IMPL: Record<ProviderName, ProviderImpl> = {
+  tmdb: {
+    configured: tmdbConfigured,
+    search: { movie: (q) => tmdbSearch("movie", q), tv: (q) => tmdbSearch("tv", q) },
+    details: { movie: (id) => tmdbMovie(id), tv: tmdbTv },
+    episodes: (ref) => tmdbSeason(...seasonRef("tmdb", ref)),
+  },
+  tvmaze: {
+    configured: () => true,
+    search: { tv: tvmazeSearch },
+    details: { tv: tvmazeShow },
+    episodes: (ref) => tvmazeSeason(...seasonRef("tvmaze", ref)),
+  },
+  jikan: {
+    configured: () => true,
+    search: { anime: jikanSearch },
+    details: { anime: jikanDetails },
+    episodes: jikanEpisodes,
+  },
+  anilist: {
+    configured: () => true,
+    search: { anime: anilistSearch },
+    details: { anime: (id) => anilistDetails(id) },
+  },
+};
+
+/** Providers usable right now for a media type, in fallback order. */
+export function availableProviders(type: MediaType): ProviderName[] {
+  return PROVIDERS_BY_TYPE[type].filter((p) => PROVIDER_IMPL[p].configured());
+}
+
 export async function searchMetadata(type: MediaType, q: string) {
   const query = q.trim().slice(0, 200);
   if (!query) return { results: [] as SearchResult[], provider: null, errors: [] as string[] };
-  const attempts: { name: string; run: () => Promise<SearchResult[]> }[] =
-    type === "movie"
-      ? [{ name: "tmdb", run: () => tmdbSearch("movie", query) }]
-      : type === "tv"
-        ? [
-            ...(tmdbConfigured() ? [{ name: "tmdb", run: () => tmdbSearch("tv", query) }] : []),
-            { name: "tvmaze", run: () => tvmazeSearch(query) },
-          ]
-        : [
-            { name: "jikan", run: () => jikanSearch(query) },
-            { name: "anilist", run: () => anilistSearch(query) },
-          ];
-  const r = await firstSuccessful(attempts);
+  const r = await firstSuccessful(availableProviders(type).map((name) => ({ name, run: () => PROVIDER_IMPL[name].search[type]!(query) })));
   return { results: r.value.map((x) => ({ ...x, type })), provider: r.provider, errors: r.errors };
 }
 
-export async function fetchDetails(type: MediaType, provider: ProviderName, id: string): Promise<ProviderDetails> {
+export async function fetchDetails(type: MediaType, provider: ProviderName, id: string, opts: DetailsOptions = {}): Promise<ProviderDetails> {
   if (!/^[A-Za-z0-9_-]{1,40}$/.test(id)) throw new ProviderError(provider, "invalid id");
-  switch (`${type}:${provider}`) {
-    case "movie:tmdb":
-      return tmdbMovie(id);
-    case "tv:tmdb":
-      return tmdbTv(id);
-    case "tv:tvmaze":
-      return tvmazeShow(id);
-    case "anime:jikan":
-      return jikanDetails(id);
-    case "anime:anilist":
-      return anilistDetails(id);
-    default:
-      throw new ProviderError(provider, `can't provide ${type} details`);
-  }
+  const details = PROVIDER_IMPL[provider]?.details[type];
+  if (!details) throw new ProviderError(provider, `can't provide ${type} details`);
+  return details(id, opts);
 }
 
 /** Episode list for one segment, using the provider reference stored on it. */
 export async function fetchSegmentEpisodes(type: MediaType, provider: string, ref: string): Promise<ProviderEpisode[]> {
-  if (type === "anime") {
-    if (provider === "jikan") return jikanEpisodes(ref);
-    throw new ProviderError(provider, "episode titles are only available from MyAnimeList (Jikan) for anime");
-  }
-  const [showId, season] = ref.split(":");
-  if (!showId || season == null || !/^\d+$/.test(season)) throw new ProviderError(provider, "segment reference should look like showId:season");
-  if (provider === "tmdb") return tmdbSeason(showId, Number(season));
-  if (provider === "tvmaze") return tvmazeSeason(showId, Number(season));
-  throw new ProviderError(provider, "unknown provider");
+  const p = provider as ProviderName;
+  if (!EPISODE_PROVIDERS_BY_TYPE[type].includes(p)) throw new ProviderError(provider, `can't provide episode titles for ${type}`);
+  return PROVIDER_IMPL[p].episodes!(ref);
 }
 
-export function providerStatus() {
-  return {
-    movie: tmdbConfigured() ? ["tmdb"] : [],
-    tv: [...(tmdbConfigured() ? ["tmdb"] : []), "tvmaze"],
-    anime: ["jikan", "anilist"],
-  };
+export function providerStatus(): Record<MediaType, ProviderName[]> {
+  return { movie: availableProviders("movie"), tv: availableProviders("tv"), anime: availableProviders("anime") };
 }

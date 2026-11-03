@@ -10,12 +10,12 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:e2e": "node --test e2e/*.test.mjs",
-    "hash-password": "node scripts/hash-password.mjs",
+    "hash-password": "node scripts/hash-password.ts",
     "seed": "node scripts/seed.mjs",
-    "backup": "node scripts/backup.mjs"
+    "backup": "node scripts/backup.ts"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=22.18"
   },
   "dependencies": {
     "better-sqlite3": "^13.0.3",

@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { posterSrc } from "@/lib/client/api";
 import { STAR_PATH } from "./Stars";
 import { STATUS_LABEL, TYPE_LABEL, type MediaType, type WatchStatus } from "@/lib/domain/types";
-import { paragraphs } from "@/lib/domain/text";
+import { paragraphs, slugify } from "@/lib/domain/text";
 
 export interface ShareData {
   title: string;
@@ -82,10 +82,9 @@ function layoutBody(ctx: CanvasRenderingContext2D, body: string, width: number, 
   return lines;
 }
 
-function linesHeight(lines: Line[], size: number) {
-  const lh = size * 1.45;
-  return lines.reduce((h, l) => h + lh + (l.gapBefore ? size * 0.7 : 0), 0);
-}
+/** Vertical space one line takes: line height plus the paragraph gap when it starts a paragraph. */
+const advance = (l: Line, size: number) => size * 1.45 + (l.gapBefore ? size * 0.7 : 0);
+const linesHeight = (lines: Line[], size: number) => lines.reduce((h, l) => h + advance(l, size), 0);
 
 function drawStars(ctx: CanvasRenderingContext2D, x: number, y: number, size: number, value: number) {
   const path = new Path2D(STAR_PATH);
@@ -109,16 +108,19 @@ function drawStars(ctx: CanvasRenderingContext2D, x: number, y: number, size: nu
   }
 }
 
-interface Rendered {
-  slides: HTMLCanvasElement[];
-  fontSize: number;
+interface Art {
+  img: HTMLImageElement | null;
+  base: [number, number, number];
 }
 
-async function render(data: ShareData, preset: keyof typeof PRESETS, brand: string): Promise<Rendered> {
-  const { w, h } = PRESETS[preset];
-  const src = posterSrc(data.posterUrl);
+async function loadArt(posterUrl: string | null): Promise<Art> {
+  const src = posterSrc(posterUrl);
   const img = src ? await loadImage(src) : null;
-  const base = img ? dominantColor(img) : ([46, 60, 96] as [number, number, number]);
+  return { img, base: img ? dominantColor(img) : [46, 60, 96] };
+}
+
+function render(data: ShareData, preset: keyof typeof PRESETS, brand: string, { img, base }: Art): HTMLCanvasElement[] {
+  const { w, h } = PRESETS[preset];
   const pad = 72;
   const posterW = preset === "portrait" ? 300 : 240;
   const posterH = posterW * 1.5;
@@ -166,15 +168,14 @@ async function render(data: ShareData, preset: keyof typeof PRESETS, brand: stri
   let room = avail1;
   let used = 0;
   for (const l of lines) {
-    const lh = size * 1.45 + (l.gapBefore ? size * 0.7 : 0);
-    if (used + lh > room && pagesLines[pagesLines.length - 1].length) {
+    if (used + advance(l, size) > room && pagesLines[pagesLines.length - 1].length) {
       pagesLines.push([]);
       room = availN;
       used = 0;
       l.gapBefore = false;
     }
     pagesLines[pagesLines.length - 1].push(l);
-    used += size * 1.45 + (l.gapBefore ? size * 0.7 : 0);
+    used += advance(l, size);
   }
   const pages = pagesLines.length;
 
@@ -253,14 +254,13 @@ async function render(data: ShareData, preset: keyof typeof PRESETS, brand: stri
     ctx.fillStyle = "#ffffff";
     ctx.font = `${size}px ${SERIF}`;
     for (const l of pagesLines[p]) {
-      if (l.gapBefore) y += size * 0.7;
-      y += size * 1.45;
+      y += advance(l, size);
       ctx.fillText(l.text, pad, y - size * 0.35);
     }
     footer(ctx, p + 1, pages);
     slides.push(c);
   }
-  return { slides, fontSize: size };
+  return slides;
 }
 
 export function ShareDialog({ data }: { data: ShareData }) {
@@ -268,30 +268,39 @@ export function ShareDialog({ data }: { data: ShareData }) {
   const holder = useRef<HTMLDivElement>(null);
   const [preset, setPreset] = useState<keyof typeof PRESETS>("portrait");
   const [brand, setBrand] = useState("specular.blog");
-  const [result, setResult] = useState<Rendered | null>(null);
+  const [slides, setSlides] = useState<HTMLCanvasElement[] | null>(null);
+  const [art, setArt] = useState<Art | null>(null);
   const [opened, setOpened] = useState(false);
 
+  // Load the poster and its colour once per open.
   useEffect(() => {
     if (!opened) return;
     let cancelled = false;
-    render(data, preset, brand).then((r) => {
-      if (cancelled || !holder.current) return;
-      holder.current.replaceChildren(...r.slides);
-      r.slides.forEach((c, i) => c.setAttribute("aria-label", `Slide ${i + 1} of ${r.slides.length}`));
-      setResult(r);
-    });
+    loadArt(data.posterUrl).then((a) => !cancelled && setArt(a));
     return () => {
       cancelled = true;
     };
-  }, [opened, preset, brand, data]);
+  }, [opened, data.posterUrl]);
+
+  // Redraw on changes; typing in the footer field waits for a short pause.
+  useEffect(() => {
+    if (!art) return;
+    const t = setTimeout(() => {
+      const next = render(data, preset, brand, art);
+      next.forEach((c, i) => c.setAttribute("aria-label", `Slide ${i + 1} of ${next.length}`));
+      holder.current?.replaceChildren(...next);
+      setSlides(next);
+    }, 200);
+    return () => clearTimeout(t);
+  }, [art, preset, brand, data]);
 
   const download = () => {
-    result?.slides.forEach((c, i) => {
+    slides?.forEach((c, i) => {
       c.toBlob((blob) => {
         if (!blob) return;
         const a = document.createElement("a");
         a.href = URL.createObjectURL(blob);
-        a.download = `${data.title.replace(/[^\w-]+/g, "-").toLowerCase()}-${preset}${result.slides.length > 1 ? `-${i + 1}` : ""}.png`;
+        a.download = `${slugify(data.title)}-${preset}${slides.length > 1 ? `-${i + 1}` : ""}.png`;
         a.click();
         setTimeout(() => URL.revokeObjectURL(a.href), 2000);
       }, "image/png");
@@ -303,11 +312,11 @@ export function ShareDialog({ data }: { data: ShareData }) {
       <button className="btn" onClick={() => { setOpened(true); ref.current?.showModal(); }}>Make Instagram image</button>
       <dialog ref={ref} className="modal wide" aria-labelledby="share-h" onClose={() => setOpened(false)}>
         <div className="share-layout">
-          <div style={{ display: "grid", gap: 12 }}>
+          <div className="stack tight">
             <h2 id="share-h">Instagram image</h2>
             <div className="share-previews" ref={holder} />
           </div>
-          <div style={{ display: "grid", gap: 14, alignContent: "start" }}>
+          <div className="stack tight">
             <label className="field">
               <span>Size</span>
               <select className="select" value={preset} onChange={(e) => setPreset(e.target.value as keyof typeof PRESETS)}>
@@ -321,14 +330,14 @@ export function ShareDialog({ data }: { data: ShareData }) {
               <input className="input" value={brand} maxLength={40} onChange={(e) => setBrand(e.target.value)} />
             </label>
             {data.spoiler && <div className="notice warn">This review is marked as containing spoilers.</div>}
-            {result && result.slides.length > 1 && (
-              <p className="hint">The full review didn&apos;t fit on one image, so it continues across {result.slides.length} slides for a carousel post.</p>
+            {slides && slides.length > 1 && (
+              <p className="hint">The full review didn&apos;t fit on one image, so it continues across {slides.length} slides for a carousel post.</p>
             )}
             <p className="hint">The image is made on this device and downloaded. Nothing is posted or uploaded anywhere.</p>
             <div className="actions">
               <button className="btn ghost" onClick={() => ref.current?.close()}>Close</button>
-              <button className="btn primary" onClick={download} disabled={!result}>
-                Download {result && result.slides.length > 1 ? `${result.slides.length} PNGs` : "PNG"}
+              <button className="btn primary" onClick={download} disabled={!slides}>
+                Download {slides && slides.length > 1 ? `${slides.length} PNGs` : "PNG"}
               </button>
             </div>
           </div>

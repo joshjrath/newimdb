@@ -8,31 +8,33 @@ export class ProviderError extends Error {
   }
 }
 
-export function providerTimeout(): number {
+function providerTimeout(): number {
   const n = Number(process.env.PROVIDER_TIMEOUT_MS);
   return Number.isFinite(n) && n > 0 ? n : 6000;
 }
 
-/** fetch + JSON with a hard timeout so a slow provider falls back instead of hanging the UI. */
-export async function fetchJson<T>(provider: string, url: string, init: RequestInit = {}, timeoutMs = providerTimeout()): Promise<T> {
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+/** fetch with a hard timeout so a slow provider falls back instead of hanging the UI. */
+export async function fetchWithTimeout(provider: string, url: string, init: RequestInit = {}, timeoutMs = providerTimeout()): Promise<Response> {
   try {
-    const res = await fetch(url, {
-      ...init,
-      signal: ctrl.signal,
-      headers: { Accept: "application/json", "User-Agent": "private-watch-journal/1.0", ...(init.headers ?? {}) },
-      cache: "no-store",
-    });
+    const res = await fetch(url, { cache: "no-store", ...init, signal: AbortSignal.timeout(timeoutMs) });
     if (!res.ok) throw new ProviderError(provider, `HTTP ${res.status}`, res.status);
-    return (await res.json()) as T;
+    return res;
   } catch (e) {
     if (e instanceof ProviderError) throw e;
-    if ((e as Error).name === "AbortError") throw new ProviderError(provider, `timed out after ${timeoutMs}ms`);
+    const name = (e as Error).name;
+    if (name === "TimeoutError" || name === "AbortError") throw new ProviderError(provider, `timed out after ${timeoutMs}ms`);
     throw new ProviderError(provider, (e as Error).message || "request failed");
-  } finally {
-    clearTimeout(timer);
   }
+}
+
+export async function fetchJson<T>(provider: string, url: string, init: RequestInit = {}, timeoutMs?: number): Promise<T> {
+  const res = await fetchWithTimeout(
+    provider,
+    url,
+    { ...init, headers: { Accept: "application/json", "User-Agent": "private-watch-journal/1.0", ...(init.headers ?? {}) } },
+    timeoutMs,
+  );
+  return (await res.json()) as T;
 }
 
 /** Try providers in order; first success wins. Collects errors for a useful message. */
@@ -51,9 +53,4 @@ export async function firstSuccessful<T>(attempts: { name: string; run: () => Pr
 export function yearOf(date: string | null | undefined): number | null {
   const m = /^(\d{4})/.exec(date ?? "");
   return m ? Number(m[1]) : null;
-}
-
-export function stripHtml(s: string | null | undefined): string | null {
-  if (!s) return null;
-  return s.replace(/<br\s*\/?>/gi, "\n").replace(/<[^>]+>/g, "").replace(/&amp;/g, "&").replace(/&quot;/g, '"').replace(/&#39;/g, "'").trim() || null;
 }

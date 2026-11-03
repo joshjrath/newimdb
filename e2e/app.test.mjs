@@ -9,7 +9,7 @@ import path from "node:path";
 import { chromium } from "playwright";
 
 const PASSWORD = "e2e-owner-password-123";
-const PORT = 3000 + Math.floor(Math.random() * 2000) + 1000;
+const PORT = 4000 + Math.floor(Math.random() * 2000);
 const BASE = `http://localhost:${PORT}`;
 const root = path.resolve(import.meta.dirname, "..");
 let server, browser, dataDir;
@@ -48,7 +48,7 @@ async function ownerPage() {
 
 before(async () => {
   dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "watch-e2e-"));
-  const hash = execFileSync("node", [path.join(root, "scripts/hash-password.mjs"), PASSWORD]).toString().trim();
+  const hash = execFileSync("node", [path.join(root, "scripts/hash-password.ts"), PASSWORD]).toString().trim();
   server = spawn(path.join(root, "node_modules/.bin/next"), ["start", "-p", String(PORT)], {
     cwd: root,
     env: { ...process.env, OWNER_PASSWORD_HASH: hash, DATA_DIR: dataDir, COOKIE_SECURE: "false", NODE_ENV: "production" },

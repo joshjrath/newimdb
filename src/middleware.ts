@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { SESSION_COOKIE } from "./lib/session-cookie";
 
 /**
  * UX only: bounce visitors without a session cookie to /login early.
@@ -7,7 +8,7 @@ import { NextResponse, type NextRequest } from "next/server";
  */
 export function middleware(req: NextRequest) {
   const { pathname, search } = req.nextUrl;
-  if (req.cookies.get("sw_session")?.value) return NextResponse.next();
+  if (req.cookies.get(SESSION_COOKIE)?.value) return NextResponse.next();
   if (pathname.startsWith("/api/")) {
     return NextResponse.json({ error: "Sign in required." }, { status: 401, headers: { "Cache-Control": "no-store" } });
   }

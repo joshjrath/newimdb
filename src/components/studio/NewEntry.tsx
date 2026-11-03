@@ -4,14 +4,8 @@ import { useState } from "react";
 import { api, ApiError } from "@/lib/client/api";
 import { useToast } from "../Toasts";
 import { Poster } from "../Poster";
-import type { MediaType } from "@/lib/domain/types";
+import { defaultSegmentLabel, defaultStatus, MEDIA_TYPES, PROVIDER_ID_FIELD, TYPE_LABEL, typePluralLabel, type MediaType } from "@/lib/domain/types";
 import type { ProviderDetails, SearchResult } from "@/lib/providers/types";
-
-const TYPES: { t: MediaType; label: string }[] = [
-  { t: "movie", label: "Movie" },
-  { t: "tv", label: "TV show" },
-  { t: "anime", label: "Anime" },
-];
 
 export function NewEntry({ initialType, providers }: { initialType: MediaType; providers: Record<MediaType, string[]> }) {
   const router = useRouter();
@@ -55,9 +49,14 @@ export function NewEntry({ initialType, providers }: { initialType: MediaType; p
       const d = await api<ProviderDetails>(`/api/metadata/details?type=${type}&provider=${r.provider}&id=${encodeURIComponent(r.providerId)}`);
       setDetails(d);
     } catch (err) {
-      setError(`${(err as Error).message}`);
+      setError((err as Error).message);
       // Fall back to what the search gave us so the owner can still add it.
-      setDetails({ provider: r.provider, metadata: { title: r.title, year: r.year, posterUrl: r.posterUrl, overview: r.overview, ...(r.provider === "tmdb" ? { tmdbId: Number(r.providerId) } : r.provider === "jikan" ? { malId: Number(r.providerId) } : r.provider === "tvmaze" ? { tvmazeId: Number(r.providerId) } : { anilistId: Number(r.providerId) }) }, segments: [], warnings: ["Only basic details were available. Add seasons in Studio."] });
+      setDetails({
+        provider: r.provider,
+        metadata: { title: r.title, year: r.year, posterUrl: r.posterUrl, overview: r.overview, [PROVIDER_ID_FIELD[r.provider]]: Number(r.providerId) },
+        segments: [],
+        warnings: ["Only basic details were available. Add seasons in Studio."],
+      });
     } finally {
       setLoadingDetails(false);
     }
@@ -77,31 +76,26 @@ export function NewEntry({ initialType, providers }: { initialType: MediaType; p
     }
   };
 
-  const fromDetails = () =>
-    details && {
-      type,
-      metadata: details.metadata,
-      review: { status: type === "movie" ? "completed" : "watching", visibility: "private" },
-      segments: details.segments.map((s) => ({ ...s })),
-    };
+  const review = { status: defaultStatus(type), visibility: "private" };
+  const fromDetails = () => details && { type, metadata: details.metadata, review, segments: details.segments };
 
   const fromManual = () => {
     const counts = manual.seasons.split(/[,\s]+/).map(Number).filter((n) => Number.isInteger(n) && n >= 0);
     return {
       type,
       metadata: { title: manual.title.trim(), year: manual.year ? Number(manual.year) : null, posterUrl: manual.posterUrl.trim() || null },
-      review: { status: type === "movie" ? "completed" : "watching", visibility: "private" },
-      segments: type === "movie" ? [] : counts.map((n, i) => ({ kind: "season", label: `Season ${i + 1}`, seasonNumber: i + 1, courNumber: null, episodeCount: n })),
+      review,
+      segments: type === "movie" ? [] : counts.map((n, i) => ({ kind: "season", label: defaultSegmentLabel("season", { season: i + 1 }), seasonNumber: i + 1, courNumber: null, episodeCount: n })),
     };
   };
 
   return (
     <div className="studio-grid two">
-      <div style={{ display: "grid", gap: 20 }}>
+      <div className="stack loose">
         <div className="chips" role="radiogroup" aria-label="Type">
-          {TYPES.map((x) => (
-            <button key={x.t} type="button" role="radio" aria-checked={type === x.t} aria-pressed={type === x.t} className="chip" onClick={() => { setType(x.t); setResults(null); setDetails(null); setError(null); }}>
-              {x.label}
+          {MEDIA_TYPES.map((t) => (
+            <button key={t} type="button" role="radio" aria-checked={type === t} aria-pressed={type === t} className="chip" onClick={() => { setType(t); setResults(null); setDetails(null); setError(null); }}>
+              {TYPE_LABEL[t]}
             </button>
           ))}
         </div>
@@ -109,7 +103,7 @@ export function NewEntry({ initialType, providers }: { initialType: MediaType; p
         <form className="toolbar" onSubmit={search} role="search">
           <label className="grow">
             <span className="visually-hidden">Title</span>
-            <input className="input" value={q} onChange={(e) => setQ(e.target.value)} placeholder={`Search ${type === "movie" ? "movies" : type === "tv" ? "TV shows" : "anime"} by title`} disabled={noProvider} />
+            <input className="input" value={q} onChange={(e) => setQ(e.target.value)} placeholder={`Search ${typePluralLabel(type).toLowerCase()} by title`} disabled={noProvider} />
           </label>
           <button className="btn primary" disabled={searching || noProvider}>{searching ? "Searching…" : "Search"}</button>
         </form>
@@ -121,8 +115,8 @@ export function NewEntry({ initialType, providers }: { initialType: MediaType; p
             {results.map((r) => (
               <button key={`${r.provider}:${r.providerId}`} type="button" className="result" aria-pressed={picked === `${r.provider}:${r.providerId}`} onClick={() => pick(r)}>
                 <Poster url={r.posterUrl} title={r.title} />
-                <span style={{ display: "grid", gap: 4, alignContent: "start" }}>
-                  <strong style={{ fontFamily: "var(--font-display)" }}>{r.title}</strong>
+                <span className="stack" style={{ "--stack-gap": "4px" } as React.CSSProperties}>
+                  <strong className="display">{r.title}</strong>
                   <span className="hint">{[r.year, r.note].filter(Boolean).join(" · ")}</span>
                   {r.originalTitle && <span className="hint">{r.originalTitle}</span>}
                   <span className="src">from {r.provider}</span>

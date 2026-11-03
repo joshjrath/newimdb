@@ -1,7 +1,7 @@
-import type { MediaType, SegmentKind } from "../domain/types";
+import type { MediaType, ProviderName, SegmentKind } from "../domain/types";
 import type { MetadataInput, ProviderEpisode } from "../schemas";
 
-export type ProviderName = "tmdb" | "tvmaze" | "jikan" | "anilist";
+export type { ProviderName };
 
 export interface SearchResult {
   provider: ProviderName;
@@ -31,4 +31,9 @@ export interface ProviderDetails {
   metadata: Partial<MetadataInput> & { title: string };
   segments: ProposedSegment[];
   warnings: string[];
+}
+
+/** `episodes: false` skips per-episode downloads (e.g. a metadata refresh only needs the show). */
+export interface DetailsOptions {
+  episodes?: boolean;
 }

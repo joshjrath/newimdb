@@ -1,6 +1,26 @@
-import type { SegmentKind } from "../domain/types";
+import { defaultSegmentLabel, type SegmentKind } from "../domain/types";
+import { htmlToTextOrNull } from "../domain/text";
+import type { ProviderEpisode } from "../schemas";
 import { fetchJson, ProviderError, yearOf } from "./http";
-import type { ProposedSegment, ProviderDetails, SearchResult } from "./types";
+import type { DetailsOptions, ProposedSegment, ProviderDetails, ProviderName, SearchResult } from "./types";
+
+/** The single segment an anime entry starts with (MAL/AniList list each season as its own entry). */
+function firstSegment(kind: SegmentKind, episodeCount: number, provider: ProviderName, providerRef: string, episodes?: ProviderEpisode[]): ProposedSegment[] {
+  const count = Math.max(episodeCount, kind === "movie" ? 1 : 0);
+  if (count === 0) return [];
+  return [
+    {
+      kind,
+      label: defaultSegmentLabel(kind, { season: kind === "season" ? 1 : null }),
+      seasonNumber: kind === "season" ? 1 : null,
+      courNumber: null,
+      episodeCount: count,
+      provider,
+      providerRef,
+      episodes: episodes?.length ? episodes : undefined,
+    },
+  ];
+}
 
 /* ---------------- Jikan (MyAnimeList) ---------------- */
 
@@ -64,27 +84,21 @@ export async function jikanEpisodes(malId: string) {
   return out;
 }
 
-export async function jikanDetails(malId: string, segmentLabel?: string): Promise<ProviderDetails> {
-  const { data: a } = await fetchJson<{ data: JikanAnime }>("jikan", `${JIKAN}/anime/${encodeURIComponent(malId)}/full`);
+export async function jikanDetails(malId: string, opts: DetailsOptions = {}): Promise<ProviderDetails> {
   const warnings: string[] = [];
-  let episodes: Awaited<ReturnType<typeof jikanEpisodes>> | undefined;
-  try {
-    episodes = await jikanEpisodes(malId);
-  } catch (e) {
-    warnings.push(`Episode titles unavailable (${(e as Error).message}). Episode count used instead.`);
-  }
+  // The two requests are independent; start the episode list straight away.
+  const episodesP =
+    opts.episodes === false
+      ? Promise.resolve(undefined)
+      : jikanEpisodes(malId).catch((e) => {
+          warnings.push(`Episode titles unavailable (${(e as Error).message}). Episode count used instead.`);
+          return undefined;
+        });
+  const [{ data: a }, episodes] = await Promise.all([
+    fetchJson<{ data: JikanAnime }>("jikan", `${JIKAN}/anime/${encodeURIComponent(malId)}/full`),
+    episodesP,
+  ]);
   const kind = kindForAnimeType(a.type);
-  const count = Math.max(a.episodes ?? 0, episodes?.length ?? 0, kind === "movie" ? 1 : 0);
-  const segment: ProposedSegment = {
-    kind,
-    label: segmentLabel ?? (kind === "season" ? "Season 1" : kind === "movie" ? "Movie 1" : kind === "ova" ? "OVA" : "Special"),
-    seasonNumber: kind === "season" ? 1 : null,
-    courNumber: null,
-    episodeCount: count,
-    provider: "jikan",
-    providerRef: String(a.mal_id),
-    episodes: episodes?.length ? episodes : undefined,
-  };
   return {
     provider: "jikan",
     metadata: {
@@ -99,7 +113,7 @@ export async function jikanDetails(malId: string, segmentLabel?: string): Promis
       thirdPartyRating: a.score,
       thirdPartyRatingSource: a.score ? "MyAnimeList" : null,
     },
-    segments: count > 0 ? [segment] : [],
+    segments: firstSegment(kind, Math.max(a.episodes ?? 0, episodes?.length ?? 0), "jikan", String(a.mal_id), episodes),
     warnings,
   };
 }
@@ -146,23 +160,22 @@ export async function anilistSearch(q: string): Promise<SearchResult[]> {
     originalTitle: m.title.english ? m.title.romaji : null,
     year: m.startDate.year,
     posterUrl: m.coverImage.extraLarge ?? m.coverImage.large,
-    overview: m.description?.replace(/<[^>]+>/g, "") ?? null,
+    overview: htmlToTextOrNull(m.description),
     note: [m.format, m.episodes ? `${m.episodes} episodes` : null].filter(Boolean).join(" · ") || null,
   }));
 }
 
-export async function anilistDetails(id: string, segmentLabel?: string): Promise<ProviderDetails> {
+export async function anilistDetails(id: string): Promise<ProviderDetails> {
   const d = await anilist<{ Media: AniMedia }>(`query ($id: Int) { Media(id: $id, type: ANIME) { ${FIELDS} } }`, { id: Number(id) });
   const m = d.Media;
   const kind = kindForAnimeType(m.format === "TV_SHORT" ? "TV" : m.format);
-  const count = Math.max(m.episodes ?? 0, kind === "movie" ? 1 : 0);
   return {
     provider: "anilist",
     metadata: {
       title: m.title.english || m.title.romaji || "Untitled",
       originalTitle: m.title.english ? m.title.romaji : m.title.native,
       year: m.startDate.year,
-      overview: m.description?.replace(/<[^>]+>/g, "") ?? null,
+      overview: htmlToTextOrNull(m.description),
       posterUrl: m.coverImage.extraLarge ?? m.coverImage.large,
       genres: m.genres,
       anilistId: m.id,
@@ -171,10 +184,7 @@ export async function anilistDetails(id: string, segmentLabel?: string): Promise
       thirdPartyRating: m.averageScore != null ? m.averageScore / 10 : null,
       thirdPartyRatingSource: m.averageScore != null ? "AniList" : null,
     },
-    segments:
-      count > 0
-        ? [{ kind, label: segmentLabel ?? (kind === "season" ? "Season 1" : kind === "movie" ? "Movie 1" : "OVA"), seasonNumber: kind === "season" ? 1 : null, courNumber: null, episodeCount: count, provider: "anilist", providerRef: String(m.id) }]
-        : [],
+    segments: firstSegment(kind, m.episodes ?? 0, "anilist", String(m.id)),
     warnings: ["AniList doesn't provide episode titles; counts only."],
   };
 }

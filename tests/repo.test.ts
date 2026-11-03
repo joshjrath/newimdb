@@ -154,7 +154,7 @@ describe("structure editing after creation", () => {
     let d = getMediaDetail(m.id)!;
     setAssessment(m.id, d.segments[1].episodes[0].id, { rating: 5 });
     d = getMediaDetail(m.id)!;
-    const segs = saveStructure(m.id, {
+    const { segments: segs } = saveStructure(m.id, {
       version: d.version,
       segments: [
         { id: d.segments[0].id, kind: "cour", label: "Season 1 · Cour 1", seasonNumber: 1, courNumber: 1, episodeCount: 12 },

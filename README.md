@@ -6,6 +6,8 @@ Everything is private in this release. No page, API, image or export can be open
 
 ## Quick start
 
+Requires Node 22.18 or newer (the `scripts/*.ts` helpers run directly with Node's built-in TypeScript support).
+
 ```bash
 npm install
 npm run hash-password            # prints OWNER_PASSWORD_HASH=...
@@ -121,8 +123,11 @@ Sources: your username (RSS feed, recent ~50 entries), pasted RSS, or the export
 ## Code map
 
 ```
-src/lib/db.ts               SQLite schema + migrations
-src/lib/auth.ts, guard.ts   sessions, owner checks, API error mapping
+src/lib/db.ts               SQLite schema + migrations, prepared-statement cache
+src/lib/domain/types.ts     every enum (types, statuses, segment kinds, providers) — schemas and UI derive from it
+src/lib/domain/assessment.ts  episode rules shared by server, restore and the optimistic UI
+src/lib/auth.ts, guard.ts   sessions, owner checks, request-cached loaders, API policy and error mapping
+src/lib/password.ts         scrypt hashing (also used by scripts/hash-password.ts)
 src/lib/schemas.ts          zod validation (every external ID listed explicitly)
 src/lib/domain/             pure logic: ratings, progress/active episode, text syntax, Letterboxd parsing
 src/lib/repo/               media, structure, assessments, tags, imports, backup, audit log
@@ -138,7 +143,7 @@ Personal data (`review`, `episode_assessment`, `media_tag`) is stored apart from
 ## Tests
 
 ```bash
-npm test                         # 42 unit/integration tests (domain, repository, import, backup, providers)
+npm test                         # 45 unit/integration tests (domain, repository, import, backup, providers)
 npm run build && npm run test:e2e   # browser tests against the production build
 ```
 

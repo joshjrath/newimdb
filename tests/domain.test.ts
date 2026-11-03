@@ -119,3 +119,30 @@ describe("text", () => {
     expect(idFromSlug("abc")).toBeNull();
   });
 });
+
+import { resolveAssessment, UNASSESSED } from "@/lib/domain/assessment";
+import { defaultSegmentLabel } from "@/lib/domain/types";
+import { hashPassword, verifyPasswordHash } from "@/lib/password";
+
+describe("shared rules", () => {
+  it("assessment: rating implies watched, leaving watched clears rating, filler independent", () => {
+    expect(resolveAssessment(UNASSESSED, { rating: 4 })).toEqual({ state: "watched", rating: 4, filler: false });
+    expect(resolveAssessment({ state: "watched", rating: 4, filler: true }, { state: "skipped" })).toEqual({ state: "skipped", rating: null, filler: true });
+    expect(resolveAssessment({ state: "watched", rating: 4, filler: false }, { filler: true })).toEqual({ state: "watched", rating: 4, filler: true });
+    expect(resolveAssessment({ state: "watched", rating: 4, filler: false }, { rating: null })).toEqual({ state: "watched", rating: null, filler: false });
+  });
+  it("segment labels", () => {
+    expect(defaultSegmentLabel("season", { season: 3 })).toBe("Season 3");
+    expect(defaultSegmentLabel("season", { season: 0 })).toBe("Specials");
+    expect(defaultSegmentLabel("cour", { season: 2, cour: 2 })).toBe("Season 2 · Cour 2");
+    expect(defaultSegmentLabel("ova", { ordinal: 2 })).toBe("OVA 2");
+    expect(defaultSegmentLabel("special")).toBe("Specials");
+    expect(defaultSegmentLabel("movie", { ordinal: 1 })).toBe("Movie 1");
+  });
+  it("password hashes verify", async () => {
+    const h = await hashPassword("correct horse");
+    expect(await verifyPasswordHash("correct horse", h)).toBe(true);
+    expect(await verifyPasswordHash("wrong", h)).toBe(false);
+    expect(await verifyPasswordHash("x", "garbage")).toBe(false);
+  });
+});

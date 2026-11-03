@@ -81,3 +81,12 @@ export function idFromSlug(slug: string): number | null {
   const m = /^(\d+)(?:-|$)/.exec(slug);
   return m ? Number(m[1]) : null;
 }
+
+/** `htmlToText` for optional provider fields: null/empty in, null out. */
+export function htmlToTextOrNull(html: string | null | undefined): string | null {
+  return html ? htmlToText(html) || null : null;
+}
+
+export function plural(n: number, one: string, many: string): string {
+  return `${n} ${n === 1 ? one : many}`;
+}

@@ -1,16 +1,12 @@
 import Link from "next/link";
 import type { ListItem } from "@/lib/repo/media";
-import { TYPE_TO_CATEGORY } from "@/lib/domain/types";
-import { excerpt, slugify } from "@/lib/domain/text";
+import { excerpt } from "@/lib/domain/text";
+import { mediaHref } from "@/lib/domain/links";
 import { Stars } from "./Stars";
 import { StatusPill } from "./StatusPill";
 import { Poster } from "./Poster";
 import { ProgressBar } from "./ProgressBar";
 import { formatDate } from "@/lib/format";
-
-export function mediaHref(m: { id: number; type: ListItem["type"]; title: string }) {
-  return `/watch/${TYPE_TO_CATEGORY[m.type]}/${m.id}-${slugify(m.title)}`;
-}
 
 export function LibraryCard({ m }: { m: ListItem }) {
   const r = m.review;
@@ -32,7 +28,7 @@ export function LibraryCard({ m }: { m: ListItem }) {
           ) : (
             <p className="card-excerpt">{excerpt(r.body, 70)}</p>
           ))}
-        {m.progress && m.progress.total > 0 && <ProgressBar p={m.progress} />}
+        {m.progress && <ProgressBar p={m.progress} />}
         <div className="card-meta">
           {r.watchedOn && <span>Watched {formatDate(r.watchedOn)}</span>}
           {m.tags.length > 0 && <span className="tags">{m.tags.join(", ")}</span>}

@@ -9,9 +9,3 @@ export function audit(db: DB, action: string, entity: string, entityId: number |
     detail === undefined ? null : JSON.stringify(detail).slice(0, 4000),
   );
 }
-
-export function recentAudit(db: DB, limit = 50) {
-  return db.prepare(`SELECT * FROM audit_event ORDER BY id DESC LIMIT ?`).all(limit) as {
-    id: number; at: string; action: string; entity: string; entity_id: string | null; detail: string | null;
-  }[];
-}

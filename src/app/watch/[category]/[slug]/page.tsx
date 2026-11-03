@@ -1,6 +1,7 @@
+import { Fragment } from "react";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { isOwner, requireOwnerPage } from "@/lib/guard";
+import { loadOwnerMedia, requireOwnerPage } from "@/lib/guard";
 import { Shell } from "@/components/Shell";
 import { Poster } from "@/components/Poster";
 import { Stars } from "@/components/Stars";
@@ -8,32 +9,43 @@ import { StatusPill } from "@/components/StatusPill";
 import { Heatmap } from "@/components/Heatmap";
 import { ShareDialog } from "@/components/ShareDialog";
 import { SpoilerReveal, CopyLink } from "@/components/DetailClient";
-import { mediaHref } from "@/components/LibraryCard";
-import { getMediaDetail } from "@/lib/repo/media";
+import { mediaHref } from "@/lib/domain/links";
 import { idFromSlug, paragraphs } from "@/lib/domain/text";
-import { CATEGORY_LABEL, TYPE_TO_CATEGORY, type Category } from "@/lib/domain/types";
+import { CATEGORY_LABEL, TYPE_TO_CATEGORY, type MediaDetail } from "@/lib/domain/types";
 import { formatDate } from "@/lib/format";
 
-export const dynamic = "force-dynamic";
+type Params = Promise<{ category: string; slug: string }>;
 
-export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }) {
-  if (!(await isOwner())) return { title: "Sign in" };
-  const id = idFromSlug((await params).slug);
-  const m = id ? getMediaDetail(id) : null;
-  return { title: m?.title ?? "Not found" };
+export async function generateMetadata({ params }: { params: Params }) {
+  const m = await loadOwnerMedia(idFromSlug((await params).slug));
+  return { title: m?.title ?? "Watch Journal" };
 }
 
-export default async function DetailPage({ params, searchParams }: { params: Promise<{ category: string; slug: string }>; searchParams: Promise<{ segment?: string }> }) {
+/** Third-party facts, kept apart from the owner's own rating and review. */
+function aboutRows(m: MediaDetail): [string, string][] {
+  const rows: [string, string | number | null | false][] = [
+    ["Genres", m.genres.join(", ")],
+    [`${m.thirdPartyRatingSource ?? "Public"} score`, m.thirdPartyRating != null && `${m.thirdPartyRating.toFixed(1)} / 10 (not my rating)`],
+    ["IMDb", m.imdbId],
+    ["TMDB", m.tmdbId],
+    ["MyAnimeList", m.malId],
+    ["TVmaze", m.tvmazeId],
+    ["Source", m.review.source === "letterboxd" && "Imported from Letterboxd"],
+    ["Details from", m.metadataSource !== "letterboxd" && m.metadataSource],
+  ];
+  return rows.filter((r): r is [string, string | number] => r[1] != null && r[1] !== false && r[1] !== "").map(([k, v]) => [k, String(v)]);
+}
+
+export default async function DetailPage({ params, searchParams }: { params: Params; searchParams: Promise<{ segment?: string }> }) {
   const { category, slug } = await params;
   await requireOwnerPage(`/watch/${category}/${slug}`);
-  const id = idFromSlug(slug);
-  const m = id ? getMediaDetail(id) : null;
+  const m = await loadOwnerMedia(idFromSlug(slug));
   if (!m) notFound();
   const canonical = mediaHref(m);
   if (canonical !== `/watch/${category}/${slug}`) redirect(canonical);
   const r = m.review;
-  const sp = await searchParams;
-  const cat = TYPE_TO_CATEGORY[m.type] as Category;
+  const cat = TYPE_TO_CATEGORY[m.type];
+  const about = aboutRows(m);
 
   const body = r.body.trim() ? (
     <div className="review-body">
@@ -94,28 +106,24 @@ export default async function DetailPage({ params, searchParams }: { params: Pro
               <h2 id="eps-h">Episodes</h2>
               <Link className="btn small ghost" href={`/studio/${m.id}#structure`}>Edit seasons</Link>
             </header>
-            <p className="hint">
-              Your overall rating above is set by you. The episode average below is calculated and shown separately.
-            </p>
-            <Heatmap mediaId={m.id} initial={m.segments} initialSegment={Number(sp.segment) || null} />
+            <p className="hint">Your overall rating above is set by you. The episode average below is calculated and shown separately.</p>
+            <Heatmap mediaId={m.id} initial={m.segments} initialSegment={Number((await searchParams).segment) || null} />
           </section>
         )}
 
-        {(m.overview || m.genres.length > 0 || m.thirdPartyRating != null || m.imdbId || m.tmdbId || m.malId || m.tvmazeId || r.source === "letterboxd") && (
-        <section className="section meta-panel" aria-labelledby="meta-h">
-          <h2 id="meta-h" style={{ fontSize: "1.05rem" }}>About this {m.type === "movie" ? "film" : "series"}</h2>
-          {m.overview && <p style={{ maxWidth: "68ch" }}>{m.overview}</p>}
-          <dl>
-            {m.genres.length > 0 && (<><dt>Genres</dt><dd>{m.genres.join(", ")}</dd></>)}
-            {m.thirdPartyRating != null && (<><dt>{m.thirdPartyRatingSource ?? "Public"} score</dt><dd>{m.thirdPartyRating.toFixed(1)} / 10 (not my rating)</dd></>)}
-            {m.imdbId && (<><dt>IMDb</dt><dd>{m.imdbId}</dd></>)}
-            {m.tmdbId && (<><dt>TMDB</dt><dd>{m.tmdbId}</dd></>)}
-            {m.malId && (<><dt>MyAnimeList</dt><dd>{m.malId}</dd></>)}
-            {m.tvmazeId && (<><dt>TVmaze</dt><dd>{m.tvmazeId}</dd></>)}
-            {r.source === "letterboxd" && (<><dt>Source</dt><dd>Imported from Letterboxd</dd></>)}
-            {m.metadataSource && m.metadataSource !== "letterboxd" && (<><dt>Details from</dt><dd>{m.metadataSource}</dd></>)}
-          </dl>
-        </section>
+        {(m.overview || about.length > 0) && (
+          <section className="section meta-panel" aria-labelledby="meta-h">
+            <h2 id="meta-h" style={{ fontSize: "1.05rem" }}>About this {m.type === "movie" ? "film" : "series"}</h2>
+            {m.overview && <p>{m.overview}</p>}
+            <dl>
+              {about.map(([k, v]) => (
+                <Fragment key={k}>
+                  <dt>{k}</dt>
+                  <dd>{v}</dd>
+                </Fragment>
+              ))}
+            </dl>
+          </section>
         )}
       </article>
     </Shell>

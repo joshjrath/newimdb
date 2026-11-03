@@ -1,6 +1,6 @@
 import { isValidRating } from "./rating";
 import type { EpisodeState, SegmentView } from "./types";
-import { orderedSegments, segmentCode } from "./progress";
+import { orderedSegments, segmentCode, sortedEpisodes } from "./progress";
 
 /**
  * Plain-text episode ratings, e.g.
@@ -108,7 +108,7 @@ export function resolveAssignments(segments: SegmentView[], parsed: ParseResult)
         let n = a.episode;
         for (const c of ordered) {
           if (n <= c.episodes.length) {
-            const ep = [...c.episodes].sort((x, y) => x.number - y.number)[n - 1];
+            const ep = sortedEpisodes(c)[n - 1];
             if (ep) resolved.push({ episodeId: ep.id, state: a.state, rating: a.rating, filler: a.filler });
             n = -1;
             break;
@@ -138,8 +138,7 @@ export function exportEpisodeText(segments: SegmentView[], opts: { includeUnwatc
   for (const s of orderedSegments(segments)) {
     const code = segmentCode(s);
     const prefix = /^S\d+/.test(code) ? code : `"${s.label.replace(/"/g, "'")}" `;
-    const eps = [...s.episodes].sort((a, b) => a.number - b.number);
-    const out = eps
+    const out = sortedEpisodes(s)
       .filter((e) => opts.includeUnwatched || e.state !== "unwatched" || e.filler)
       .map((e) => {
         const v = e.rating != null ? String(e.rating) : e.state === "watched" ? "watched" : e.state === "skipped" ? "skip" : "?";

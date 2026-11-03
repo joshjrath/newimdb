@@ -1,47 +1,26 @@
-import fs from "node:fs";
 import path from "node:path";
 import { z } from "zod";
-import { dataDir, getDb, nowIso, type DB } from "../db";
-import { metadataSchema, reviewSchema } from "../schemas";
+import { dataSubdir, getDb, nowIso, type DB } from "../db";
+import { REVIEW_SOURCES } from "../domain/types";
+import { backupSegmentSchema, metadataSchema, mediaTypeSchema, reviewSchema } from "../schemas";
 import { audit } from "./audit";
-import { createMedia, getMediaDetail } from "./media";
+import { getMediaDetail, insertMedia, metadataOf, restoreAssessments } from "./media";
 
 export const BACKUP_FORMAT = "specular-watch-backup";
 
-const episodeBackup = z.object({
-  number: z.number().int().positive(),
-  title: z.string().nullable(),
-  airDate: z.string().nullable(),
-  overview: z.string().nullable().optional(),
-  state: z.enum(["unwatched", "watched", "skipped"]),
-  rating: z.number().nullable(),
-  filler: z.boolean(),
-  watchedAt: z.string().nullable(),
-});
-
 const mediaBackup = z.object({
   uid: z.string().min(8).max(64),
-  type: z.enum(["movie", "tv", "anime"]),
+  type: mediaTypeSchema,
   metadata: metadataSchema,
   review: reviewSchema.extend({
-    source: z.enum(["manual", "letterboxd", "backup"]),
+    source: z.enum(REVIEW_SOURCES),
     sourceRef: z.string().nullable(),
     lastWatchedAt: z.string().nullable(),
     createdAt: z.string(),
     updatedAt: z.string(),
   }),
   tags: z.array(z.string()),
-  segments: z.array(
-    z.object({
-      kind: z.enum(["season", "cour", "ova", "movie", "special"]),
-      label: z.string(),
-      seasonNumber: z.number().int().nullable(),
-      courNumber: z.number().int().nullable(),
-      provider: z.string().nullable(),
-      providerRef: z.string().nullable(),
-      episodes: z.array(episodeBackup),
-    }),
-  ),
+  segments: z.array(backupSegmentSchema),
   createdAt: z.string(),
 });
 
@@ -65,59 +44,17 @@ export function exportAll(db = getDb()): Backup {
       return {
         uid: m.uid,
         type: m.type,
-        metadata: {
-          title: m.title,
-          originalTitle: m.originalTitle,
-          year: m.year,
-          overview: m.overview,
-          posterUrl: m.posterUrl,
-          backdropUrl: m.backdropUrl,
-          runtimeMin: m.runtimeMin,
-          genres: m.genres,
-          tmdbId: m.tmdbId,
-          imdbId: m.imdbId,
-          malId: m.malId,
-          tvmazeId: m.tvmazeId,
-          anilistId: m.anilistId,
-          letterboxdUrl: m.letterboxdUrl,
-          metadataSource: m.metadataSource,
-          lockedFields: m.lockedFields,
-          thirdPartyRating: m.thirdPartyRating,
-          thirdPartyRatingSource: m.thirdPartyRatingSource,
-        },
-        review: {
-          rating: m.review.rating,
-          ratingLabel: m.review.ratingLabel,
-          body: m.review.body,
-          watchedOn: m.review.watchedOn,
-          spoiler: m.review.spoiler,
-          status: m.review.status,
-          featured: m.review.featured,
-          visibility: "private" as const,
-          source: m.review.source,
-          sourceRef: m.review.sourceRef,
-          lastWatchedAt: m.review.lastWatchedAt,
-          createdAt: m.review.createdAt,
-          updatedAt: m.review.updatedAt,
-        },
+        metadata: metadataOf(m),
+        review: m.review,
         tags: m.tags,
-        segments: m.segments.map((s) => ({
-          kind: s.kind,
-          label: s.label,
-          seasonNumber: s.seasonNumber,
-          courNumber: s.courNumber,
-          provider: s.provider,
-          providerRef: s.providerRef,
-          episodes: s.episodes.map((e) => ({
-            number: e.number,
-            title: e.title,
-            airDate: e.airDate,
-            overview: e.overview,
-            state: e.state,
-            rating: e.rating,
-            filler: e.filler,
-            watchedAt: e.watchedAt,
-          })),
+        segments: m.segments.map(({ kind, label, seasonNumber, courNumber, provider, providerRef, episodes }) => ({
+          kind,
+          label,
+          seasonNumber,
+          courNumber,
+          provider,
+          providerRef,
+          episodes: episodes.map(({ number, title, airDate, overview, state, rating, filler, watchedAt }) => ({ number, title, airDate, overview, state, rating, filler, watchedAt })),
         })),
         createdAt: m.createdAt,
       };
@@ -127,15 +64,17 @@ export function exportAll(db = getDb()): Backup {
 
 /** File-level SQLite snapshot (consistent even while the app runs). */
 export async function snapshotDatabase(label = "manual", db = getDb()): Promise<string> {
-  const dir = path.join(dataDir(), "backups");
-  fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
-  const file = path.join(dir, `watch-${nowIso().replace(/[:.]/g, "-")}-${label}.db`);
+  const file = path.join(dataSubdir("backups"), `watch-${nowIso().replace(/[:.]/g, "-")}-${label}.db`);
   await db.backup(file);
   return file;
 }
 
+function existingUids(db: DB): Set<string> {
+  return new Set((db.prepare(`SELECT uid FROM media`).all() as { uid: string }[]).map((r) => r.uid));
+}
+
 export function summarizeBackup(b: Backup, db = getDb()) {
-  const existing = new Set((db.prepare(`SELECT uid FROM media`).all() as { uid: string }[]).map((r) => r.uid));
+  const existing = existingUids(db);
   const matched = b.media.filter((m) => existing.has(m.uid)).length;
   return {
     entries: b.media.length,
@@ -156,44 +95,28 @@ export async function restoreBackup(b: Backup, mode: "merge" | "replace", db = g
   db.transaction(() => {
     if (mode === "replace") db.prepare(`DELETE FROM media`).run();
     for (const m of b.media) {
-      const prev = db.prepare(`SELECT id FROM media WHERE uid = ?`).get(m.uid) as { id: number } | undefined;
-      if (prev) {
-        db.prepare(`DELETE FROM media WHERE id = ?`).run(prev.id);
-        counts.replaced++;
-      } else counts.created++;
+      if (db.prepare(`DELETE FROM media WHERE uid = ?`).run(m.uid).changes) counts.replaced++;
+      else counts.created++;
       const { source, sourceRef, lastWatchedAt, createdAt, updatedAt, ...review } = m.review;
-      const created = createMedia(
+      const id = insertMedia(
         {
           type: m.type,
           metadata: m.metadata,
           review,
           tags: m.tags,
-          segments: m.segments.map((s) => ({
-            kind: s.kind,
-            label: s.label,
-            seasonNumber: s.seasonNumber,
-            courNumber: s.courNumber,
-            provider: s.provider,
-            providerRef: s.providerRef,
-            episodeCount: s.episodes.length ? Math.max(...s.episodes.map((e) => e.number)) : 0,
-            episodes: s.episodes.map((e) => ({ number: e.number, title: e.title, airDate: e.airDate, overview: e.overview ?? null, providerRef: null })),
+          segments: m.segments.map(({ episodes, ...s }) => ({
+            ...s,
+            episodeCount: Math.max(0, ...episodes.map((e) => e.number)),
+            episodes: episodes.map((e) => ({ number: e.number, title: e.title, airDate: e.airDate, overview: e.overview ?? null, providerRef: null })),
           })),
         },
         { source, sourceRef, uid: m.uid },
         db,
       );
-      db.prepare(`UPDATE review SET last_watched_at = ?, created_at = ?, updated_at = ? WHERE media_id = ?`).run(lastWatchedAt, createdAt, updatedAt, created.id);
-      db.prepare(`UPDATE media SET created_at = ? WHERE id = ?`).run(m.createdAt, created.id);
-      const segs = db.prepare(`SELECT id FROM segment WHERE media_id = ? ORDER BY position`).all(created.id) as { id: number }[];
-      m.segments.forEach((s, i) => {
-        for (const e of s.episodes) {
-          if (e.state === "unwatched" && e.rating == null && !e.filler) continue;
-          const ep = db.prepare(`SELECT id FROM episode WHERE segment_id = ? AND number = ?`).get(segs[i].id, e.number) as { id: number };
-          db.prepare(
-            `INSERT OR REPLACE INTO episode_assessment (episode_id, state, rating, filler, watched_at, updated_at) VALUES (?,?,?,?,?,?)`,
-          ).run(ep.id, e.rating != null ? "watched" : e.state, e.rating, e.filler ? 1 : 0, e.watchedAt, nowIso());
-        }
-      });
+      db.prepare(`UPDATE review SET last_watched_at = ?, created_at = ?, updated_at = ? WHERE media_id = ?`).run(lastWatchedAt, createdAt, updatedAt, id);
+      db.prepare(`UPDATE media SET created_at = ? WHERE id = ?`).run(m.createdAt, id);
+      const segIds = (db.prepare(`SELECT id FROM segment WHERE media_id = ? ORDER BY position`).all(id) as { id: number }[]).map((r) => r.id);
+      m.segments.forEach((s, i) => restoreAssessments(db, segIds[i], s.episodes));
     }
     audit(db, "restore_backup", "library", null, { mode, ...counts, snapshot: path.basename(snapshot) });
   })();

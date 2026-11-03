@@ -1,24 +1,19 @@
 "use client";
 import { useState } from "react";
+import { api } from "@/lib/client/api";
 
 export function LoginForm({ next }: { next: string }) {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   return (
     <form
+      className="stack"
       onSubmit={async (e) => {
         e.preventDefault();
         setBusy(true);
         setError(null);
-        const password = String(new FormData(e.currentTarget).get("password") ?? "");
         try {
-          const res = await fetch("/api/auth/login", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ password }),
-          });
-          const body = await res.json().catch(() => ({}));
-          if (!res.ok) throw new Error(body.error ?? "Sign-in failed.");
+          await api("/api/auth/login", { body: { password: String(new FormData(e.currentTarget).get("password") ?? "") } });
           window.location.href = next;
         } catch (err) {
           setError((err as Error).message);

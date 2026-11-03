@@ -18,7 +18,7 @@ export function parseRating(input: string): number | null | undefined {
 }
 
 /** Suggested short labels. Owner can override per review ("Perfect", not "Awesome"). */
-export const SUGGESTED_LABEL: Record<string, string> = {
+const SUGGESTED_LABEL: Record<string, string> = {
   "5": "Perfect",
   "4.5": "Excellent",
   "4": "Great",
@@ -43,11 +43,6 @@ export function formatRating(r: number | null): string {
 export function formatScore(r: number | null, digits = 1): string {
   if (r == null) return "–";
   return Number.isInteger(r) && digits === 1 ? r.toFixed(0) : r.toFixed(digits);
-}
-
-export function starsText(r: number | null): string {
-  if (r == null) return "";
-  return "★".repeat(Math.floor(r)) + (r % 1 ? "½" : "");
 }
 
 /**

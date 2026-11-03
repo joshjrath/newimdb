@@ -1,13 +1,12 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { destroySession, SESSION_COOKIE } from "@/lib/auth";
+import { destroySession } from "@/lib/auth";
+import { publicApi } from "@/lib/guard";
+import { SESSION_COOKIE, sessionCookieOptions } from "@/lib/session-cookie";
 
-export const dynamic = "force-dynamic";
-
-export async function POST() {
-  const jar = await cookies();
-  destroySession(jar.get(SESSION_COOKIE)?.value);
+export const POST = publicApi(async () => {
+  destroySession((await cookies()).get(SESSION_COOKIE)?.value);
   const res = NextResponse.json({ ok: true });
-  res.cookies.set(SESSION_COOKIE, "", { httpOnly: true, path: "/", maxAge: 0 });
+  res.cookies.set(SESSION_COOKIE, "", sessionCookieOptions(new Date(0)));
   return res;
-}
+});
