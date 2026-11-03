@@ -18,8 +18,9 @@ export interface ShareData {
 }
 
 const PRESETS = { portrait: { w: 1080, h: 1350, label: "Portrait 1080×1350" }, square: { w: 1080, h: 1080, label: "Square 1080×1080" } };
-const SERIF = `"Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif`;
-const SANS = `system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif`;
+/** Specular's two faces: Bricolage Grotesque for the facts, Archivo for the prose. */
+const DISPLAY = `"Bricolage Grotesque Variable", "Bricolage Grotesque", system-ui, sans-serif`;
+const SANS = `"Archivo", system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif`;
 const STATUS_COLOR: Record<WatchStatus, string> = { watching: "#8fb4ff", completed: "#6fdc98", dropped: "#ff7d7d", plan: "#c6b8f0", on_hold: "#e6c56f" };
 
 function loadImage(src: string): Promise<HTMLImageElement | null> {
@@ -74,7 +75,7 @@ function wrap(ctx: CanvasRenderingContext2D, text: string, width: number): strin
 type Line = { text: string; gapBefore: boolean };
 
 function layoutBody(ctx: CanvasRenderingContext2D, body: string, width: number, size: number): Line[] {
-  ctx.font = `${size}px ${SERIF}`;
+  ctx.font = `${size}px ${SANS}`;
   const lines: Line[] = [];
   paragraphs(body).forEach((p, pi) => {
     wrap(ctx, p, width).forEach((l, li) => lines.push({ text: l, gapBefore: pi > 0 && li === 0 }));
@@ -100,7 +101,7 @@ function drawStars(ctx: CanvasRenderingContext2D, x: number, y: number, size: nu
       ctx.beginPath();
       ctx.rect(0, 0, 24 * fill, 24);
       ctx.clip();
-      ctx.fillStyle = "#f4bf55";
+      ctx.fillStyle = "#f3e96c";
       ctx.fill(path);
       ctx.restore();
     }
@@ -114,6 +115,7 @@ interface Art {
 }
 
 async function loadArt(posterUrl: string | null): Promise<Art> {
+  await document.fonts.ready; // canvas text needs the web fonts loaded first
   const src = posterSrc(posterUrl);
   const img = src ? await loadImage(src) : null;
   return { img, base: img ? dominantColor(img) : [46, 60, 96] };
@@ -150,7 +152,7 @@ function render(data: ShareData, preset: keyof typeof PRESETS, brand: string, { 
   const probe = document.createElement("canvas").getContext("2d")!;
   const headX = pad + posterW + 40;
   const headW = w - headX - pad;
-  probe.font = `700 54px ${SERIF}`;
+  probe.font = `800 54px ${DISPLAY}`;
   const titleLines = wrap(probe, data.title, headW).slice(0, 4);
   const bodyTop1 = pad + posterH + 48;
   const avail1 = h - bodyTop1 - pad - footerH;
@@ -203,13 +205,13 @@ function render(data: ShareData, preset: keyof typeof PRESETS, brand: string, { 
         ctx.drawImage(img, (img.width - sw) / 2, 0, sw, sh, pad, pad, posterW, posterH);
       } else {
         ctx.fillStyle = "rgba(255,255,255,0.75)";
-        ctx.font = `600 30px ${SERIF}`;
+        ctx.font = `700 30px ${DISPLAY}`;
         wrap(ctx, data.title, posterW - 40).slice(0, 5).forEach((l, i) => ctx.fillText(l, pad + 20, pad + 60 + i * 38));
       }
       // header
       let hy = pad + 50;
       ctx.fillStyle = "#ffffff";
-      ctx.font = `700 54px ${SERIF}`;
+      ctx.font = `800 54px ${DISPLAY}`;
       titleLines.forEach((l) => {
         ctx.fillText(l, headX, hy);
         hy += 62;
@@ -223,7 +225,7 @@ function render(data: ShareData, preset: keyof typeof PRESETS, brand: string, { 
         hy += 86;
         if (data.ratingLabel) {
           ctx.fillStyle = "rgba(255,255,255,0.88)";
-          ctx.font = `italic 30px ${SERIF}`;
+          ctx.font = `700 30px ${DISPLAY}`;
           ctx.fillText(data.ratingLabel, headX, hy - 6);
           hy += 30;
         }
@@ -247,12 +249,12 @@ function render(data: ShareData, preset: keyof typeof PRESETS, brand: string, { 
       y = bodyTop1;
     } else {
       ctx.fillStyle = "rgba(255,255,255,0.7)";
-      ctx.font = `600 30px ${SERIF}`;
+      ctx.font = `700 30px ${DISPLAY}`;
       ctx.fillText(`${data.title}, continued`, pad, pad + 24);
       y = pad + 90;
     }
     ctx.fillStyle = "#ffffff";
-    ctx.font = `${size}px ${SERIF}`;
+    ctx.font = `${size}px ${SANS}`;
     for (const l of pagesLines[p]) {
       y += advance(l, size);
       ctx.fillText(l.text, pad, y - size * 0.35);

@@ -153,7 +153,7 @@ export function EditEntry({ initial }: { initial: MediaDetail }) {
     <div className="stack loose">
       <div className="page-head">
         <div>
-          <p className="hint"><Link href="/studio">Studio</Link> · {TYPE_LABEL[type]}</p>
+          <Link className="crumb" href="/studio">← Studio · {TYPE_LABEL[type]}</Link>
           <h1>{saved.title}</h1>
         </div>
         <div className="toolbar">

@@ -1,21 +1,55 @@
 import Link from "next/link";
-import { SignOutButton, ThemeToggle } from "./ShellClient";
+import { countMedia } from "@/lib/repo/media";
+import { CATEGORY_LABEL, CATEGORY_TO_TYPE, type Category } from "@/lib/domain/types";
+import { SignOutButton } from "./ShellClient";
 
-export function Shell({ children, active }: { children: React.ReactNode; active?: "watch" | "studio" | "import" }) {
+export type ShellActive = Category | "studio" | "new" | "import";
+
+const CATEGORIES = Object.keys(CATEGORY_TO_TYPE) as Category[];
+const STUDIO: { key: ShellActive; href: string; label: string }[] = [
+  { key: "studio", href: "/studio", label: "Manage" },
+  { key: "new", href: "/studio/new", label: "Add title" },
+  { key: "import", href: "/studio/import", label: "Import & backup" },
+];
+
+/** Specular's shell: a rounded rail on the left, the page on the right. `category` sets the block colour. */
+export function Shell({ children, active, category }: { children: React.ReactNode; active?: ShellActive; category?: Category }) {
+  const counts = countMedia();
+  const cat = category ?? (CATEGORIES.includes(active as Category) ? (active as Category) : undefined);
   return (
-    <div className="page">
-      <header className="topbar">
-        <Link href="/watch/movies" className="brand">
-          Watch Journal<small>Private</small>
-        </Link>
-        <nav className="topnav" aria-label="Main">
-          <Link href="/watch/movies" aria-current={active === "watch" ? "page" : undefined}>Library</Link>
-          <Link href="/studio" aria-current={active === "studio" ? "page" : undefined}>Studio</Link>
-          <Link href="/studio/import" aria-current={active === "import" ? "page" : undefined}>Import &amp; backup</Link>
-          <ThemeToggle />
-          <SignOutButton />
-        </nav>
-      </header>
+    <div className={`shell${cat ? ` cat-${cat}` : ""}`}>
+      <aside className="rail">
+        <div className="inner">
+          <Link className="mark" href="/watch/movies">
+            Specular<small>Watch</small>
+          </Link>
+          <form className="search" method="get" action="/studio" role="search">
+            <input type="search" name="q" placeholder="Search…" aria-label="Search every title and review" />
+          </form>
+          <nav aria-label="Library">
+            {CATEGORIES.map((c) => (
+              <Link key={c} className={`cat-${c}`} href={`/watch/${c}`} aria-current={active === c ? "page" : undefined}>
+                <span className="dot" />
+                {CATEGORY_LABEL[c]}
+                <span className="n">{counts[CATEGORY_TO_TYPE[c]]}</span>
+              </Link>
+            ))}
+          </nav>
+          <h3>Studio</h3>
+          <nav className="studio" aria-label="Studio">
+            {STUDIO.map((s) => (
+              <Link key={s.key} href={s.href} aria-current={active === s.key ? "page" : undefined}>
+                {s.label}
+              </Link>
+            ))}
+          </nav>
+          <div className="live">
+            <span className="pulse" />
+            Private · only you
+            <SignOutButton />
+          </div>
+        </div>
+      </aside>
       <main id="main">{children}</main>
     </div>
   );

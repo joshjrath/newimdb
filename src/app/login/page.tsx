@@ -9,8 +9,10 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
   return (
     <main className="login" id="main">
       <div className="stack login-box">
-        <h1>Watch Journal</h1>
-        <p className="muted">Private. Only the owner can sign in.</p>
+        <div className="mark">
+          Specular<small>Watch · private</small>
+        </div>
+        <p className="muted">Only the owner can sign in.</p>
         {authConfigured() ? (
           <LoginForm next={safeNext} />
         ) : (

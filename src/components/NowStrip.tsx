@@ -10,9 +10,7 @@ export function NowStrip({ items }: { items: WatchingItem[] }) {
   if (!items.length) return null;
   return (
     <section className="now-strip" aria-labelledby="now-h">
-      <header>
-        <h2 id="now-h">Currently watching</h2>
-      </header>
+      <h2 id="now-h">Currently watching</h2>
       <div className="now-row">
         {items.map((m) => {
           const seg = m.pointer.segment;
@@ -25,13 +23,13 @@ export function NowStrip({ items }: { items: WatchingItem[] }) {
                 <strong>{m.title}</strong>
                 <p className="now-next">
                   {next && seg ? (
-                    <>Next: <b>{episodeCode(seg, next)}</b>{next.title ? `, ${next.title}` : ""}</>
+                    <><b>{episodeCode(seg, next)}</b>Up next{next.title ? ` · ${next.title}` : ""}</>
                   ) : m.pointer.caughtUp ? (
-                    <>Caught up{seg ? ` on ${seg.label}` : ""}</>
+                    <><b>Caught up</b>{seg?.label}</>
                   ) : seg ? (
-                    <>Start {seg.label}</>
+                    <><b>Start</b>{seg.label}</>
                   ) : (
-                    "No episodes yet"
+                    <><b>–</b>No episodes yet</>
                   )}
                 </p>
                 <ProgressBar p={m.progress} />

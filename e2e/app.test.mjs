@@ -153,7 +153,7 @@ test("a failed save shows an error and keeps the edits", async () => {
     asked = true;
     d.dismiss();
   });
-  await page.click("text=Library");
+  await page.click(".rail nav a >> nth=0");
   assert.ok(asked, "should warn about unsaved changes");
   assert.match(page.url(), /\/studio\//);
   const d = await apiCall(cookie, "GET", `/api/media/${m.body.media.id}`);
@@ -175,11 +175,9 @@ test("rating an episode in the grid persists, updates progress and Recently Watc
   assert.equal(await page.locator(".card-title").first().innerText(), "Newer Show");
   await page.goto(`${BASE}/watch/tv/${old.body.media.id}-older-show`);
   await page.click(".heatmap .cell >> nth=0");
-  await page.click(".pop .rate-grid button[aria-label='4.5 stars']");
-  await page.waitForResponse((r) => r.url().includes("/episodes/") && r.request().method() === "PATCH");
+  await Promise.all([page.waitForResponse((r) => r.url().includes("/episodes/") && r.request().method() === "PATCH"), page.click(".pop .rate-grid button[aria-label='4.5 stars']")]);
   await page.click(".heatmap .cell >> nth=1");
-  await page.click("text=Skip (N/A)");
-  await page.waitForResponse((r) => r.url().includes("/episodes/") && r.request().method() === "PATCH");
+  await Promise.all([page.waitForResponse((r) => r.url().includes("/episodes/") && r.request().method() === "PATCH"), page.click("text=Skip (N/A)")]);
   await page.reload();
   const cells = page.locator(".heatmap .cell");
   assert.equal(await cells.nth(0).innerText(), "4.5");

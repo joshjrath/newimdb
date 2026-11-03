@@ -18,7 +18,7 @@ type Params = Promise<{ category: string; slug: string }>;
 
 export async function generateMetadata({ params }: { params: Params }) {
   const m = await loadOwnerMedia(idFromSlug((await params).slug));
-  return { title: m?.title ?? "Watch Journal" };
+  return { title: m?.title ?? "Watch" };
 }
 
 /** Third-party facts, kept apart from the owner's own rating and review. */
@@ -58,50 +58,54 @@ export default async function DetailPage({ params, searchParams }: { params: Par
   );
 
   return (
-    <Shell active="watch">
-      <p className="hint" style={{ marginTop: 8 }}>
-        <Link href={`/watch/${cat}`}>{CATEGORY_LABEL[cat]}</Link>
-      </p>
-      <article>
+    <Shell active={cat}>
+      <Link className="crumb" href={`/watch/${cat}`}>← {CATEGORY_LABEL[cat]}</Link>
+      <article className="stack">
         <div className="detail-hero">
           <Poster url={m.posterUrl} title={m.title} contain priority />
           <div className="detail-head">
-            <h1>{m.title}</h1>
-            <div className="detail-sub">
-              {m.year && <span>{m.year}</span>}
-              {m.originalTitle && <span lang="">{m.originalTitle}</span>}
-              {m.runtimeMin ? <span>{m.runtimeMin} min{m.type !== "movie" ? " per episode" : ""}</span> : null}
-              <StatusPill status={r.status} />
-              {r.featured && <span className="hint">Featured</span>}
+            <div className="title-block">
+              <h1>{m.title}</h1>
+              <div className="detail-sub">
+                {m.year && <span>{m.year}</span>}
+                {m.originalTitle && <span lang="">{m.originalTitle}</span>}
+                {m.runtimeMin ? <span>{m.runtimeMin} min{m.type !== "movie" ? " per episode" : ""}</span> : null}
+                <StatusPill status={r.status} />
+                {r.featured && <span>Featured</span>}
+              </div>
+              <div className="my-rating" aria-label="My rating">
+                {r.rating != null ? <Stars value={r.rating} size={28} /> : <span className="hint">Not rated yet</span>}
+                {r.ratingLabel && <span className="label-text">{r.ratingLabel}</span>}
+              </div>
             </div>
-            <div className="my-rating" aria-label="My rating">
-              {r.rating != null ? <Stars value={r.rating} size={26} /> : <span className="hint">Not rated yet</span>}
-              {r.ratingLabel && <span className="label-text">{r.ratingLabel}</span>}
-            </div>
-            {r.spoiler && r.body.trim() ? <SpoilerReveal>{body}</SpoilerReveal> : body}
-            <div className="detail-sub">
-              {r.watchedOn && <span>Watched {formatDate(r.watchedOn)}</span>}
-              {m.tags.length > 0 && (
-                <span className="chips">
-                  {m.tags.map((t) => (
-                    <Link key={t} className="chip" href={`/watch/${cat}?tag=${encodeURIComponent(t)}`}>{t}</Link>
-                  ))}
-                </span>
+            <div className="review-card">
+              {r.spoiler && r.body.trim() ? <SpoilerReveal>{body}</SpoilerReveal> : body}
+              {(r.watchedOn || m.tags.length > 0) && (
+                <div className="detail-sub">
+                  {r.watchedOn && <span>Watched {formatDate(r.watchedOn)}</span>}
+                  {m.tags.length > 0 && (
+                    <span className="chips">
+                      {m.tags.map((t) => (
+                        <Link key={t} className="chip" href={`/watch/${cat}?tag=${encodeURIComponent(t)}`}>{t}</Link>
+                      ))}
+                    </span>
+                  )}
+                </div>
               )}
+              <div className="toolbar">
+                <Link className="btn primary" href={`/studio/${m.id}`}>Edit</Link>
+                <ShareDialog
+                  data={{ title: m.title, year: m.year, type: m.type, posterUrl: m.posterUrl, rating: r.rating, ratingLabel: r.ratingLabel, status: r.status, body: r.body, spoiler: r.spoiler }}
+                />
+                <CopyLink />
+                <span className="private-note push-left">Only you can open this page</span>
+              </div>
             </div>
-            <div className="toolbar">
-              <Link className="btn primary" href={`/studio/${m.id}`}>Edit</Link>
-              <ShareDialog
-                data={{ title: m.title, year: m.year, type: m.type, posterUrl: m.posterUrl, rating: r.rating, ratingLabel: r.ratingLabel, status: r.status, body: r.body, spoiler: r.spoiler }}
-              />
-              <CopyLink />
-            </div>
-            <p className="private-note">Private. Only you can open this page.</p>
           </div>
         </div>
 
         {m.type !== "movie" && (
-          <section className="section" aria-labelledby="eps-h">
+          <section className="panel" aria-labelledby="eps-h">
             <header>
               <h2 id="eps-h">Episodes</h2>
               <Link className="btn small ghost" href={`/studio/${m.id}#structure`}>Edit seasons</Link>
@@ -112,8 +116,8 @@ export default async function DetailPage({ params, searchParams }: { params: Par
         )}
 
         {(m.overview || about.length > 0) && (
-          <section className="section meta-panel" aria-labelledby="meta-h">
-            <h2 id="meta-h" style={{ fontSize: "1.05rem" }}>About this {m.type === "movie" ? "film" : "series"}</h2>
+          <section className="panel meta-panel" aria-labelledby="meta-h">
+            <h2 id="meta-h">About this {m.type === "movie" ? "film" : "series"}</h2>
             {m.overview && <p>{m.overview}</p>}
             <dl>
               {about.map(([k, v]) => (

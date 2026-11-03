@@ -10,7 +10,7 @@ export default async function NewPage({ searchParams }: { searchParams: Promise<
   await requireOwnerPage("/studio/new");
   const { type } = await searchParams;
   return (
-    <Shell active="studio">
+    <Shell active="new">
       <div className="page-head"><h1>Add a title</h1></div>
       <NewEntry initialType={MEDIA_TYPES.includes(type as MediaType) ? (type as MediaType) : "movie"} providers={providerStatus()} />
     </Shell>

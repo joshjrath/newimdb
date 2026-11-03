@@ -46,19 +46,25 @@ export default async function LibraryPage({ params, searchParams }: { params: Pr
   const sameTag = (t: string) => tag?.toLowerCase() === t.toLowerCase();
 
   return (
-    <Shell active="watch">
-      <nav className="cat-tabs" aria-label="Category">
-        {CATEGORIES.map((c) => (
-          <Link key={c} href={`/watch/${c}`} aria-current={c === cat ? "page" : undefined}>
-            {CATEGORY_LABEL[c]}
-            <span className="count">{counts[CATEGORY_TO_TYPE[c]]}</span>
-          </Link>
-        ))}
-      </nav>
+    <Shell active={cat}>
+      <header className="page-head">
+        <div>
+          <h1>{label}</h1>
+          <p className="sub">{plural(counts[type], "entry", "entries")} · private</p>
+        </div>
+        <nav className="seg" aria-label="Category">
+          {CATEGORIES.map((c) => (
+            <Link key={c} className={`cat-${c}`} href={`/watch/${c}`} aria-current={c === cat ? "page" : undefined}>
+              {CATEGORY_LABEL[c]}
+              <span className="n">{counts[CATEGORY_TO_TYPE[c]]}</span>
+            </Link>
+          ))}
+        </nav>
+      </header>
 
       <NowStrip items={watching} />
 
-      <div className="stack tight" style={{ marginBottom: 28 }}>
+      <div className="filters stack tight">
         <form className="toolbar" method="get" action={`/watch/${cat}`} role="search">
           {status && <input type="hidden" name="status" value={status} />}
           {tag && <input type="hidden" name="tag" value={tag} />}
@@ -100,8 +106,8 @@ export default async function LibraryPage({ params, searchParams }: { params: Pr
         )}
       </div>
 
-      <p className="hint" style={{ marginBottom: 18 }}>
-        {plural(total, "entry", "entries")}
+      <p className="count-line">
+        {filtered ? `${plural(total, "match", "matches")}` : plural(total, "entry", "entries")}
         {filtered && <> · <Link href={`/watch/${cat}`}>Clear filters</Link></>}
       </p>
 
