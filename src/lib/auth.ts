@@ -5,25 +5,38 @@ import { SESSION_DAYS } from "./session-cookie";
 
 /**
  * Single-owner authentication.
- *  - Password is verified against OWNER_PASSWORD_HASH (scrypt) when set, otherwise OWNER_PASSWORD
- *    (a plain secret in the host's variables, e.g. Railway). In production it must be 12+ characters.
+ *  - Password is a scrypt hash in OWNER_PASSWORD_HASH, or a plain password in OWNER_PASSWORD
+ *    (or typed into OWNER_PASSWORD_HASH). A plain one must be 12+ characters in production.
  *  - Sessions are random 256-bit tokens; only their SHA-256 is stored.
  *  - Every page and API handler checks the session server-side. Middleware is UX only.
  */
 
 export const MIN_PRODUCTION_PASSWORD = 12;
 
-/** The plain password, if one is set and long enough for where it's running. */
-const plainPassword = () => {
-  const p = process.env.OWNER_PASSWORD?.trim();
-  if (!p) return undefined;
-  return process.env.NODE_ENV === "production" && p.length < MIN_PRODUCTION_PASSWORD ? undefined : p;
-};
+/** A real hash from `npm run hash-password`. Anything else in OWNER_PASSWORD_HASH is a typed password. */
+const isScryptHash = (v: string) => /^scrypt\$\d+\$\d+\$\d+\$[^$]+\$[^$]+$/.test(v);
+
+const env = (k: "OWNER_PASSWORD" | "OWNER_PASSWORD_HASH") => process.env[k]?.trim() || undefined;
+
+/**
+ * Where the password comes from. People often type their password straight into
+ * OWNER_PASSWORD_HASH (it's the variable a host may suggest), so a value there that
+ * isn't a scrypt hash is treated as the plain password itself.
+ */
+function configured(): { hash: string } | { plain: string } | null {
+  const h = env("OWNER_PASSWORD_HASH");
+  if (h && isScryptHash(h)) return { hash: h };
+  const plain = env("OWNER_PASSWORD") ?? h;
+  return plain ? { plain } : null;
+}
+
+const tooShort = (p: string) => process.env.NODE_ENV === "production" && p.length < MIN_PRODUCTION_PASSWORD;
 
 /** Why sign-in can't work yet, or null when a password is configured. */
 export function authProblem(): "missing" | "too_short" | null {
-  if (process.env.OWNER_PASSWORD_HASH || plainPassword()) return null;
-  return process.env.OWNER_PASSWORD?.trim() ? "too_short" : "missing";
+  const c = configured();
+  if (!c) return "missing";
+  return "plain" in c && tooShort(c.plain) ? "too_short" : null;
 }
 
 export function authConfigured(): boolean {
@@ -34,10 +47,10 @@ const sha = (t: string) => crypto.createHash("sha256").update(t).digest();
 
 export async function checkOwnerPassword(password: string): Promise<boolean> {
   if (typeof password !== "string" || password.length === 0 || password.length > 1024) return false;
-  const hash = process.env.OWNER_PASSWORD_HASH;
-  if (hash) return verifyPasswordHash(password, hash);
-  const plain = plainPassword();
-  return Boolean(plain) && crypto.timingSafeEqual(sha(password), sha(plain!));
+  const c = configured();
+  if (!c) return false;
+  if ("hash" in c) return verifyPasswordHash(password, c.hash);
+  return !tooShort(c.plain) && crypto.timingSafeEqual(sha(password), sha(c.plain));
 }
 
 const tokenHash = (t: string) => sha(t).toString("hex");

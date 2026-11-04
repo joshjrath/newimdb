@@ -19,7 +19,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
           <div className="notice warn">
             {authProblem() === "too_short" ? (
               <>
-                The password in <code>OWNER_PASSWORD</code> is too short for a live site. Use at least {MIN_PRODUCTION_PASSWORD} characters, then redeploy.
+                Your password variable is too short for a live site. Use at least {MIN_PRODUCTION_PASSWORD} characters, then redeploy.
               </>
             ) : process.env.NODE_ENV !== "production" ? (
               <>
@@ -28,7 +28,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
               </>
             ) : (
               <>
-                The server didn&apos;t find a password. Add a variable called <code>OWNER_PASSWORD</code> (at least {MIN_PRODUCTION_PASSWORD} characters) in your
+                The server didn&apos;t find a password. Set <code>OWNER_PASSWORD</code> (or <code>OWNER_PASSWORD_HASH</code>) to your password, at least {MIN_PRODUCTION_PASSWORD} characters, in your
                 host&apos;s settings (on Railway: your service → Variables), then redeploy.
               </>
             )}

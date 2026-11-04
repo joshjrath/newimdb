@@ -31,6 +31,14 @@ describe("owner password", () => {
     expect(await checkOwnerPassword("the hashed one")).toBe(true);
     expect(await checkOwnerPassword("the plain one here")).toBe(false);
   });
+  it("treats a plain password typed into OWNER_PASSWORD_HASH as the password", async () => {
+    env.NODE_ENV = "production";
+    delete env.OWNER_PASSWORD;
+    env.OWNER_PASSWORD_HASH = "  my railway password  ";
+    expect(authProblem()).toBeNull();
+    expect(await checkOwnerPassword("my railway password")).toBe(true);
+    expect(await checkOwnerPassword("scrypt$1$1$1$a$b")).toBe(false);
+  });
   it("reports a missing password", () => {
     delete env.OWNER_PASSWORD_HASH;
     delete env.OWNER_PASSWORD;
