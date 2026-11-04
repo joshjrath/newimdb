@@ -5,13 +5,14 @@ import { SignOutButton } from "./ShellClient";
 import { UpdateBell } from "./UpdateBell";
 import { updatesSummary } from "@/lib/repo/releases";
 
-export type ShellActive = Category | "studio" | "new" | "import";
+export type ShellActive = Category | "studio" | "new" | "import" | "settings";
 
 const CATEGORIES = Object.keys(CATEGORY_TO_TYPE) as Category[];
 const STUDIO: { key: ShellActive; href: string; label: string }[] = [
   { key: "studio", href: "/studio", label: "Manage" },
   { key: "new", href: "/studio/new", label: "Add title" },
   { key: "import", href: "/studio/import", label: "Import & backup" },
+  { key: "settings", href: "/studio/settings", label: "Settings" },
 ];
 
 /** Specular's shell: a rounded rail on the left, the page on the right. `category` sets the block colour. */

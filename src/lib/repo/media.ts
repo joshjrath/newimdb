@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import { getDb, nowIso, type DB } from "../db";
 import { RepoError } from "../errors";
-import type { EpisodeState, EpisodeView, MediaDetail, MediaType, MediaView, ReviewSource, ReviewView, SegmentView, WatchStatus } from "../domain/types";
+import type { EpisodeState, EpisodeView, MediaDetail, MediaType, MediaView, PersonRef, ReviewSource, ReviewView, SegmentView, WatchStatus } from "../domain/types";
 import { METADATA_KEYS, type BulkAssessAction, type BulkMediaAction, type CreateMediaInput, type MetadataInput, type ProviderEpisode, type ReviewInput, type SegmentInput } from "../schemas";
 import { resolveAssessment, UNASSESSED, type AssessmentPatch } from "../domain/assessment";
 import { activePointer, computeProgress, progressFromCounts, type ActivePointer, type Progress } from "../domain/progress";
@@ -9,6 +9,7 @@ import { normalizeTitle } from "../domain/text";
 import type { SortKey } from "../domain/sort";
 import { audit } from "./audit";
 import { setMediaTags, tagsFor, tagsForMany } from "./tags";
+import { addPersonTo, peopleFor, peopleForMany, removePersonFrom, requirePerson, setMediaPeople } from "./people";
 
 export { RepoError };
 
@@ -80,7 +81,7 @@ function mapReview(r: Row | undefined, m: MediaRow): ReviewView {
   };
 }
 
-function mapMedia(m: MediaRow, r: Row | undefined, tags: string[]): MediaView {
+function mapMedia(m: MediaRow, r: Row | undefined, tags: string[], people: PersonRef[]): MediaView {
   const meta = Object.fromEntries(
     METADATA_KEYS.map((k) => {
       const col = METADATA_COLUMNS[k];
@@ -97,6 +98,7 @@ function mapMedia(m: MediaRow, r: Row | undefined, tags: string[]): MediaView {
     updatedAt: m.updated_at as string,
     review: mapReview(r, m),
     tags,
+    people,
   };
 }
 
@@ -117,7 +119,7 @@ export function getMedia(id: number, db = getDb()): MediaView | null {
   const m = db.prepare(`SELECT * FROM media WHERE id = ?`).get(id) as MediaRow | undefined;
   if (!m) return null;
   const r = db.prepare(`SELECT * FROM review WHERE media_id = ?`).get(id) as Row | undefined;
-  return mapMedia(m, r, tagsFor(db, id));
+  return mapMedia(m, r, tagsFor(db, id), peopleFor(db, id));
 }
 
 /** For write paths and routes: the entry must exist. */
@@ -214,6 +216,8 @@ export interface ListQuery {
   type?: MediaType;
   status?: WatchStatus | "none";
   tag?: string;
+  /** Only titles watched with this person. */
+  withPerson?: number;
   q?: string;
   featured?: boolean;
   sort?: SortKey;
@@ -242,6 +246,10 @@ export function listMedia(query: ListQuery, db = getDb()): { items: ListItem[]; 
     where.push(`EXISTS (SELECT 1 FROM media_tag mt JOIN tag t ON t.id = mt.tag_id WHERE mt.media_id = m.id AND t.name = ? COLLATE NOCASE)`);
     params.push(query.tag);
   }
+  if (query.withPerson) {
+    where.push(`EXISTS (SELECT 1 FROM media_person mp WHERE mp.media_id = m.id AND mp.person_id = ?)`);
+    params.push(query.withPerson);
+  }
   if (query.q?.trim()) {
     where.push(`(m.title LIKE ? ESCAPE '\\' OR m.original_title LIKE ? ESCAPE '\\' OR r.body LIKE ? ESCAPE '\\')`);
     const like = `%${query.q.trim().replace(/[\\%_]/g, (c) => "\\" + c)}%`;
@@ -261,9 +269,10 @@ export function listMedia(query: ListQuery, db = getDb()): { items: ListItem[]; 
     .all(...params, pageSize, (page - 1) * pageSize) as MediaRow[];
   const ids = rows.map((r) => r.id);
   const tags = tagsForMany(db, ids);
+  const people = peopleForMany(db, ids);
   const progress = progressFor(db, rows.filter((r) => r.type !== "movie").map((r) => r.id));
   const items = rows.map((row) => ({
-    ...mapMedia(row, { ...row, created_at: row.r_created_at, updated_at: row.r_updated_at }, tags.get(row.id) ?? []),
+    ...mapMedia(row, { ...row, created_at: row.r_created_at, updated_at: row.r_updated_at }, tags.get(row.id) ?? [], people.get(row.id) ?? []),
     progress: progress.get(row.id) ?? null,
   }));
   return { items, total, page, pageSize };
@@ -373,6 +382,7 @@ export function insertMedia(input: CreateMediaInput, opts: CreateOptions = {}, d
       id,
     );
     if (input.tags) setMediaTags(db, id, input.tags);
+    if (input.people?.length) setMediaPeople(db, id, input.people);
     (input.segments ?? []).forEach((s, i) => {
       const segId = insertSegment(db, id, s, i);
       if (s.episodes?.length) applyProviderEpisodes(segId, s.episodes, { grow: true }, db);
@@ -389,7 +399,7 @@ export function createMedia(input: CreateMediaInput, opts: CreateOptions = {}, d
 
 export function updateMedia(
   id: number,
-  patch: { version: number; metadata?: Partial<MetadataInput>; review?: Partial<ReviewInput>; tags?: string[] },
+  patch: { version: number; metadata?: Partial<MetadataInput>; review?: Partial<ReviewInput>; tags?: string[]; people?: number[] },
   db = getDb(),
 ): MediaView {
   db.transaction(() => {
@@ -397,11 +407,13 @@ export function updateMedia(
     if (patch.metadata) writeMetadata(db, id, patch.metadata);
     if (patch.review) writeReview(db, id, patch.review);
     if (patch.tags) setMediaTags(db, id, patch.tags);
+    if (patch.people) setMediaPeople(db, id, patch.people);
     bumpVersion(db, id);
     audit(db, "update", "media", id, {
       metadata: patch.metadata && Object.keys(patch.metadata),
       review: patch.review && Object.keys(patch.review),
       tags: patch.tags,
+      people: patch.people,
     });
   })();
   return getMedia(id, db)!;
@@ -437,16 +449,20 @@ export function deleteMedia(ids: number[], db = getDb()): number {
   })();
 }
 
-export function bulkUpdate(ids: number[], action: BulkMediaAction, opts: { status?: WatchStatus | null; tag?: string }, db = getDb()): number {
+export function bulkUpdate(ids: number[], action: BulkMediaAction, opts: { status?: WatchStatus | null; tag?: string; personId?: number }, db = getDb()): number {
   if (action === "delete") return deleteMedia(ids, db);
   const tag = opts.tag?.toLowerCase();
+  if ((action === "add_person" || action === "remove_person") && !opts.personId) throw new RepoError("invalid", "Pick a person.");
   return db.transaction(() => {
+    if (opts.personId) requirePerson(db, opts.personId);
     const existing = (db.prepare(`SELECT id FROM media WHERE id IN (${placeholders(ids.length)})`).all(...ids) as { id: number }[]).map((r) => r.id);
     for (const id of existing) {
       if (action === "feature" || action === "unfeature") writeReview(db, id, { featured: action === "feature" });
       else if (action === "set_status") writeReview(db, id, { status: opts.status ?? null });
       else if (action === "add_tag" && opts.tag) setMediaTags(db, id, [...tagsFor(db, id), opts.tag]);
       else if (action === "remove_tag" && tag) setMediaTags(db, id, tagsFor(db, id).filter((x) => x.toLowerCase() !== tag));
+      else if (action === "add_person") addPersonTo(db, id, opts.personId!);
+      else if (action === "remove_person") removePersonFrom(db, id, opts.personId!);
       bumpVersion(db, id);
     }
     audit(db, "bulk_" + action, "media", ids.join(","), opts);

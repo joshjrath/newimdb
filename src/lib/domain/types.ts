@@ -126,6 +126,12 @@ export interface ReviewView {
   updatedAt: string;
 }
 
+/** Someone you watched with. */
+export interface PersonRef {
+  id: number;
+  name: string;
+}
+
 export interface MediaView {
   id: number;
   uid: string;
@@ -153,6 +159,8 @@ export interface MediaView {
   updatedAt: string;
   review: ReviewView;
   tags: string[];
+  /** Who you watched it with: nobody, one person or several. */
+  people: PersonRef[];
 }
 
 export interface MediaDetail extends MediaView {

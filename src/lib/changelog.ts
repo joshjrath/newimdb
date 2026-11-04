@@ -12,6 +12,16 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-11-04-watched-with",
+    date: "2026-11-04",
+    title: "Who you watched with",
+    items: [
+      "Add the people you watch with in Settings.",
+      "On any title, pick everyone who watched it with you: nobody, one person or several.",
+      "Filter your library by who you watched with, and add or remove people on many titles at once in Studio.",
+    ],
+  },
+  {
     id: "2026-11-04-update-bell",
     date: "2026-11-04",
     title: "Update notices and safer updates",

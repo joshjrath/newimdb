@@ -31,6 +31,7 @@ export function LibraryCard({ m }: { m: ListItem }) {
         {m.progress && <ProgressBar p={m.progress} />}
         <div className="card-meta">
           {r.watchedOn && <span>Watched {formatDate(r.watchedOn)}</span>}
+          {m.people.length > 0 && <span>With {m.people.map((p) => p.name).join(", ")}</span>}
           {m.tags.length > 0 && <span className="tags">{m.tags.join(", ")}</span>}
         </div>
       </div>

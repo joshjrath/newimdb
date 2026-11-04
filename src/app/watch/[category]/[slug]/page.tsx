@@ -80,6 +80,14 @@ export default async function DetailPage({ params, searchParams }: { params: Par
             </div>
             <div className="review-card">
               {r.spoiler && r.body.trim() ? <SpoilerReveal>{body}</SpoilerReveal> : body}
+              {m.people.length > 0 && (
+                <div className="watched-with">
+                  <span className="label">Watched with</span>
+                  {m.people.map((p) => (
+                    <Link key={p.id} className="chip" href={`/watch/${cat}?with=${p.id}`}>{p.name}</Link>
+                  ))}
+                </div>
+              )}
               {(r.watchedOn || m.tags.length > 0) && (
                 <div className="detail-sub">
                   {r.watchedOn && <span>Watched {formatDate(r.watchedOn)}</span>}

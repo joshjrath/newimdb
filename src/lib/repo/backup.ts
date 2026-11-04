@@ -5,6 +5,7 @@ import { REVIEW_SOURCES } from "../domain/types";
 import { backupSegmentSchema, metadataSchema, mediaTypeSchema, reviewSchema } from "../schemas";
 import { audit } from "./audit";
 import { getMediaDetail, insertMedia, metadataOf, restoreAssessments } from "./media";
+import { personIdForName } from "./people";
 
 export const BACKUP_FORMAT = "specular-watch-backup";
 
@@ -20,6 +21,8 @@ const mediaBackup = z.object({
     updatedAt: z.string(),
   }),
   tags: z.array(z.string()),
+  /** Names of the people you watched it with (older backups don't have this). */
+  people: z.array(z.string().max(60)).max(100).optional(),
   segments: z.array(backupSegmentSchema),
   createdAt: z.string(),
 });
@@ -47,6 +50,7 @@ export function exportAll(db = getDb()): Backup {
         metadata: metadataOf(m),
         review: m.review,
         tags: m.tags,
+        people: m.people.map((p) => p.name),
         segments: m.segments.map(({ kind, label, seasonNumber, courNumber, provider, providerRef, episodes }) => ({
           kind,
           label,
@@ -104,6 +108,7 @@ export async function restoreBackup(b: Backup, mode: "merge" | "replace", db = g
           metadata: m.metadata,
           review,
           tags: m.tags,
+          people: (m.people ?? []).flatMap((name) => personIdForName(name, db) ?? []),
           segments: m.segments.map(({ episodes, ...s }) => ({
             ...s,
             episodeCount: Math.max(0, ...episodes.map((e) => e.number)),

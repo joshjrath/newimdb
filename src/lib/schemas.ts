@@ -70,6 +70,8 @@ export const reviewSchema = z.object({
 });
 
 const tagsSchema = z.array(z.string().trim().min(1).max(40)).max(50);
+/** Who you watched it with: ids of people from Settings. */
+const peopleSchema = z.array(z.number().int().positive()).max(100);
 
 export const mediaPatchSchema = z
   .object({
@@ -77,6 +79,7 @@ export const mediaPatchSchema = z
     metadata: metadataSchema.partial().optional(),
     review: reviewSchema.partial().optional(),
     tags: tagsSchema.optional(),
+    people: peopleSchema.optional(),
   })
   .strict();
 
@@ -115,6 +118,7 @@ export const createMediaSchema = z.object({
   metadata: metadataSchema.partial().extend({ title: metadataSchema.shape.title }),
   review: reviewSchema.partial().optional(),
   tags: tagsSchema.optional(),
+  people: peopleSchema.optional(),
   segments: z
     .array(segmentInputSchema.omit({ id: true }).extend({ episodes: z.array(providerEpisodeSchema).max(5000).optional() }))
     .max(500)
@@ -137,7 +141,7 @@ export const bulkAssessSchema = z.object({
   rating: ratingSchema.optional(),
 });
 
-export const BULK_MEDIA_ACTIONS = ["feature", "unfeature", "delete", "set_status", "add_tag", "remove_tag"] as const;
+export const BULK_MEDIA_ACTIONS = ["feature", "unfeature", "delete", "set_status", "add_tag", "remove_tag", "add_person", "remove_person"] as const;
 export type BulkMediaAction = (typeof BULK_MEDIA_ACTIONS)[number];
 
 export const bulkMediaSchema = z.object({
@@ -145,7 +149,10 @@ export const bulkMediaSchema = z.object({
   action: z.enum(BULK_MEDIA_ACTIONS),
   status: statusSchema.optional(),
   tag: z.string().trim().min(1).max(40).optional(),
+  personId: z.number().int().positive().optional(),
 });
+
+export const personNameSchema = z.object({ name: z.string().trim().min(1, "Enter a name.").max(60) });
 
 /* ---- backup file: built from the same field schemas as the live API ---- */
 

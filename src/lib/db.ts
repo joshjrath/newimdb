@@ -173,6 +173,20 @@ const MIGRATIONS: string[] = [
     seen_at     TEXT
   );
   `,
+  // 4 — people you watched with (any number per title)
+  `
+  CREATE TABLE person (
+    id         INTEGER PRIMARY KEY,
+    name       TEXT NOT NULL UNIQUE COLLATE NOCASE,
+    created_at TEXT NOT NULL
+  );
+  CREATE TABLE media_person (
+    media_id  INTEGER NOT NULL REFERENCES media(id) ON DELETE CASCADE,
+    person_id INTEGER NOT NULL REFERENCES person(id) ON DELETE CASCADE,
+    PRIMARY KEY (media_id, person_id)
+  );
+  CREATE INDEX media_person_person ON media_person(person_id);
+  `,
 ];
 
 /** Whether the database was created just now (no earlier data), per connection. */

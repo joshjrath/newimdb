@@ -147,6 +147,13 @@ How it works:
 - **Re-running is safe.** Titles already in the library (same IMDb ID) are updated, never duplicated. You choose whether ratings you've changed here are kept or replaced.
 - Recently Watched follows the date you rated each title on IMDb. Everything imported is private.
 
+### Who you watched with
+- **Settings → People you watch with:** add, rename and remove people.
+- **On any title in Studio:** tap everyone who watched it with you. You can pick nobody, one person or several, or add someone new on the spot.
+- **Title page and library cards:** show who you watched with. Each library has a "Watched with" filter.
+- **Studio's bulk menu:** adds or removes a person on many titles at once.
+- **Removing a person** only takes them off titles. The titles stay. Backups include who you watched with.
+
 ### Editing safety
 - Saves use optimistic versioning. If an entry was changed in another tab, you get a clear conflict message and your form is kept.
 - "Saved" appears only after the server confirms the save. Failed saves show a persistent error and keep your edits.
@@ -176,7 +183,7 @@ Personal data (`review`, `episode_assessment`, `media_tag`) is stored apart from
 ## Tests
 
 ```bash
-npm test                         # 60 unit/integration tests (domain, repository, import, backup, providers)
+npm test                         # 65 unit/integration tests (domain, repository, import, backup, providers)
 npm run build && npm run test:e2e   # browser tests against the production build
 ```
 

@@ -9,6 +9,7 @@ import { pageCount, Pager } from "@/components/Pager";
 import { countMedia, listMedia, listWatching } from "@/lib/repo/media";
 import { SORT_OPTIONS } from "@/lib/domain/sort";
 import { allTags } from "@/lib/repo/tags";
+import { listPeople } from "@/lib/repo/people";
 import { getDb } from "@/lib/db";
 import { parseListQuery } from "@/lib/listQuery";
 import { plural } from "@/lib/domain/text";
@@ -30,11 +31,12 @@ export default async function LibraryPage({ params, searchParams }: { params: Pr
   const type = CATEGORY_TO_TYPE[cat];
   const sp = await searchParams;
   const query = { ...parseListQuery(sp, { pageSize: 24 }), type };
-  const { status, tag, q, featured, sort, page = 1 } = query;
+  const { status, tag, q, featured, sort, page = 1, withPerson } = query;
   const { items, total, pageSize } = listMedia(query);
   const counts = countMedia();
   const tags = allTags(getDb(), type);
-  const filtered = Boolean(status || tag || q || featured);
+  const people = listPeople(getDb(), type).filter((p) => p.count > 0);
+  const filtered = Boolean(status || tag || q || featured || withPerson);
   const watching = type === "movie" || filtered || page > 1 ? [] : listWatching(type);
   const label = CATEGORY_LABEL[cat];
 
@@ -69,6 +71,7 @@ export default async function LibraryPage({ params, searchParams }: { params: Pr
           {status && <input type="hidden" name="status" value={status} />}
           {tag && <input type="hidden" name="tag" value={tag} />}
           {featured && <input type="hidden" name="featured" value="1" />}
+          {withPerson && <input type="hidden" name="with" value={withPerson} />}
           <label className="grow">
             <span className="visually-hidden">Search {label}</span>
             <input className="input" type="search" name="q" defaultValue={q} placeholder={`Search ${label.toLowerCase()} and reviews`} />
@@ -95,6 +98,16 @@ export default async function LibraryPage({ params, searchParams }: { params: Pr
           ))}
           <Link className="chip" href={href({ featured: featured ? undefined : "1" })} aria-current={featured ? "true" : undefined}>Featured</Link>
         </div>
+        {people.length > 0 && (
+          <div className="chips with-chips" aria-label="Filter by who you watched with">
+            <span className="label" style={{ alignSelf: "center", marginRight: 2 }}>Watched with</span>
+            {people.map((p) => (
+              <Link key={p.id} className="chip" href={href({ with: withPerson === p.id ? undefined : String(p.id) })} aria-current={withPerson === p.id ? "true" : undefined}>
+                {p.name} <span className="hint">{p.count}</span>
+              </Link>
+            ))}
+          </div>
+        )}
         {tags.length > 0 && (
           <div className="chips" aria-label="Filter by tag">
             {tags.map((t) => (

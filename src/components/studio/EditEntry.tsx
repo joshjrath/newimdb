@@ -11,7 +11,8 @@ import { StructureEditor } from "./StructureEditor";
 import { EpisodeTextPanel } from "./EpisodeTextPanel";
 import { SaveState } from "./SaveState";
 import { StatusOptions } from "../Options";
-import { TYPE_LABEL, type MediaDetail, type MediaView, type SegmentView } from "@/lib/domain/types";
+import { TYPE_LABEL, type MediaDetail, type MediaView, type PersonRef, type SegmentView } from "@/lib/domain/types";
+import { PeoplePicker } from "./PeoplePicker";
 import { suggestedLabel } from "@/lib/domain/rating";
 import { mediaHref } from "@/lib/domain/links";
 import { wordCount } from "@/lib/domain/text";
@@ -22,6 +23,7 @@ type Draft = {
   lockedFields: string[];
   rating: number | null; ratingLabel: string; body: string; watchedOn: string; spoiler: boolean; status: string; featured: boolean;
   tags: string;
+  people: number[];
 };
 
 function toDraft(m: MediaView): Draft {
@@ -31,7 +33,7 @@ function toDraft(m: MediaView): Draft {
     backdropUrl: s(m.backdropUrl), runtimeMin: s(m.runtimeMin), genres: m.genres.join(", "), tmdbId: s(m.tmdbId), imdbId: s(m.imdbId),
     malId: s(m.malId), tvmazeId: s(m.tvmazeId), anilistId: s(m.anilistId), letterboxdUrl: s(m.letterboxdUrl), lockedFields: m.lockedFields,
     rating: m.review.rating, ratingLabel: s(m.review.ratingLabel), body: m.review.body, watchedOn: s(m.review.watchedOn),
-    spoiler: m.review.spoiler, status: s(m.review.status), featured: m.review.featured, tags: m.tags.join(", "),
+    spoiler: m.review.spoiler, status: s(m.review.status), featured: m.review.featured, tags: m.tags.join(", "), people: m.people.map((p) => p.id).sort((a, b) => a - b),
   };
 }
 
@@ -52,12 +54,14 @@ function toPatch(d: Draft, version: number) {
       spoiler: d.spoiler, status: (txt(d.status) as never) ?? null, featured: d.featured, visibility: "private" as const,
     },
     tags: d.tags.split(",").map((t) => t.trim()).filter(Boolean),
+    people: d.people,
   };
 }
 
 const LOCKABLE: [keyof Draft, string][] = [["title", "Title"], ["year", "Year"], ["overview", "Overview"], ["posterUrl", "Poster"], ["genres", "Genres"]];
 
-export function EditEntry({ initial }: { initial: MediaDetail }) {
+export function EditEntry({ initial, people: allInitial }: { initial: MediaDetail; people: PersonRef[] }) {
+  const [allPeople, setAllPeople] = useState(allInitial);
   const router = useRouter();
   const toast = useToast();
   const { id, type } = initial;
@@ -205,6 +209,7 @@ export function EditEntry({ initial }: { initial: MediaDetail }) {
             <input className="input" value={draft.tags} onChange={(e) => set("tags", e.target.value)} placeholder="e.g. MCU, True Crime, Sitcom" />
             <span className="hint">Comma separated. Tags become filters in the library.</span>
           </label>
+          <PeoplePicker all={allPeople} selected={draft.people} onChange={(ids) => set("people", [...ids].sort((a, b) => a - b))} onPeople={setAllPeople} />
           <div className="notice">
             Visibility: <strong>Private</strong>. Publishing and public sharing are switched off in this version.
           </div>

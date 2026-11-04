@@ -8,7 +8,7 @@ import { Stars } from "../Stars";
 import { StatusPill } from "../StatusPill";
 import { StatusOptions, TypeOptions } from "../Options";
 import { pageCount, Pager } from "../Pager";
-import { TYPE_LABEL, type MediaType, type WatchStatus } from "@/lib/domain/types";
+import { TYPE_LABEL, type MediaType, type PersonRef, type WatchStatus } from "@/lib/domain/types";
 import { mediaHref } from "@/lib/domain/links";
 import { plural } from "@/lib/domain/text";
 import { formatDate } from "@/lib/format";
@@ -26,10 +26,11 @@ interface Row {
   updatedAt: string;
   source: string;
   tags: string[];
+  people: string[];
   progress: string | null;
 }
 
-export function ManageTable({ items, total, page, pageSize, filters }: { items: Row[]; total: number; page: number; pageSize: number; filters: Record<"type" | "status" | "q" | "sort", string> }) {
+export function ManageTable({ items, total, page, pageSize, filters, people }: { items: Row[]; total: number; page: number; pageSize: number; filters: Record<"type" | "status" | "q" | "sort" | "with", string>; people: PersonRef[] }) {
   const router = useRouter();
   const { busy, run } = useAction();
   const [selected, setSelected] = useState<Set<number>>(new Set());
@@ -82,6 +83,7 @@ export function ManageTable({ items, total, page, pageSize, filters }: { items: 
             ))}
           </select>
         </label>
+        {filters.with && <input type="hidden" name="with" value={filters.with} />}
         <label className="grow">
           <span className="visually-hidden">Search</span>
           <input className="input" type="search" name="q" defaultValue={filters.q} placeholder="Search titles and reviews" />
@@ -107,6 +109,28 @@ export function ManageTable({ items, total, page, pageSize, filters }: { items: 
             <button className="btn small" disabled={busy || !tag.trim()} onClick={() => bulk("add_tag", { tag: tag.trim() })}>Add tag</button>
             <button className="btn small" disabled={busy || !tag.trim()} onClick={() => bulk("remove_tag", { tag: tag.trim() })}>Remove tag</button>
           </span>
+          {people.length > 0 && (
+            <label>
+              <span className="visually-hidden">Watched with</span>
+              <select
+                className="select small"
+                disabled={busy}
+                value=""
+                onChange={(e) => {
+                  const [act, id] = e.target.value.split(":");
+                  if (id) bulk(act === "add" ? "add_person" : "remove_person", { personId: Number(id) });
+                }}
+              >
+                <option value="">Watched with…</option>
+                <optgroup label="Add">
+                  {people.map((p) => <option key={`a${p.id}`} value={`add:${p.id}`}>+ {p.name}</option>)}
+                </optgroup>
+                <optgroup label="Remove">
+                  {people.map((p) => <option key={`r${p.id}`} value={`remove:${p.id}`}>− {p.name}</option>)}
+                </optgroup>
+              </select>
+            </label>
+          )}
           <button
             className="btn small danger"
             disabled={busy}
@@ -149,7 +173,9 @@ export function ManageTable({ items, total, page, pageSize, filters }: { items: 
                   <Link className="t" href={`/studio/${m.id}`}>{m.title}</Link>
                   {m.year ? <span className="hint"> ({m.year})</span> : null}
                   {m.featured && <span className="hint"> · Featured</span>}
-                  {m.tags.length > 0 && <div className="hint">{m.tags.join(", ")}</div>}
+                  {(m.people.length > 0 || m.tags.length > 0) && (
+                    <div className="hint">{[m.people.length ? `With ${m.people.join(", ")}` : "", m.tags.join(", ")].filter(Boolean).join(" · ")}</div>
+                  )}
                 </td>
                 <td>{TYPE_LABEL[m.type]}{m.source === "letterboxd" ? <div className="hint">Letterboxd</div> : null}</td>
                 <td>{m.rating != null ? <Stars value={m.rating} size={14} /> : <span className="hint">–</span>}</td>

@@ -24,7 +24,7 @@ describe("updates never lose data", () => {
     setDbForTests(db);
     createMedia({ type: "movie", metadata: { title: "Kept" } }, {}, db);
     // Pretend this database came from an older version.
-    db.exec(`DROP TABLE release; UPDATE schema_version SET version = 2;`);
+    db.exec(`DROP TABLE release; DROP TABLE media_person; DROP TABLE person; UPDATE schema_version SET version = 2;`);
     db.close();
 
     db = openDatabase(file); // "the update"
