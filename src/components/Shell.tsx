@@ -3,6 +3,7 @@ import { countMedia } from "@/lib/repo/media";
 import { CATEGORY_LABEL, CATEGORY_TO_TYPE, type Category } from "@/lib/domain/types";
 import { SignOutButton } from "./ShellClient";
 import { UpdateBell } from "./UpdateBell";
+import { RailSearch } from "./RailSearch";
 import { updatesSummary } from "@/lib/repo/releases";
 
 export type ShellActive = Category | "studio" | "new" | "import" | "settings" | "stats" | "recommended" | "lists";
@@ -27,9 +28,7 @@ export function Shell({ children, active, category }: { children: React.ReactNod
           <Link className="mark" href="/watch/movies">
             Specular<small>Watch</small>
           </Link>
-          <form className="search" method="get" action="/studio" role="search">
-            <input type="search" name="q" placeholder="Search…" aria-label="Search every title and review" />
-          </form>
+          <RailSearch />
           <Link className="rail-feature" href="/recommended" aria-current={active === "recommended" ? "page" : undefined}>
             <span className="rail-feature-icon" aria-hidden="true">✦</span>
             <span>Recommended<small>Picked for you</small></span>

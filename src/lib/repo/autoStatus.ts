@@ -120,11 +120,18 @@ export function applyAutoStatus(db = getDb(), opts: { mediaIds?: number[]; segme
   const moves: { id: number; from: string | null; to: string }[] = [];
   db.transaction(() => {
     for (const r of rows) {
-      // Your own pick holds until you watch something newer.
-      if (r.status_manual_at && (!r.last_activity || r.status_manual_at > r.last_activity)) continue;
       const segs = segmentsOf(r.id);
       markUndatedUpcoming(db, segs);
       const caughtUp = !hasUnwatchedAired(segs, { ignoreFiller: r.type === "anime" });
+      // 100% is always Completed, whatever was picked before.
+      if (caughtUp && r.status !== "completed") {
+        set.run(r.id, "completed", nowIso(), nowIso());
+        moves.push({ id: r.id, from: r.status, to: "completed" });
+        changed++;
+        continue;
+      }
+      // Otherwise your own pick holds until you watch something newer.
+      if (r.status_manual_at && (!r.last_activity || r.status_manual_at > r.last_activity)) continue;
       // A new episode coming out counts as activity: a finished show with something new is
       // back to Currently watching (not straight to On hold because you finished it long ago).
       const newest = caughtUp ? null : newestUnwatchedAired(segs, r.type === "anime");

@@ -4,6 +4,7 @@ import { requireOwnerPage } from "@/lib/guard";
 import { Shell } from "@/components/Shell";
 import { LibraryCard } from "@/components/LibraryCard";
 import { SortMenu } from "@/components/SortMenu";
+import { LiveSearch } from "@/components/LiveSearch";
 import { Suspense } from "react";
 import { SelectableGrid } from "@/components/SelectableGrid";
 import { listLists } from "@/lib/repo/lists";
@@ -93,7 +94,9 @@ export default async function LibraryPage({ params, searchParams }: { params: Pr
           {withPeople.length > 0 && <input type="hidden" name="with" value={withPeople.join(",")} />}
           <label className="grow">
             <span className="visually-hidden">Search {label}</span>
-            <input className="input" type="search" name="q" defaultValue={q} placeholder={`Search ${label.toLowerCase()} and reviews`} />
+            <Suspense fallback={<input className="input" type="search" name="q" defaultValue={q} placeholder={`Search ${label.toLowerCase()} and reviews`} />}>
+              <LiveSearch placeholder={`Search ${label.toLowerCase()} and reviews`} label={`Search ${label}`} />
+            </Suspense>
           </label>
           {genre && <input type="hidden" name="genre" value={genre} />}
           {watchedIn && <input type="hidden" name="where" value={watchedIn} />}

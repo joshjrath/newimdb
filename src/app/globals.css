@@ -809,3 +809,16 @@ button.stat-btn:hover { background: var(--raised); }
 @keyframes celebrate-pop { 50% { transform: rotate(-14deg) scale(1.25); } }
 @media (prefers-reduced-motion: reduce) { .celebrate, .celebrate-emoji { animation: none; } }
 .filler-status { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 0 0 12px; } .filler-status .toolbar { flex-basis: 100%; } .notice.small { font-size: 12px; padding: 6px 10px; }
+.tt-undated .tt-month { grid-column: 2 / -1; }
+.live-search { display: block; position: relative; }
+.live-search .input { width: 100%; }
+.live-search.pending::after { content: ""; position: absolute; right: 14px; top: 50%; width: 14px; height: 14px; margin-top: -7px; border-radius: 50%; border: 2px solid var(--muted, rgba(255,255,255,.4)); border-top-color: transparent; animation: spin .7s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.rail-search { position: relative; }
+.rail-hits { position: absolute; left: 0; right: -120px; top: calc(100% + 6px); z-index: 50; list-style: none; margin: 0; padding: 6px; background: var(--raised); border-radius: 16px; box-shadow: 0 18px 44px rgba(0, 0, 0, .55), 0 0 0 1px rgba(255, 255, 255, .06); }
+.rail-hits a { display: grid; grid-template-columns: 30px 1fr; gap: 10px; align-items: center; padding: 6px 8px; border-radius: 10px; color: var(--ink); text-decoration: none; font: 600 13px/1.2 var(--display); }
+.rail-hits a:hover, .rail-hits a:focus-visible { background: var(--sunk); }
+.rail-hits small { display: block; font-weight: 500; font-size: 11px; color: var(--muted, rgba(255, 255, 255, .55)); }
+.rail-hits .poster { border-radius: 5px; }
+.rail-hits .poster-fallback { font-size: 0; }
+.rail-hits .rail-hits-all { display: block; text-align: center; color: var(--cat, #c7b6f6); }

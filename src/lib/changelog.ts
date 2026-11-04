@@ -12,6 +12,17 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-11-04-live-search-theater",
+    date: "2026-11-04",
+    title: "Search as you type, theater timeline fixed",
+    items: [
+      "Search filters as you type, no Enter needed. The search in the side bar shows matching titles straight away.",
+      "Every movie marked Theater now shows on the theater timeline (without a watch date, the day you rated or logged it is used).",
+      "A show at 100% always goes to Completed, even if you'd set another status.",
+      "Confetti when you finish a show 🎉",
+    ],
+  },
+  {
     id: "2026-11-04-sort-both-ways",
     date: "2026-11-04",
     title: "Sort both ways, and more quick filters",

@@ -158,3 +158,16 @@ describe("between seasons isn't abandoned", () => {
     expect(getMedia(m.id)!.review.status).toBe("watching");
   });
 });
+
+describe("100% is always Completed", () => {
+  it("even over a status you picked yourself", () => {
+    const m = show("Picked", 2);
+    bulkAssess(m.id, ids(m.id).slice(0, 1), "watched", undefined);
+    bulkUpdate([m.id], "set_status", { status: "on_hold" }); // your pick
+    applyAutoStatus();
+    expect(getMedia(m.id)!.review.status).toBe("on_hold");
+    getDb().prepare(`UPDATE review SET status_manual_at = ? WHERE media_id = ?`).run(new Date(Date.now() + 60_000).toISOString(), m.id);
+    bulkAssess(m.id, ids(m.id).slice(1), "watched", undefined); // finishes it
+    expect(getMedia(m.id)!.review.status).toBe("completed");
+  });
+});

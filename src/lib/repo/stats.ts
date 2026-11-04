@@ -20,7 +20,9 @@ export interface MonthCount {
 export interface TheaterVisit {
   id: number;
   title: string;
-  date: string;
+  /** The watch date, or (marked approximate) when you rated/logged it. Null if neither is known. */
+  date: string | null;
+  approximate: boolean;
   posterUrl: string | null;
   rating: number | null;
 }
@@ -119,10 +121,13 @@ export function getStats(db = getDb()): Stats {
 
   const theater = db
     .prepare(
-      `SELECT m.id, m.title, r.watched_on AS date, m.poster_url AS posterUrl, r.rating FROM media m JOIN review r ON r.media_id = m.id
-       WHERE m.type = 'movie' AND r.watched_in = 'theater' AND r.watched_on IS NOT NULL ORDER BY r.watched_on`,
+      `SELECT m.id, m.title, COALESCE(r.watched_on, substr(r.last_watched_at, 1, 10)) AS date, r.watched_on IS NULL AS approximate,
+              m.poster_url AS posterUrl, r.rating
+       FROM media m JOIN review r ON r.media_id = m.id
+       WHERE m.type = 'movie' AND r.watched_in = 'theater' ORDER BY date IS NULL, date`,
     )
-    .all() as TheaterVisit[];
+    .all()
+    .map((v) => ({ ...(v as TheaterVisit), approximate: Boolean((v as { approximate: number }).approximate) })) as TheaterVisit[];
 
   return { counts, moviesWatched: mv.n, episodesWatched, minutesWatched, averageRating, ratingHistogram, months: months(db), people, genres, theater, timeLeft: timeLeft(db), topRated: topRated(db) };
 }

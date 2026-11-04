@@ -1,4 +1,6 @@
 "use client";
+import { Suspense } from "react";
+import { LiveSearch } from "../LiveSearch";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -97,7 +99,9 @@ export function ManageTable({ items, total, page, pageSize, filters, people, gen
         {filters.with && <input type="hidden" name="with" value={filters.with} />}
         <label className="grow">
           <span className="visually-hidden">Search</span>
-          <input className="input" type="search" name="q" defaultValue={filters.q} placeholder="Search titles and reviews" />
+          <Suspense fallback={<input className="input" type="search" name="q" defaultValue={filters.q} placeholder="Search titles and reviews" />}>
+            <LiveSearch placeholder="Search titles and reviews" label="Search titles and reviews" />
+          </Suspense>
         </label>
         <button className="btn" type="submit">Filter</button>
       </form>

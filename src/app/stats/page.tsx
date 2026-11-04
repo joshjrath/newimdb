@@ -13,8 +13,10 @@ const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "
 const monthLabel = (k: string) => `${MONTHS[Number(k.slice(5, 7)) - 1]} ${k.slice(2, 4)}`;
 const DAY = 86_400_000;
 
-function theaterSummary(visits: TheaterVisit[]) {
-  if (!visits.length) return null;
+function theaterSummary(all: TheaterVisit[]) {
+  const visits = all.filter((v): v is TheaterVisit & { date: string } => Boolean(v.date));
+  if (!all.length) return null;
+  if (!visits.length) return { total: all.length, thisYear: 0, averageGap: null, longestGap: null, busiest: null, sinceLast: null };
   const dates = visits.map((v) => Date.parse(v.date + "T12:00:00Z"));
   const gaps = dates.slice(1).map((d, i) => (d - dates[i]) / DAY);
   const byMonth = new Map<string, number>();
@@ -42,7 +44,9 @@ export default async function StatsPage() {
   const leftTotal = s.timeLeft.reduce((a, t) => a + t.minutesLeft, 0);
   const maxLeft = Math.max(1, ...s.timeLeft.map((t) => t.minutesLeft));
   const theater = theaterSummary(s.theater);
-  const years = [...new Set(s.theater.map((v) => v.date.slice(0, 4)))].sort().reverse();
+  const dated = s.theater.filter((v): v is typeof v & { date: string } => Boolean(v.date));
+  const undated = s.theater.filter((v) => !v.date);
+  const years = [...new Set(dated.map((v) => v.date.slice(0, 4)))].sort().reverse();
 
   return (
     <Shell active="stats">
@@ -113,7 +117,7 @@ export default async function StatsPage() {
       <section className="panel" aria-labelledby="theater-h">
         <header>
           <h2 id="theater-h">🎬 At the theater</h2>
-          <span className="hint">Movies marked &quot;Theater&quot; with a watch date.</span>
+          <span className="hint">Movies marked &quot;Theater&quot;. Without a watch date, the day you rated or logged it is used.</span>
         </header>
         {!theater ? (
           <p className="hint">No theater trips yet. Mark a movie as watched in a theater on its Studio page (or pick several in Studio and use &quot;Watched in…&quot;).</p>
@@ -123,8 +127,8 @@ export default async function StatsPage() {
               <div className="stat-tile"><span className="label">Visits</span><b>{theater.total}</b><span className="hint">{theater.thisYear} this year</span></div>
               <div className="stat-tile"><span className="label">Every</span><b>{theater.averageGap != null ? `${theater.averageGap} d` : "–"}</b><span className="hint">on average</span></div>
               <div className="stat-tile"><span className="label">Longest gap</span><b>{theater.longestGap != null ? `${theater.longestGap} d` : "–"}</b><span className="hint">between visits</span></div>
-              <div className="stat-tile"><span className="label">Busiest month</span><b>{theater.busiest[1]}</b><span className="hint">{monthLabel(theater.busiest[0])}</span></div>
-              <div className="stat-tile"><span className="label">Last visit</span><b>{theater.sinceLast} d</b><span className="hint">ago</span></div>
+              <div className="stat-tile"><span className="label">Busiest month</span><b>{theater.busiest ? theater.busiest[1] : "–"}</b><span className="hint">{theater.busiest ? monthLabel(theater.busiest[0]) : "no dates yet"}</span></div>
+              <div className="stat-tile"><span className="label">Last visit</span><b>{theater.sinceLast != null ? `${theater.sinceLast} d` : "–"}</b><span className="hint">ago</span></div>
             </div>
             <div className="theater-timeline">
               <div className="tt-head" aria-hidden="true">
@@ -133,16 +137,16 @@ export default async function StatsPage() {
               </div>
               {years.map((y) => (
                 <div key={y} className="tt-row">
-                  <span className="tt-year">{y}<small>{s.theater.filter((v) => v.date.startsWith(y)).length}</small></span>
+                  <span className="tt-year">{y}<small>{dated.filter((v) => v.date.startsWith(y)).length}</small></span>
                   {MONTHS.map((_, i) => {
                     const k = `${y}-${String(i + 1).padStart(2, "0")}`;
-                    const here = s.theater.filter((v) => v.date.startsWith(k));
+                    const here = dated.filter((v) => v.date.startsWith(k));
                     return (
                       <div key={k} className={`tt-month${here.length ? " on" : ""}`}>
                         {here.map((v) => (
                           <Link key={v.id} href={`/studio/${v.id}`} className="tt-visit" aria-label={`${v.title}, ${formatDate(v.date)}`}>
                             <Poster url={v.posterUrl} title={v.title} />
-                            <span className="tip"><b>{v.title}</b>{formatDate(v.date)}{v.rating != null ? ` · ★ ${v.rating}` : ""}</span>
+                            <span className="tip"><b>{v.title}</b>{v.approximate ? "around " : ""}{formatDate(v.date)}{v.rating != null ? ` · ★ ${v.rating}` : ""}</span>
                           </Link>
                         ))}
                       </div>
@@ -150,6 +154,19 @@ export default async function StatsPage() {
                   })}
                 </div>
               ))}
+              {undated.length > 0 && (
+                <div className="tt-row tt-undated">
+                  <span className="tt-year">No date<small>{undated.length}</small></span>
+                  <div className="tt-month on">
+                    {undated.map((v) => (
+                      <Link key={v.id} href={`/studio/${v.id}`} className="tt-visit" aria-label={`${v.title}, no watch date`}>
+                        <Poster url={v.posterUrl} title={v.title} />
+                        <span className="tip"><b>{v.title}</b>Add a watch date on its page</span>
+                      </Link>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           </>
         )}
