@@ -6,7 +6,7 @@ import { repairDone, repairInflatedShows } from "./repair";
 import { pruneDatasetCache } from "../imdb/datasets";
 import { groupAnimeFranchises } from "../repo/franchise";
 import { upgradeGenreRules } from "../repo/genres";
-import { applyAutoStatus, dropStaleOnce } from "../repo/autoStatus";
+import { applyAutoStatus, dropStaleOnce, undoBetweenSeasonDrops } from "../repo/autoStatus";
 import { startRecommendationsIfStale } from "../recommend/job";
 import { runFillerCheck } from "../anime/filler";
 import { getDb } from "../db";
@@ -127,6 +127,7 @@ export function startEpisodeScheduler() {
     autoMergeDuplicates(); // the same film or show never stays twice
     try {
       removePlaceholderSeasons(); // planned seasons IMDb lists as "Episode #2.1"… aren't real yet
+      undoBetweenSeasonDrops(); // once: finished shows dropped only because of a newer season come back
       dropStaleOnce(); // once: shows untouched for 6 months are set to Dropped
       applyAutoStatus(); // status follows progress: completed, watching, on hold, dropped
     } catch (e) {

@@ -130,3 +130,31 @@ describe("one-time Dropped for shows untouched in 6 months", () => {
     expect(getMedia(old.id)!.review.status).toBe("watching");
   });
 });
+
+describe("between seasons isn't abandoned", () => {
+  it("a finished show with an unstarted new season stays Watching, and wrongly dropped ones come back", async () => {
+    const { undoBetweenSeasonDrops } = await import("@/lib/repo/autoStatus");
+    const e = (n: number, d: string) => ({ number: n, title: `E${n}`, airDate: d, overview: null, providerRef: null });
+    const m = createMedia({
+      type: "tv",
+      metadata: { title: "Finished" },
+      segments: [
+        { kind: "season", label: "Season 1", seasonNumber: 1, courNumber: null, episodeCount: 2, episodes: [e(1, "2020-01-01"), e(2, "2020-01-08")] },
+        { kind: "special", label: "Specials", seasonNumber: 0, courNumber: null, episodeCount: 1, episodes: [e(1, "2020-06-01")] },
+        { kind: "season", label: "Season 2", seasonNumber: 2, courNumber: null, episodeCount: 1, episodes: [e(1, "2025-01-01")] }, // out long ago
+      ],
+    });
+    const s1 = getMediaDetail(m.id)!.segments.find((s) => s.label === "Season 1")!.episodes.map((x) => x.id);
+    bulkAssess(m.id, s1, "watched", undefined);
+    getDb().prepare(`UPDATE episode_assessment SET watched_at = ?`).run(ago(700));
+    getDb().prepare(`INSERT OR REPLACE INTO app_flag (key, at) VALUES ('status-clock-start', ?)`).run(ago(365));
+    applyAutoStatus();
+    expect(getMedia(m.id)!.review.status).toBe("watching"); // not dropped
+    // As if the 6-month tidy-up had dropped it:
+    const ran = new Date().toISOString();
+    getDb().prepare(`INSERT OR REPLACE INTO app_flag (key, at) VALUES ('one-time-drop-6-months', ?)`).run(ran);
+    getDb().prepare(`UPDATE review SET status = 'dropped', status_manual_at = ? WHERE media_id = ?`).run(ran, m.id);
+    expect(undoBetweenSeasonDrops()).toBe(1);
+    expect(getMedia(m.id)!.review.status).toBe("watching");
+  });
+});

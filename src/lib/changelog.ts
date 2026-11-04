@@ -20,6 +20,7 @@ export const CHANGELOG: ChangelogEntry[] = [
       "Watched with: tap several people to see only what you watched with all of them.",
       "Select mode on Movies has Theater and Streaming buttons.",
       "One-time tidy-up: shows you started but haven't touched in 6 months are set to Dropped (watch an episode to bring one back).",
+      "A show you finished that has a new season you haven't started stays in Currently watching: it never drifts to On hold or Dropped, and any the tidy-up dropped are back.",
       "Episode grids have an Unwatched filter and Hide filler.",
     ],
   },

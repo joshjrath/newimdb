@@ -148,15 +148,16 @@ export interface Returning {
  * the last season you watched is watched (or skipped), and a later season with no watched
  * episodes has appeared. Null when you're mid-way, haven't started, or there's nothing new.
  */
-export function returningSeason(segments: SegmentView[], today = new Date().toISOString().slice(0, 10)): Returning | null {
-  const segs = orderedSegments(segments).filter((s) => s.episodes.length > 0);
+export function returningSeason(segments: SegmentView[], today = new Date().toISOString().slice(0, 10), opts: { ignoreFiller?: boolean } = {}): Returning | null {
+  // Main seasons only: an unwatched special or OVA doesn't mean you didn't finish.
+  const segs = orderedSegments(segments).filter((s) => s.episodes.length > 0 && (s.kind === "season" || s.kind === "cour"));
   const watchedIn = (s: SegmentView) => s.episodes.some((e) => e.state === "watched");
   let last = -1;
   segs.forEach((s, i) => {
     if (watchedIn(s)) last = i;
   });
   if (last < 0) return null;
-  const finished = segs.slice(0, last + 1).every((s) => s.episodes.every((e) => e.state !== "unwatched" || isUnaired(e, today)));
+  const finished = segs.slice(0, last + 1).every((s) => s.episodes.every((e) => e.state !== "unwatched" || isUnaired(e, today) || (opts.ignoreFiller && e.filler)));
   if (!finished) return null;
   const newSegments = segs.slice(last + 1).filter((s) => !s.episodes.some((e) => e.state !== "unwatched"));
   if (!newSegments.length) return null;

@@ -1,5 +1,5 @@
 import { getDb, nowIso, type DB } from "../db";
-import { allEpisodes, hasAired } from "../domain/progress";
+import { allEpisodes, hasAired, returningSeason } from "../domain/progress";
 import type { EpisodeView, SegmentView, WatchStatus } from "../domain/types";
 import { audit } from "./audit";
 import { getSegments } from "./media";
@@ -130,7 +130,10 @@ export function applyAutoStatus(db = getDb(), opts: { mediaIds?: number[]; segme
       const newest = caughtUp ? null : newestUnwatchedAired(segs, r.type === "anime");
       const lastActivity = [r.last_activity, clock, newest].filter((x): x is string => Boolean(x)).sort().pop() ?? clock;
       const returning = false;
-      const want = statusFor({ watched: r.watched, denominator: caughtUp ? r.watched : r.watched + 1, lastActivity, returning });
+      // Finished everything, and a new season came out that you haven't started: that's
+      // between seasons, not abandoned. It stays Currently watching however long it waits.
+      const between = !caughtUp && returningSeason(segs, undefined, { ignoreFiller: r.type === "anime" })?.state === "out";
+      const want = between ? "watching" : statusFor({ watched: r.watched, denominator: caughtUp ? r.watched : r.watched + 1, lastActivity, returning });
       if (!want || want === r.status) continue;
       set.run(r.id, want, nowIso(), nowIso());
       moves.push({ id: r.id, from: r.status, to: want });
@@ -169,7 +172,9 @@ export function dropStaleOnce(db = getDb(), now = Date.now()): number {
   db.transaction(() => {
     for (const r of rows) {
       if (r.status === "dropped" || r.status === "completed") continue;
-      if (!hasUnwatchedAired(getSegments(r.id, db, { overview: false }), { ignoreFiller: r.type === "anime" })) continue; // finished what's out
+      const segs = getSegments(r.id, db, { overview: false });
+      if (!hasUnwatchedAired(segs, { ignoreFiller: r.type === "anime" })) continue; // finished what's out
+      if (returningSeason(segs, undefined, { ignoreFiller: r.type === "anime" })) continue; // finished, just waiting on / not started a new season
       db.prepare(
         `INSERT INTO review (media_id, status, status_manual_at, created_at, updated_at) VALUES (?, 'dropped', ?, ?, ?)
          ON CONFLICT(media_id) DO UPDATE SET status = 'dropped', status_manual_at = excluded.status_manual_at, updated_at = excluded.updated_at`,
@@ -180,4 +185,34 @@ export function dropStaleOnce(db = getDb(), now = Date.now()): number {
     if (dropped.length) audit(db, "drop_stale_once", "library", null, { dropped: dropped.length, ids: dropped.slice(0, 500) });
   })();
   return dropped.length;
+}
+
+const UNDO_FLAG = "undo-drop-between-seasons";
+
+/**
+ * Once: the 6-month tidy-up also dropped some shows you'd actually finished, where only a
+ * newer season was unwatched. Those go back to Currently watching.
+ */
+export function undoBetweenSeasonDrops(db = getDb()): number {
+  if (db.prepare(`SELECT 1 FROM app_flag WHERE key = ?`).get(UNDO_FLAG)) return 0;
+  // The shows that tidy-up dropped: set to Dropped by it, at the moment it ran.
+  const ran = (db.prepare(`SELECT at FROM app_flag WHERE key = ?`).get(STALE_FLAG) as { at: string } | undefined)?.at;
+  const ids = new Set<number>();
+  if (ran) {
+    const from = new Date(Date.parse(ran) - 5 * 60_000).toISOString();
+    for (const r of db.prepare(`SELECT media_id FROM review WHERE status = 'dropped' AND status_manual_at BETWEEN ? AND ?`).all(from, ran) as { media_id: number }[]) ids.add(r.media_id);
+  }
+  let restored = 0;
+  db.transaction(() => {
+    for (const id of ids) {
+      const m = db.prepare(`SELECT m.type, r.status FROM media m JOIN review r ON r.media_id = m.id WHERE m.id = ?`).get(id) as { type: string; status: string | null } | undefined;
+      if (!m || m.status !== "dropped") continue;
+      if (!returningSeason(getSegments(id, db, { overview: false }), undefined, { ignoreFiller: m.type === "anime" })) continue;
+      db.prepare(`UPDATE review SET status = 'watching', status_manual_at = NULL, updated_at = ? WHERE media_id = ?`).run(nowIso(), id);
+      restored++;
+    }
+    db.prepare(`INSERT INTO app_flag (key, at, detail) VALUES (?, ?, ?)`).run(UNDO_FLAG, nowIso(), JSON.stringify({ restored }));
+    if (restored) audit(db, "undo_drop_between_seasons", "library", null, { restored });
+  })();
+  return restored;
 }
