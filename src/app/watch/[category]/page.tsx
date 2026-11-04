@@ -3,6 +3,8 @@ import { notFound } from "next/navigation";
 import { requireOwnerPage } from "@/lib/guard";
 import { Shell } from "@/components/Shell";
 import { LibraryCard } from "@/components/LibraryCard";
+import { SelectableGrid } from "@/components/SelectableGrid";
+import { listLists } from "@/lib/repo/lists";
 import { NowStrip } from "@/components/NowStrip";
 import { ReturningStrip } from "@/components/ReturningStrip";
 import { AiringStrip, UpcomingStrip } from "@/components/AiringStrips";
@@ -76,7 +78,8 @@ export default async function LibraryPage({ params, searchParams }: { params: Pr
       {!filtered && page === 1 && (
         <>
           <AiringStrip items={sections.airing} />
-          <ReturningStrip items={sections.returning} />
+          {/* A show already in Currently watching doesn't need to be here too. */}
+          <ReturningStrip items={sections.returning.filter((m) => !watching.some((w) => w.id === m.id))} />
           <NowStrip items={watching} />
           <UpcomingStrip items={sections.upcoming} />
         </>
@@ -157,11 +160,19 @@ export default async function LibraryPage({ params, searchParams }: { params: Pr
       </p>
 
       {items.length ? (
-        <div className="library">
+        <SelectableGrid
+          pageIds={items.map((m) => m.id)}
+          people={listPeople().map(({ id, name }) => ({ id, name }))}
+          genres={listGenres().map(({ id, name }) => ({ id, name }))}
+          lists={listLists().map(({ id, name }) => ({ id, name }))}
+          statuses={(type === "movie" ? MOVIE_STATUSES : WATCH_STATUSES).map((s) => ({ key: s, label: STATUS_LABEL[s] }))}
+        >
           {items.map((m) => (
-            <LibraryCard key={m.id} m={m} returning={returningById.get(m.id)} />
+            <div key={m.id} data-select-id={m.id} className="select-cell">
+              <LibraryCard m={m} returning={returningById.get(m.id)} />
+            </div>
           ))}
-        </div>
+        </SelectableGrid>
       ) : (
         <div className="empty-state">
           <h2>{filtered ? "Nothing matches these filters" : `No ${label.toLowerCase()} yet`}</h2>
