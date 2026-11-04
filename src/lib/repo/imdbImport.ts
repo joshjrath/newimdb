@@ -8,6 +8,7 @@ import { defaultSegmentLabel, MEDIA_TYPES, type MediaType } from "../domain/type
 import type { EpisodeLookup } from "../imdb/datasets";
 import { audit } from "./audit";
 import { aliasFor } from "./franchise";
+import { isPlaceholderEpisode } from "./episodeSync";
 import { fillEmptyMetadata, insertMedia, restoreAssessments, titleMatcher, touchWatched } from "./media";
 
 /**
@@ -238,8 +239,12 @@ function recordImport(db: DB, imdbId: string, mediaId: number, decision: string)
   ).run(imdbId, mediaId, decision, nowIso());
 }
 
+/** Seasons IMDb only lists as numbered placeholders (planned, nothing aired) aren't created. */
+const realSeasons = (t: PlanTitle) =>
+  t.seasons.filter((s) => s.season <= 1 || s.episodes.some((e) => e.rating != null) || !s.episodes.every((e) => isPlaceholderEpisode({ title: e.title, airDate: e.airDate })));
+
 const segmentsOf = (t: PlanTitle) =>
-  t.seasons.map((s) => ({
+  realSeasons(t).map((s) => ({
     kind: (s.season === 0 ? "special" : "season") as "special" | "season",
     label: defaultSegmentLabel("season", { season: s.season }),
     seasonNumber: s.season,

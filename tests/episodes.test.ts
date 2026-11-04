@@ -156,3 +156,23 @@ describe("syncing never inflates a show (Bleach had 700 episodes)", () => {
     expect(syncShowEpisodes(m.id, tv, { provider: "tvmaze", showRef: "1" }).newSeasons).toBe(0);
   });
 });
+
+describe("seasons that don't exist yet (Your Friendly Neighborhood Spider-Man)", () => {
+  it("removes IMDb's placeholder seasons, keeps real and watched ones", async () => {
+    const { removePlaceholderSeasons } = await import("@/lib/repo/episodeSync");
+    const year = String(new Date().getUTCFullYear());
+    const ph = (n: number) => ({ number: n, title: `Episode #2.${n}`, airDate: year, overview: null, providerRef: `tt99${n}` });
+    const real = (n: number) => ({ number: n, title: `Real ${n}`, airDate: "2025-01-29", overview: null, providerRef: `tt88${n}` });
+    const m = createMedia({
+      type: "tv",
+      metadata: { title: "Your Friendly Neighborhood Spider-Man" },
+      segments: [
+        { kind: "season", label: "Season 1", seasonNumber: 1, courNumber: null, episodeCount: 2, episodes: [real(1), real(2)] },
+        { kind: "season", label: "Season 2", seasonNumber: 2, courNumber: null, episodeCount: 2, episodes: [ph(1), ph(2)] },
+        { kind: "season", label: "Season 3", seasonNumber: 3, courNumber: null, episodeCount: 1, episodes: [{ ...ph(1), airDate: null }] },
+      ],
+    });
+    expect(removePlaceholderSeasons()).toBe(2);
+    expect(getMediaDetail(m.id)!.segments.map((s) => s.label)).toEqual(["Season 1"]);
+  });
+});

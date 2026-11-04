@@ -107,6 +107,7 @@ export function syncShowEpisodes(
 ): { added: number; newSeasons: number; mismatched: number[] } {
   let added = 0;
   let newSeasons = 0;
+  let removedSeasons = 0;
   const mismatched: number[] = [];
   const type = (db.prepare(`SELECT type FROM media WHERE id = ?`).get(mediaId) as { type: string } | undefined)?.type;
   db.transaction(() => {
@@ -160,11 +161,72 @@ export function syncShowEpisodes(
       latest = season;
       added += applyProviderEpisodes(target, eps.map((e) => ({ ...e, filler: false })), { grow: true }, db).added;
     }
-    if (added || newSeasons) {
+    // Lined up, and the provider has no such season: our extra seasons with nothing watched,
+    // no real titles and no aired dates are placeholders. Remove them.
+    const providerMax = Math.max(0, ...[...bySeason.keys()].filter((k) => (bySeason.get(k)?.length ?? 0) > 0));
+    if (lined && providerMax > 0) {
+      for (const seg of segs().filter((x) => x.kind === "season" && x.season_number != null && x.season_number > providerMax && x.cour_number == null)) {
+        const list = db
+          .prepare(`SELECT e.title, e.air_date AS airDate, a.state, a.rating FROM episode e LEFT JOIN episode_assessment a ON a.episode_id = e.id WHERE e.segment_id = ?`)
+          .all(seg.id) as { title: string | null; airDate: string | null; state: string | null; rating: number | null }[];
+        if (list.every((e) => (e.state ?? "unwatched") === "unwatched" && e.rating == null && isPlaceholderEpisode(e))) {
+          db.prepare(`DELETE FROM segment WHERE id = ?`).run(seg.id);
+          removedSeasons++;
+        }
+      }
+    }
+    if (added || newSeasons || removedSeasons) {
       db.prepare(`UPDATE media SET version = version + 1, updated_at = ? WHERE id = ?`).run(nowIso(), mediaId);
-      audit(db, "sync_episodes", "media", mediaId, { added, newSeasons, provider: source.provider });
+      audit(db, "sync_episodes", "media", mediaId, { added, newSeasons, removedSeasons, provider: source.provider });
     }
     markSynced(mediaId, mismatched.length ? `${source.provider === "tmdb" ? "TMDB" : "TVmaze"} splits season ${mismatched.join(", ")} differently, so ${mismatched.length === 1 ? "it was" : "they were"} left as ${mismatched.length === 1 ? "it is" : "they are"}.` : null, db);
   })();
   return { added, newSeasons, mismatched };
+}
+
+/** IMDb's stand-in title for an episode it only knows by number ("Episode #2.1"). */
+export const PLACEHOLDER_TITLE = /^episode\s*#?\s*\d+(\.\d+)?$/i;
+const thisYear = () => new Date().getUTCFullYear();
+
+/** An episode that's only a number on IMDb: no real title, and no date that says it's aired. */
+export function isPlaceholderEpisode(e: { title: string | null; airDate: string | null }): boolean {
+  const titled = Boolean(e.title && !PLACEHOLDER_TITLE.test(e.title.trim()));
+  if (titled) return false;
+  const d = e.airDate;
+  return !d || d === "TBA" || (/^\d{4}$/.test(d) && Number(d) >= thisYear());
+}
+
+/**
+ * Seasons that don't exist yet: IMDb lists planned seasons as numbered placeholders
+ * (Your Friendly Neighborhood Spider-Man had a "Season 2, 3, 4"). A season made only of
+ * those, with nothing watched or rated, isn't shown. The real one arrives with the
+ * new-episode check once it's announced with episodes.
+ */
+export function removePlaceholderSeasons(db: DB = getDb(), mediaIds?: number[]): number {
+  const only = mediaIds?.length ? `AND s.media_id IN (${mediaIds.map(() => "?").join(",")})` : "";
+  const segs = db
+    .prepare(
+      `SELECT s.id, s.media_id FROM segment s JOIN media m ON m.id = s.media_id
+       WHERE m.type IN ('tv', 'anime') AND s.kind = 'season' AND s.season_number > 1 ${only}
+         AND NOT EXISTS (SELECT 1 FROM episode e JOIN episode_assessment a ON a.episode_id = e.id WHERE e.segment_id = s.id AND (a.state != 'unwatched' OR a.rating IS NOT NULL))
+         AND (provider IS NULL OR provider = 'imdb')`,
+    )
+    .all(...(mediaIds ?? [])) as { id: number; media_id: number }[];
+  const eps = db.prepare(`SELECT title, air_date AS airDate, provider_ref AS ref FROM episode WHERE segment_id = ?`);
+  let removed = 0;
+  const touched = new Set<number>();
+  db.transaction(() => {
+    for (const seg of segs) {
+      const list = eps.all(seg.id) as { title: string | null; airDate: string | null; ref: string | null }[];
+      if (!list.length || !list.every((e) => isPlaceholderEpisode(e) && (!e.ref || e.ref.startsWith("tt")))) continue;
+      db.prepare(`DELETE FROM segment WHERE id = ?`).run(seg.id);
+      touched.add(seg.media_id);
+      removed++;
+    }
+    for (const id of touched) {
+      db.prepare(`UPDATE media SET version = version + 1, updated_at = ? WHERE id = ?`).run(nowIso(), id);
+      audit(db, "remove_placeholder_seasons", "media", id);
+    }
+  })();
+  return removed;
 }

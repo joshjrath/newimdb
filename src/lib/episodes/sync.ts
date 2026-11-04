@@ -11,7 +11,7 @@ import { getDb } from "../db";
 import { tvmazeEpisodesBySeason, tvmazeLookupImdb } from "../providers/tvmaze";
 import { tmdbConfigured, tmdbFindByImdb, tmdbTv } from "../providers/tmdb";
 import { fillEmptyMetadata } from "../repo/media";
-import { allShows, dueShows, markSynced, syncShowEpisodes, type DueShow, type SyncEpisode } from "../repo/episodeSync";
+import { allShows, dueShows, markSynced, removePlaceholderSeasons, syncShowEpisodes, type DueShow, type SyncEpisode } from "../repo/episodeSync";
 
 /**
  * The automatic new-episode check. Runs on the server every 15 minutes, a small batch at a
@@ -121,6 +121,7 @@ export function startEpisodeScheduler() {
     }
     autoMergeDuplicates(); // the same film or show never stays twice
     try {
+      removePlaceholderSeasons(); // planned seasons IMDb lists as "Episode #2.1"… aren't real yet
       applyAutoStatus(); // status follows progress: completed, watching, on hold, dropped
     } catch (e) {
       console.error("[status] automatic status failed:", e);

@@ -9,7 +9,7 @@ import { normalizeTitle } from "../domain/text";
 import type { SortKey } from "../domain/sort";
 import { audit } from "./audit";
 import { setMediaTags, tagsFor, tagsForMany } from "./tags";
-import { applyGenres, genresForMany, setMediaGenres } from "./genres";
+import { applyGenres, genresForMany, setMediaGenre, setMediaGenres } from "./genres";
 import { applyAutoStatus, markStatusManual } from "./autoStatus";
 import { addPersonTo, peopleFor, peopleForMany, removePersonFrom, requirePerson, setMediaPeople } from "./people";
 
@@ -567,7 +567,7 @@ export function deleteMedia(ids: number[], db = getDb()): number {
   })();
 }
 
-export function bulkUpdate(ids: number[], action: BulkMediaAction, opts: { status?: WatchStatus | null; tag?: string; personId?: number; mediaType?: MediaType; watchedIn?: "theater" | "streaming" | null }, db = getDb()): number {
+export function bulkUpdate(ids: number[], action: BulkMediaAction, opts: { status?: WatchStatus | null; tag?: string; personId?: number; mediaType?: MediaType; watchedIn?: "theater" | "streaming" | null; genreId?: number }, db = getDb()): number {
   if (action === "delete") return deleteMedia(ids, db);
   if (action === "set_type") {
     if (!opts.mediaType) throw new RepoError("invalid", "Pick Movies, TV Shows or Anime.");
@@ -586,6 +586,7 @@ export function bulkUpdate(ids: number[], action: BulkMediaAction, opts: { statu
       }
       else if (action === "add_tag" && opts.tag) setMediaTags(db, id, [...tagsFor(db, id), opts.tag]);
       else if (action === "remove_tag" && tag) setMediaTags(db, id, tagsFor(db, id).filter((x) => x.toLowerCase() !== tag));
+      else if ((action === "add_genre" || action === "remove_genre") && opts.genreId) setMediaGenre(db, id, opts.genreId, action === "add_genre");
       else if (action === "set_watched_in") writeReview(db, id, { watchedIn: opts.watchedIn ?? null });
       else if (action === "add_person") addPersonTo(db, id, opts.personId!);
       else if (action === "remove_person") removePersonFrom(db, id, opts.personId!);
