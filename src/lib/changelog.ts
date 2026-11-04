@@ -12,6 +12,18 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-11-04-stats-recs-lists",
+    date: "2026-11-04",
+    title: "Recommended, Lists, Statistics, and fairer automatic status",
+    items: [
+      "Recommended: picks for Anime, TV and Movies from your ratings and favourite genres, with where to watch them (Netflix, Hulu, Apple TV+…). Add to Plan to watch in one tap.",
+      "Lists: make your own (an MCU list, comfort shows…), mixing movies, shows and anime, in your own order or by release, with a progress bar.",
+      "Statistics: time watched, watched per month, who you watch with, ratings, top genres, your theater trips on a timeline, and time left on shows you've started.",
+      "Automatic status no longer counts episodes that aren't out (or undated placeholders) against you, and the 30/90-day clock starts today for every show.",
+      "Movies: mark where you watched them (theater or streaming).",
+    ],
+  },
+  {
     id: "2026-11-04-episode-fixes-airing-grouping",
     date: "2026-11-04",
     title: "Fixed episode counts, Currently airing, and grouped anime",

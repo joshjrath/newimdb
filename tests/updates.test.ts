@@ -24,7 +24,7 @@ describe("updates never lose data", () => {
     setDbForTests(db);
     createMedia({ type: "movie", metadata: { title: "Kept" } }, {}, db);
     // Undo the newest migration, as if this database came from the previous version.
-    db.exec(`DROP TABLE recommendation; DROP TABLE recommendation_dismissed; DROP TABLE app_flag; DROP TABLE media_alias; ALTER TABLE review DROP COLUMN watched_in; ALTER TABLE review DROP COLUMN status_manual_at; ALTER TABLE media DROP COLUMN filler_checked_at; ALTER TABLE media DROP COLUMN filler_note; UPDATE schema_version SET version = 7;`);
+    db.exec(`DROP TABLE recommendation; DROP TABLE recommendation_dismissed; DROP TABLE app_flag; DROP TABLE media_alias; DROP TABLE list_item; DROP TABLE list; ALTER TABLE review DROP COLUMN watched_in; ALTER TABLE review DROP COLUMN status_manual_at; ALTER TABLE media DROP COLUMN filler_checked_at; ALTER TABLE media DROP COLUMN filler_note; UPDATE schema_version SET version = 7;`);
     db.close();
 
     db = openDatabase(file); // "the update"

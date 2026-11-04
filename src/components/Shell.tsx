@@ -5,7 +5,7 @@ import { SignOutButton } from "./ShellClient";
 import { UpdateBell } from "./UpdateBell";
 import { updatesSummary } from "@/lib/repo/releases";
 
-export type ShellActive = Category | "studio" | "new" | "import" | "settings";
+export type ShellActive = Category | "studio" | "new" | "import" | "settings" | "stats" | "recommended" | "lists";
 
 const CATEGORIES = Object.keys(CATEGORY_TO_TYPE) as Category[];
 const STUDIO: { key: ShellActive; href: string; label: string }[] = [
@@ -30,6 +30,10 @@ export function Shell({ children, active, category }: { children: React.ReactNod
           <form className="search" method="get" action="/studio" role="search">
             <input type="search" name="q" placeholder="Search…" aria-label="Search every title and review" />
           </form>
+          <Link className="rail-feature" href="/recommended" aria-current={active === "recommended" ? "page" : undefined}>
+            <span className="rail-feature-icon" aria-hidden="true">✦</span>
+            <span>Recommended<small>Picked for you</small></span>
+          </Link>
           <nav aria-label="Library">
             {CATEGORIES.map((c) => (
               <Link key={c} className={`cat-${c}`} href={`/watch/${c}`} aria-current={active === c ? "page" : undefined}>
@@ -38,6 +42,10 @@ export function Shell({ children, active, category }: { children: React.ReactNod
                 <span className="n">{counts[CATEGORY_TO_TYPE[c]]}</span>
               </Link>
             ))}
+          </nav>
+          <nav className="studio" aria-label="More">
+            <Link href="/lists" aria-current={active === "lists" ? "page" : undefined}>Lists</Link>
+            <Link href="/stats" aria-current={active === "stats" ? "page" : undefined}>Statistics</Link>
           </nav>
           <h3>Studio</h3>
           <nav className="studio" aria-label="Studio">

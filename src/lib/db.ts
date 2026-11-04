@@ -252,6 +252,23 @@ const MIGRATIONS: string[] = [
     created_at TEXT NOT NULL
   );
   CREATE INDEX media_alias_imdb ON media_alias(imdb_id);
+  -- your own lists (mixed movies, shows and anime)
+  CREATE TABLE list (
+    id          INTEGER PRIMARY KEY,
+    name        TEXT NOT NULL,
+    description TEXT NOT NULL DEFAULT '',
+    sort        TEXT NOT NULL DEFAULT 'manual' CHECK (sort IN ('manual', 'release', 'watched', 'rating', 'title', 'added')),
+    created_at  TEXT NOT NULL,
+    updated_at  TEXT NOT NULL
+  );
+  CREATE TABLE list_item (
+    list_id  INTEGER NOT NULL REFERENCES list(id) ON DELETE CASCADE,
+    media_id INTEGER NOT NULL REFERENCES media(id) ON DELETE CASCADE,
+    position INTEGER NOT NULL,
+    added_at TEXT NOT NULL,
+    PRIMARY KEY (list_id, media_id)
+  );
+  CREATE INDEX list_item_media ON list_item(media_id);
   `,
 ];
 

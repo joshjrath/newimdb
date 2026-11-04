@@ -1,0 +1,28 @@
+import { beforeEach, describe, expect, it } from "vitest";
+import { freshDb } from "./helpers";
+import { bulkAssess, createMedia, getMediaDetail } from "@/lib/repo/media";
+import { addToList, createList, getList, listLists, reorderList, updateList } from "@/lib/repo/lists";
+
+beforeEach(() => {
+  freshDb();
+});
+
+describe("lists", () => {
+  it("mixes movies and shows, sorts, reorders, and shows progress", () => {
+    const im = createMedia({ type: "movie", metadata: { title: "Iron Man", year: 2008 }, review: { rating: 4 } });
+    const cap = createMedia({ type: "movie", metadata: { title: "Captain America: The First Avenger", year: 2011 } });
+    const loki = createMedia({ type: "tv", metadata: { title: "Loki", year: 2021 }, segments: [{ kind: "season", label: "Season 1", seasonNumber: 1, courNumber: null, episodeCount: 4 }] });
+    bulkAssess(loki.id, getMediaDetail(loki.id)!.segments[0].episodes.slice(0, 2).map((e) => e.id), "watched", undefined);
+    const id = createList({ name: "MCU", mediaIds: [im.id, loki.id] });
+    expect(addToList(id, [cap.id, im.id])).toBe(1); // no duplicates
+    let l = getList(id)!;
+    expect(l.items.map((i) => i.title)).toEqual(["Iron Man", "Loki", "Captain America: The First Avenger"]);
+    expect(l.percent).toBe(50); // 1 + 0.5 + 0 of 3
+    reorderList(id, [cap.id, im.id, loki.id]); // story order
+    expect(getList(id)!.items.map((i) => i.title)[0]).toBe("Captain America: The First Avenger");
+    updateList(id, { sort: "release" });
+    l = getList(id)!;
+    expect(l.items.map((i) => i.year)).toEqual([2008, 2011, 2021]);
+    expect(listLists()[0]).toMatchObject({ name: "MCU", count: 3, finished: 1 });
+  });
+});

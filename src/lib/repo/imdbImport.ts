@@ -312,10 +312,10 @@ function mergeTitle(db: DB, id: number, t: PlanTitle, mode: "fill" | "overwrite"
       const segId = (db.prepare(
         `INSERT INTO segment (media_id, kind, label, season_number, cour_number, position, created_at, updated_at) VALUES (?,?,?,?,NULL,?,?,?) RETURNING id`,
       ).get(id, def.kind, def.label, s.season, i, nowIso(), nowIso()) as { id: number }).id;
-      const ins = db.prepare(`INSERT OR IGNORE INTO episode (segment_id, number, title, provider_ref) VALUES (?,?,?,?)`);
+      const ins = db.prepare(`INSERT OR IGNORE INTO episode (segment_id, number, title, air_date, provider_ref) VALUES (?,?,?,?,?)`);
       for (let n = 1; n <= def.episodeCount; n++) {
         const e = s.episodes.find((x) => x.episode === n);
-        ins.run(segId, n, e?.title ?? null, e?.imdbId ?? null);
+        ins.run(segId, n, e?.title ?? null, e?.airDate ?? "TBA", e?.imdbId ?? null);
       }
       seg = { id: segId, season_number: s.season };
     }
