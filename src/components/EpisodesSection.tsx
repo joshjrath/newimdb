@@ -115,6 +115,7 @@ export function EpisodesSection({ mediaId, type, version: v0, initial, initialSe
       <Heatmap
         key={`${gridKey}-${view}`}
         mediaId={mediaId}
+        ignoreFiller={type === "anime"}
         initial={shown}
         initialSegment={view === "story" || view === "seasons" || view === "release" ? initialSegment : null}
         onSegments={(updated) => setSegments((real) => (offerViews ? foldBack(real, updated) : updated))}

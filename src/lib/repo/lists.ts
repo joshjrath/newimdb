@@ -31,7 +31,7 @@ function items(db: DB, listId: number): ListItemView[] {
       `SELECT li.media_id AS mediaId, li.position, m.type, m.title, m.year, m.poster_url AS posterUrl, r.rating, r.status,
               COALESCE(r.watched_on, r.last_watched_at) AS watchedOn, r.watched_on AS watchedDate,
               (SELECT SUM(a.state = 'watched') FROM segment s JOIN episode e ON e.segment_id = s.id LEFT JOIN episode_assessment a ON a.episode_id = e.id WHERE s.media_id = m.id) AS watched,
-              (SELECT COUNT(e.id) - SUM(COALESCE(a.state, '') = 'skipped') - SUM(${UNAIRED}) FROM segment s JOIN episode e ON e.segment_id = s.id LEFT JOIN episode_assessment a ON a.episode_id = e.id WHERE s.media_id = m.id) AS total
+              (SELECT COUNT(e.id) - SUM(COALESCE(a.state, '') = 'skipped') - SUM(${UNAIRED}) - SUM(m.type = 'anime' AND COALESCE(a.filler, 0) = 1 AND COALESCE(a.state, 'unwatched') = 'unwatched' AND a.rating IS NULL AND NOT COALESCE(${UNAIRED}, 0)) FROM segment s JOIN episode e ON e.segment_id = s.id LEFT JOIN episode_assessment a ON a.episode_id = e.id WHERE s.media_id = m.id) AS total
        FROM list_item li JOIN media m ON m.id = li.media_id LEFT JOIN review r ON r.media_id = m.id WHERE li.list_id = ?`,
     )
     .all(listId) as (Omit<ListItemView, "done"> & { watched: number | null; total: number | null; watchedDate: string | null })[];

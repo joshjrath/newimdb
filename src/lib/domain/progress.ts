@@ -5,7 +5,8 @@ import type { EpisodeView, SegmentView } from "./types";
  *  - An episode is "watched" when its state is `watched` (a rating always implies watched).
  *  - Intentionally skipped episodes (N/A) are removed from the denominator, and reported
  *    separately as "skipped". They never count as watched.
- *  - Filler is an independent flag; filler episodes count like any other episode.
+ *  - Filler is an independent flag. For anime, filler you haven't watched is left out of the
+ *    total (finishing every canon episode is 100%); filler you did watch counts as watched.
  *  - Episodes not out yet (future or unknown air date) are left out until they air.
  *  - Padding cells in the heatmap are visual only and are never episodes.
  */
@@ -16,17 +17,19 @@ export interface ProgressCounts {
   skipped: number;
   /** Not out yet (and not watched): left out of the denominator until they air. */
   unaired: number;
+  /** Anime: filler you haven't watched, left out of the denominator. */
+  filler?: number;
 }
 
 export interface Progress extends ProgressCounts {
   remaining: number; // not watched, not skipped, already out
-  denominator: number; // total - skipped - unaired
+  denominator: number; // total - skipped - unaired - unwatched filler (anime)
   percent: number; // 0–100, watched / denominator
 }
 
 /** The only place the progress maths lives; SQL aggregates and in-memory episodes both feed it. */
 export function progressFromCounts(c: ProgressCounts): Progress {
-  const denominator = c.total - c.skipped - c.unaired;
+  const denominator = c.total - c.skipped - c.unaired - (c.filler ?? 0);
   return {
     ...c,
     denominator,
@@ -48,13 +51,17 @@ export function isUnaired(e: Pick<EpisodeView, "state" | "rating" | "airDate">, 
   return e.airDate.slice(0, 10) > today;
 }
 
-export function computeProgress(episodes: EpisodeView[]): Progress {
-  const c: ProgressCounts = { total: episodes.length, watched: 0, rated: 0, skipped: 0, unaired: 0 };
+/** Anime filler you haven't watched (and that's out): not counted towards progress. */
+export const isSkippableFiller = (e: Pick<EpisodeView, "state" | "rating" | "airDate" | "filler">) => e.filler && e.state === "unwatched" && e.rating == null && !isUnaired(e);
+
+export function computeProgress(episodes: EpisodeView[], opts: { ignoreFiller?: boolean } = {}): Progress {
+  const c: ProgressCounts = { total: episodes.length, watched: 0, rated: 0, skipped: 0, unaired: 0, filler: 0 };
   for (const e of episodes) {
     if (e.state === "watched") c.watched++;
     if (e.rating != null) c.rated++;
     if (e.state === "skipped") c.skipped++;
     if (isUnaired(e)) c.unaired++;
+    else if (opts.ignoreFiller && isSkippableFiller(e)) c.filler!++;
   }
   return progressFromCounts(c);
 }
@@ -99,13 +106,13 @@ export interface ActivePointer {
  *  - If that episode lives in the next season (previous one complete), the next season is active.
  *  - Empty future seasons (no episodes yet) are never chosen.
  */
-export function activePointer(segments: SegmentView[]): ActivePointer {
+export function activePointer(segments: SegmentView[], opts: { ignoreFiller?: boolean } = {}): ActivePointer {
   const flat = allEpisodes(segments);
   let lastIdx = -1;
   flat.forEach((e, i) => {
     if (e.state === "watched") lastIdx = i;
   });
-  const next = flat.slice(lastIdx + 1).find((e) => e.state === "unwatched" && !isUnaired(e)) ?? null;
+  const next = flat.slice(lastIdx + 1).find((e) => e.state === "unwatched" && !isUnaired(e) && !(opts.ignoreFiller && e.filler)) ?? null;
   const lastWatched = lastIdx >= 0 ? flat[lastIdx] : null;
   const pivot = next ?? lastWatched ?? flat[0];
   const segment = pivot ? segments.find((s) => s.id === pivot.segmentId) ?? null : null;

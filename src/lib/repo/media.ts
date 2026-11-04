@@ -216,7 +216,10 @@ const UNAIRED_SQL = `(COALESCE(a.state, 'unwatched') = 'unwatched' AND a.rating 
     OR (length(e.air_date) >= 10 AND substr(e.air_date, 1, 10) > date('now'))))`;
 
 /** A show's percent watched (null when there's nothing to watch), for sorting by progress. */
-const PERCENT_SQL = `(SELECT 100.0 * SUM(a.state = 'watched') / NULLIF(COUNT(e.id) - SUM(COALESCE(a.state, '') = 'skipped') - SUM(${UNAIRED_SQL}), 0)
+/** Anime filler you haven't watched (and that's out): left out of progress. Expects `m`, `e`, `a`. */
+const SKIPPABLE_FILLER_SQL = `(m.type = 'anime' AND COALESCE(a.filler, 0) = 1 AND COALESCE(a.state, 'unwatched') = 'unwatched' AND a.rating IS NULL AND NOT COALESCE(${UNAIRED_SQL}, 0))`;
+
+const PERCENT_SQL = `(SELECT 100.0 * SUM(a.state = 'watched') / NULLIF(COUNT(e.id) - SUM(COALESCE(a.state, '') = 'skipped') - SUM(${UNAIRED_SQL}) - SUM(${SKIPPABLE_FILLER_SQL}), 0)
    FROM segment s JOIN episode e ON e.segment_id = s.id LEFT JOIN episode_assessment a ON a.episode_id = e.id WHERE s.media_id = m.id)`;
 
 const ORDER_BY: Record<SortKey, string> = {
@@ -317,12 +320,13 @@ function progressFor(db: DB, ids: number[]): Map<number, Progress> {
               SUM(CASE WHEN a.state = 'watched' THEN 1 ELSE 0 END) AS watched,
               SUM(CASE WHEN a.rating IS NOT NULL THEN 1 ELSE 0 END) AS rated,
               SUM(CASE WHEN a.state = 'skipped' THEN 1 ELSE 0 END) AS skipped,
-              SUM(CASE WHEN ${UNAIRED_SQL} THEN 1 ELSE 0 END) AS unaired
-       FROM segment s JOIN episode e ON e.segment_id = s.id
+              SUM(CASE WHEN ${UNAIRED_SQL} THEN 1 ELSE 0 END) AS unaired,
+              SUM(CASE WHEN ${SKIPPABLE_FILLER_SQL} THEN 1 ELSE 0 END) AS filler
+       FROM segment s JOIN media m ON m.id = s.media_id JOIN episode e ON e.segment_id = s.id
        LEFT JOIN episode_assessment a ON a.episode_id = e.id
        WHERE s.media_id IN (${placeholders(ids.length)}) GROUP BY s.media_id`,
     )
-    .all(...ids) as { id: number; total: number; watched: number; rated: number; skipped: number; unaired: number }[];
+    .all(...ids) as { id: number; total: number; watched: number; rated: number; skipped: number; unaired: number; filler: number }[];
   return new Map(rows.map(({ id, ...counts }) => [id, progressFromCounts(counts)]));
 }
 
@@ -337,7 +341,7 @@ export function listWatching(type?: MediaType, db = getDb()): WatchingItem[] {
   const segments = segmentsFor(db, items.map((m) => m.id), { overview: false });
   return items.map((m) => {
     const segs = segments.get(m.id) ?? [];
-    return { ...m, progress: m.progress ?? computeProgress([]), pointer: activePointer(segs) };
+    return { ...m, progress: m.progress ?? computeProgress([]), pointer: activePointer(segs, { ignoreFiller: m.type === "anime" }) };
   });
 }
 

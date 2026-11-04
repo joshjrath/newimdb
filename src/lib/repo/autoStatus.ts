@@ -31,6 +31,7 @@ export function statusFor(p: { watched: number; denominator: number; lastActivit
 
 interface Row {
   id: number;
+  type: string;
   status: string | null;
   status_manual_at: string | null;
   watched: number;
@@ -59,13 +60,13 @@ const knownAired = (e: EpisodeView) => Boolean(e.airDate) && hasAired(e.airDate,
  * a later one is known to have aired (or you've watched one after it); otherwise it's an
  * announced episode that isn't out yet. (A show with no dates at all counts everything.)
  */
-export function hasUnwatchedAired(segments: SegmentView[]): boolean {
+export function hasUnwatchedAired(segments: SegmentView[], opts: { ignoreFiller?: boolean } = {}): boolean {
   const eps = allEpisodes(segments.filter((s) => s.kind === "season" || s.kind === "cour"));
   // A show with no dates at all (added by hand): every listed episode counts as out.
   let laterProof = !eps.some((e) => e.airDate);
   for (let i = eps.length - 1; i >= 0; i--) {
     const e = eps[i];
-    const unwatched = e.state === "unwatched" && e.rating == null;
+    const unwatched = e.state === "unwatched" && e.rating == null && !(opts.ignoreFiller && e.filler);
     if (unwatched && (knownAired(e) || (!e.airDate && laterProof))) return true;
     if (knownAired(e) || e.state === "watched") laterProof = true;
   }
@@ -93,7 +94,7 @@ export function applyAutoStatus(db = getDb(), opts: { mediaIds?: number[]; segme
   const clock = statusClockStart(db);
   const rows = db
     .prepare(
-      `SELECT m.id, r.status, r.status_manual_at, SUM(a.state = 'watched') AS watched,
+      `SELECT m.id, m.type, r.status, r.status_manual_at, SUM(a.state = 'watched') AS watched,
               MAX(CASE WHEN a.state = 'watched' OR a.rating IS NOT NULL THEN COALESCE(a.watched_at, a.updated_at) END) AS last_activity
        FROM media m LEFT JOIN review r ON r.media_id = m.id
        JOIN segment s ON s.media_id = m.id JOIN episode e ON e.segment_id = s.id LEFT JOIN episode_assessment a ON a.episode_id = e.id
@@ -111,7 +112,7 @@ export function applyAutoStatus(db = getDb(), opts: { mediaIds?: number[]; segme
       if (r.status_manual_at && (!r.last_activity || r.status_manual_at >= r.last_activity)) continue;
       const segs = segmentsOf(r.id);
       markUndatedUpcoming(db, segs);
-      const caughtUp = !hasUnwatchedAired(segs);
+      const caughtUp = !hasUnwatchedAired(segs, { ignoreFiller: r.type === "anime" });
       const returning = !caughtUp && Boolean(returningSeason(segs));
       const lastActivity = !r.last_activity || r.last_activity < clock ? clock : r.last_activity;
       const want = statusFor({ watched: r.watched, denominator: caughtUp ? r.watched : r.watched + 1, lastActivity, returning });

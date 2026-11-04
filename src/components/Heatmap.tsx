@@ -62,7 +62,7 @@ const EpisodeCell = memo(function EpisodeCell({ seg, ep, isNext, busy, selected,
   );
 });
 
-export function Heatmap({ mediaId, initial, initialSegment, onSegments }: { mediaId: number; initial: SegmentView[]; initialSegment?: number | null; onSegments?: (s: SegmentView[]) => void }) {
+export function Heatmap({ mediaId, initial, initialSegment, onSegments, ignoreFiller = false }: { mediaId: number; initial: SegmentView[]; initialSegment?: number | null; onSegments?: (s: SegmentView[]) => void; /** Anime: unwatched filler isn't counted, and Up next skips it. */ ignoreFiller?: boolean }) {
   const [segments, setSegments] = useState(initial);
   // Let the page know (e.g. the season editor next to the grid) after each change.
   const reported = useRef(initial);
@@ -86,12 +86,12 @@ export function Heatmap({ mediaId, initial, initialSegment, onSegments }: { medi
     const eps = allEpisodes(segments);
     return {
       ordered,
-      progress: computeProgress(eps),
-      pointer: activePointer(segments),
+      progress: computeProgress(eps, { ignoreFiller }),
+      pointer: activePointer(segments, { ignoreFiller }),
       avg: episodeAverage(eps),
       maxCols: Math.max(0, ...ordered.map((s) => s.episodes.length)),
     };
-  }, [segments]);
+  }, [segments, ignoreFiller]);
   const nextId = pointer.nextEpisode?.id;
   // Watch order, for keyboard movement, ranges and "watched up to here".
   const flat: Flat[] = useMemo(() => ordered.flatMap((seg) => sortedEpisodes(seg).map((ep) => ({ seg, ep }))), [ordered]);
@@ -345,7 +345,7 @@ export function Heatmap({ mediaId, initial, initialSegment, onSegments }: { medi
 
       {current ? (
         <div onKeyDown={onCellKey}>
-          <SeasonList seg={current} cell={cell} onBulk={(action, rating) => bulk(current, action, rating)} />
+          <SeasonList seg={current} cell={cell} ignoreFiller={ignoreFiller} onBulk={(action, rating) => bulk(current, action, rating)} />
         </div>
       ) : (
         <div className="heatmap-wrap" onKeyDown={onCellKey} aria-label="Episode ratings grid. Scroll sideways for more episodes.">
@@ -405,8 +405,8 @@ export function Heatmap({ mediaId, initial, initialSegment, onSegments }: { medi
 }
 
 /** Single-season view: episode titles plus season-wide quick actions. */
-function SeasonList({ seg, cell, onBulk }: { seg: SegmentView; cell: (s: SegmentView, e: EpisodeView) => React.ReactNode; onBulk: (action: BulkAssessAction, rating?: number) => void }) {
-  const p = computeProgress(seg.episodes);
+function SeasonList({ seg, cell, onBulk, ignoreFiller }: { seg: SegmentView; cell: (s: SegmentView, e: EpisodeView) => React.ReactNode; onBulk: (action: BulkAssessAction, rating?: number) => void; ignoreFiller?: boolean }) {
+  const p = computeProgress(seg.episodes, { ignoreFiller });
   const avg = episodeAverage(seg.episodes);
   return (
     <div className="stack tight" id={`seg-${seg.id}`}>

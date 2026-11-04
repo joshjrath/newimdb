@@ -12,6 +12,15 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-11-04-anime-filler-progress",
+    date: "2026-11-04",
+    title: "Anime filler doesn't count against you",
+    items: [
+      "For anime, filler you haven't watched is left out of % watched, so finishing every canon episode is 100% (and Completed).",
+      "Up next skips filler, and time left on a show doesn't include it. Filler you did watch still counts.",
+    ],
+  },
+  {
     id: "2026-11-04-smarter-picks-views-filler",
     date: "2026-11-04",
     title: "Smarter picks, anime views, filler, and select many",

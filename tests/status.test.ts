@@ -71,3 +71,25 @@ describe("unaired episodes never make a show look abandoned", () => {
     expect(getMedia(b.id)!.review.status).toBe("watching");
   });
 });
+
+describe("anime filler doesn't count towards progress", () => {
+  it("is 100% (and Completed) once every canon episode is watched", async () => {
+    const { computeProgress, activePointer } = await import("@/lib/domain/progress");
+    const a = createMedia({ type: "anime", metadata: { title: "Naruto Shippuden" }, segments: [{ kind: "season", label: "Season 1", seasonNumber: 1, courNumber: null, episodeCount: 5 }] });
+    const eps = getMediaDetail(a.id)!.segments[0].episodes;
+    bulkAssess(a.id, [eps[2].id, eps[3].id], "filler_on", undefined);
+    bulkAssess(a.id, [eps[0].id, eps[1].id], "watched", undefined);
+    const p = listMedia({ type: "anime" }).items[0].progress!;
+    expect(p).toMatchObject({ watched: 2, filler: 2, denominator: 3 });
+    const segs = getMediaDetail(a.id)!.segments;
+    expect(computeProgress(segs[0].episodes, { ignoreFiller: true }).percent).toBeCloseTo(66.7);
+    expect(activePointer(segs, { ignoreFiller: true }).nextEpisode?.number).toBe(5); // Up next skips filler
+    bulkAssess(a.id, [eps[4].id], "watched", undefined);
+    expect(listMedia({ type: "anime" }).items[0].progress).toMatchObject({ percent: 100 });
+    expect(getMedia(a.id)!.review.status).toBe("completed");
+    // A TV show's "filler" flag doesn't change its progress.
+    const t = show("Procedural", 2);
+    bulkAssess(t.id, ids(t.id).slice(0, 1), "filler_on", undefined);
+    expect(listMedia({ type: "tv" }).items.find((x) => x.id === t.id)!.progress).toMatchObject({ denominator: 2 });
+  });
+});
