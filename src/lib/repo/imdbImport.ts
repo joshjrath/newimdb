@@ -19,6 +19,8 @@ export interface PlanEpisode {
   imdbId: string;
   episode: number;
   title: string | null;
+  /** IMDb only knows the year; "TBA" when it doesn't even know that (not out yet). */
+  airDate: string | null;
   rating: number | null;
   ratedOn: string | null;
 }
@@ -154,7 +156,8 @@ export function buildImdbPlan(rows: ImdbRating[], invalid: number, lookup: Episo
         const r = rated.get(info.imdbId);
         const season = bySeason.get(info.season) ?? new Map<number, PlanEpisode>();
         if (!season.has(info.episode) || r) {
-          season.set(info.episode, { imdbId: info.imdbId, episode: info.episode, title: lookup.basics.get(info.imdbId)?.title ?? null, rating: r?.rating ?? null, ratedOn: r?.ratedOn ?? null });
+          const b = lookup.basics.get(info.imdbId);
+          season.set(info.episode, { imdbId: info.imdbId, episode: info.episode, title: b?.title ?? null, airDate: b ? (b.year != null ? String(b.year) : "TBA") : null, rating: r?.rating ?? null, ratedOn: r?.ratedOn ?? null });
         }
         bySeason.set(info.season, season);
       }
@@ -241,7 +244,7 @@ const segmentsOf = (t: PlanTitle) =>
     seasonNumber: s.season,
     courNumber: null,
     episodeCount: Math.max(0, ...s.episodes.map((e) => e.episode)),
-    episodes: s.episodes.map((e) => ({ number: e.episode, title: e.title, airDate: null, overview: null, providerRef: e.imdbId })),
+    episodes: s.episodes.map((e) => ({ number: e.episode, title: e.title, airDate: e.airDate ?? null, overview: null, providerRef: e.imdbId })),
   }));
 
 const assessmentsOf = (eps: PlanEpisode[]) =>

@@ -187,6 +187,30 @@ const MIGRATIONS: string[] = [
   );
   CREATE INDEX media_person_person ON media_person(person_id);
   `,
+  // 5 — when each show's episode list was last checked for new episodes
+  `
+  ALTER TABLE media ADD COLUMN episodes_synced_at TEXT;
+  ALTER TABLE media ADD COLUMN episodes_sync_note TEXT;
+  `,
+  // 6 — genre filters you choose in Settings, applied to titles automatically
+  `
+  CREATE TABLE genre (
+    id         INTEGER PRIMARY KEY,
+    name       TEXT NOT NULL UNIQUE COLLATE NOCASE,
+    rules      TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL
+  );
+  CREATE TABLE media_genre (
+    media_id INTEGER NOT NULL REFERENCES media(id) ON DELETE CASCADE,
+    genre_id INTEGER NOT NULL REFERENCES genre(id) ON DELETE CASCADE,
+    -- auto: matched by the rules; manual: you added it; excluded: you removed it (never re-added)
+    state    TEXT NOT NULL CHECK (state IN ('auto', 'manual', 'excluded')),
+    PRIMARY KEY (media_id, genre_id)
+  );
+  CREATE INDEX media_genre_genre ON media_genre(genre_id, state);
+  ALTER TABLE media ADD COLUMN keywords TEXT;
+  ALTER TABLE media ADD COLUMN keywords_fetched_at TEXT;
+  `,
 ];
 
 /** Whether the database was created just now (no earlier data), per connection. */

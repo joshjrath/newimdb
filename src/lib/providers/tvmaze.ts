@@ -116,3 +116,25 @@ export async function tvmazeLookupImdb(imdbId: string): Promise<{ posterUrl: str
     throw e;
   }
 }
+
+/**
+ * Every numbered episode of a show, by season, including announced ones that haven't aired
+ * (those get airDate "TBA" when TVmaze has no date yet).
+ */
+export async function tvmazeEpisodesBySeason(showId: number): Promise<Map<number, ProviderEpisodeLite[]>> {
+  const eps = await fetchJson<Episode[]>("tvmaze", `${BASE}/shows/${showId}/episodes?specials=0`);
+  const out = new Map<number, ProviderEpisodeLite[]>();
+  for (const e of eps) {
+    if (e.number == null || e.season < 1) continue;
+    out.set(e.season, [...(out.get(e.season) ?? []), { number: e.number, title: e.name || null, airDate: e.airdate || "TBA", overview: htmlToTextOrNull(e.summary), providerRef: String(e.id) }]);
+  }
+  return out;
+}
+
+export interface ProviderEpisodeLite {
+  number: number;
+  title: string | null;
+  airDate: string | null;
+  overview: string | null;
+  providerRef: string | null;
+}

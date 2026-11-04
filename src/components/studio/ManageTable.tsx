@@ -30,7 +30,7 @@ interface Row {
   progress: string | null;
 }
 
-export function ManageTable({ items, total, page, pageSize, filters, people }: { items: Row[]; total: number; page: number; pageSize: number; filters: Record<"type" | "status" | "q" | "sort" | "with", string>; people: PersonRef[] }) {
+export function ManageTable({ items, total, page, pageSize, filters, people, genres }: { items: Row[]; total: number; page: number; pageSize: number; filters: Record<"type" | "status" | "q" | "sort" | "with" | "genre", string>; people: PersonRef[]; genres: { id: number; name: string }[] }) {
   const router = useRouter();
   const { busy, run } = useAction();
   const [selected, setSelected] = useState<Set<number>>(new Set());
@@ -83,6 +83,17 @@ export function ManageTable({ items, total, page, pageSize, filters, people }: {
             ))}
           </select>
         </label>
+        {genres.length > 0 && (
+          <label>
+            <span className="visually-hidden">Genre</span>
+            <select className="select small" name="genre" defaultValue={filters.genre}>
+              <option value="">Any genre</option>
+              {genres.map((g) => (
+                <option key={g.id} value={g.id}>{g.name}</option>
+              ))}
+            </select>
+          </label>
+        )}
         {filters.with && <input type="hidden" name="with" value={filters.with} />}
         <label className="grow">
           <span className="visually-hidden">Search</span>

@@ -6,7 +6,7 @@ import { Shell } from "@/components/Shell";
 import { Poster } from "@/components/Poster";
 import { Stars } from "@/components/Stars";
 import { StatusPill } from "@/components/StatusPill";
-import { Heatmap } from "@/components/Heatmap";
+import { EpisodesSection } from "@/components/EpisodesSection";
 import { ShareDialog } from "@/components/ShareDialog";
 import { SpoilerReveal, CopyLink } from "@/components/DetailClient";
 import { mediaHref } from "@/lib/domain/links";
@@ -80,6 +80,14 @@ export default async function DetailPage({ params, searchParams }: { params: Par
             </div>
             <div className="review-card">
               {r.spoiler && r.body.trim() ? <SpoilerReveal>{body}</SpoilerReveal> : body}
+              {m.genreFilters.length > 0 && (
+                <div className="watched-with">
+                  <span className="label">Genres</span>
+                  {m.genreFilters.map((g) => (
+                    <Link key={g.id} className="chip" href={`/watch/${cat}?genre=${g.id}`}>{g.name}</Link>
+                  ))}
+                </div>
+              )}
               {m.people.length > 0 && (
                 <div className="watched-with">
                   <span className="label">Watched with</span>
@@ -113,14 +121,7 @@ export default async function DetailPage({ params, searchParams }: { params: Par
         </div>
 
         {m.type !== "movie" && (
-          <section className="panel" aria-labelledby="eps-h">
-            <header>
-              <h2 id="eps-h">Episodes</h2>
-              <Link className="btn small ghost" href={`/studio/${m.id}#structure`}>Edit seasons</Link>
-            </header>
-            <p className="hint">Your overall rating above is set by you. The episode average below is calculated and shown separately.</p>
-            <Heatmap mediaId={m.id} initial={m.segments} initialSegment={Number((await searchParams).segment) || null} />
-          </section>
+          <EpisodesSection mediaId={m.id} type={m.type} version={m.version} initial={m.segments} initialSegment={Number((await searchParams).segment) || null} />
         )}
 
         {(m.overview || about.length > 0) && (

@@ -6,6 +6,7 @@ import { countMedia, listMedia } from "@/lib/repo/media";
 import { parseListQuery } from "@/lib/listQuery";
 import { plural } from "@/lib/domain/text";
 import { listPeople } from "@/lib/repo/people";
+import { listGenres } from "@/lib/repo/genres";
 
 export const metadata = { title: "Studio" };
 
@@ -15,6 +16,7 @@ export default async function StudioPage({ searchParams }: { searchParams: Promi
   const data = listMedia(query);
   const counts = countMedia();
   const people = listPeople();
+  const genres = listGenres();
   const withName = query.withPerson ? people.find((p) => p.id === query.withPerson)?.name : undefined;
   return (
     <Shell active="studio">
@@ -47,7 +49,8 @@ export default async function StudioPage({ searchParams }: { searchParams: Promi
         total={data.total}
         page={data.page}
         pageSize={data.pageSize}
-        filters={{ type: query.type ?? "", status: query.status ?? "", q: query.q ?? "", sort: query.sort ?? "added", with: query.withPerson ? String(query.withPerson) : "" }}
+        filters={{ type: query.type ?? "", status: query.status ?? "", q: query.q ?? "", sort: query.sort ?? "added", with: query.withPerson ? String(query.withPerson) : "", genre: query.genre ? String(query.genre) : "" }}
+        genres={genres.map(({ id, name }) => ({ id, name }))}
         people={people.map(({ id, name }) => ({ id, name }))}
       />
     </Shell>

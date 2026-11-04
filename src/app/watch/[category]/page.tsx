@@ -10,6 +10,7 @@ import { countMedia, listMedia, listWatching } from "@/lib/repo/media";
 import { SORT_OPTIONS } from "@/lib/domain/sort";
 import { allTags } from "@/lib/repo/tags";
 import { listPeople } from "@/lib/repo/people";
+import { listGenres } from "@/lib/repo/genres";
 import { getDb } from "@/lib/db";
 import { parseListQuery } from "@/lib/listQuery";
 import { plural } from "@/lib/domain/text";
@@ -18,6 +19,8 @@ import { CATEGORY_LABEL, CATEGORY_TO_TYPE, STATUS_LABEL, WATCH_STATUSES, type Ca
 type SP = Record<string, string | undefined>;
 const CATEGORIES = Object.keys(CATEGORY_TO_TYPE) as Category[];
 const MOVIE_STATUSES: WatchStatus[] = ["completed", "plan"];
+/** 60 divides evenly into 1, 2, 3, 4, 5 and 6 columns, so every full page ends on a full row. */
+const LIBRARY_PAGE_SIZE = 60;
 
 export async function generateMetadata({ params }: { params: Promise<{ category: string }> }) {
   return { title: CATEGORY_LABEL[(await params).category as Category] ?? "Library" };
@@ -30,13 +33,14 @@ export default async function LibraryPage({ params, searchParams }: { params: Pr
   const cat = category as Category;
   const type = CATEGORY_TO_TYPE[cat];
   const sp = await searchParams;
-  const query = { ...parseListQuery(sp, { pageSize: 24 }), type };
-  const { status, tag, q, featured, sort, page = 1, withPerson } = query;
+  const query = { ...parseListQuery(sp, { pageSize: LIBRARY_PAGE_SIZE }), type };
+  const { status, tag, q, featured, sort, page = 1, withPerson, genre } = query;
   const { items, total, pageSize } = listMedia(query);
   const counts = countMedia();
   const tags = allTags(getDb(), type);
   const people = listPeople(getDb(), type).filter((p) => p.count > 0);
-  const filtered = Boolean(status || tag || q || featured || withPerson);
+  const genres = listGenres(getDb(), type).filter((g) => g.count > 0 || g.id === genre);
+  const filtered = Boolean(status || tag || q || featured || withPerson || genre);
   const watching = type === "movie" || filtered || page > 1 ? [] : listWatching(type);
   const label = CATEGORY_LABEL[cat];
 
@@ -98,6 +102,16 @@ export default async function LibraryPage({ params, searchParams }: { params: Pr
           ))}
           <Link className="chip" href={href({ featured: featured ? undefined : "1" })} aria-current={featured ? "true" : undefined}>Featured</Link>
         </div>
+        {genres.length > 0 && (
+          <div className="chips with-chips" aria-label="Filter by genre">
+            <span className="label" style={{ alignSelf: "center", marginRight: 2 }}>Genre</span>
+            {genres.map((g) => (
+              <Link key={g.id} className="chip" href={href({ genre: genre === g.id ? undefined : String(g.id) })} aria-current={genre === g.id ? "true" : undefined}>
+                {g.name} <span className="hint">{g.count}</span>
+              </Link>
+            ))}
+          </div>
+        )}
         {people.length > 0 && (
           <div className="chips with-chips" aria-label="Filter by who you watched with">
             <span className="label" style={{ alignSelf: "center", marginRight: 2 }}>Watched with</span>

@@ -18,6 +18,7 @@ export function parseListQuery(params: Params, defaults: { sort?: SortKey; pageS
     status: status === "none" ? "none" : pick<WatchStatus>(WATCH_STATUSES, status),
     tag: get("tag"),
     withPerson: Number(get("with")) > 0 ? Number(get("with")) : undefined,
+    genre: Number(get("genre")) > 0 ? Number(get("genre")) : undefined,
     q: get("q"),
     featured: get("featured") === "1" || undefined,
     sort: pick(SORT_OPTIONS.map((s) => s.key), get("sort")) ?? defaults.sort ?? "recent",

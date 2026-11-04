@@ -9,7 +9,7 @@ export function ProgressBar({ p, big }: { p: Progress; big?: boolean }) {
         <div className="progress-fill" style={{ width: `${p.percent}%` }} />
       </div>
       <span className="progress-label">
-        {p.watched}/{p.denominator} watched{p.skipped ? `, ${p.skipped} skipped` : ""}
+        {p.watched}/{p.denominator} watched{p.skipped ? `, ${p.skipped} skipped` : ""}{p.unaired ? `, ${p.unaired} not out yet` : ""}
         {big && p.rated !== p.watched ? `, ${p.rated} rated` : ""} · {Math.round(p.percent)}%
       </span>
     </div>

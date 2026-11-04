@@ -12,6 +12,18 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-11-04-genres-and-new-episodes",
+    date: "2026-11-04",
+    title: "Genre filters, new episodes and faster rating",
+    items: [
+      "Add the genres you care about (True Crime, Superhero, Action…) in Settings; every title that fits is tagged straight away, and new ones as they arrive.",
+      "Filter any library page by genre, and add or remove a genre on a title from its Studio page.",
+      "Shows and anime check for new episodes by themselves, so there's no need to re-import.",
+      "Episodes that aren't out yet show as TBA and don't count against your progress.",
+      "Rate episodes from the keyboard: select a cell and type a number, use arrows to move, shift-click to select a range, and edit seasons right on the title's page.",
+    ],
+  },
+  {
     id: "2026-11-04-posters-and-duplicates",
     date: "2026-11-04",
     title: "Posters, and one review per title",
@@ -19,7 +31,7 @@ export const CHANGELOG: ChangelogEntry[] = [
       "Titles imported from IMDb get their posters filled in automatically.",
       "A film from both Letterboxd and IMDb is only kept once, with Letterboxd's rating and review.",
       "Import & backup can merge any duplicates already in your library.",
-      "Library cards fill the last row, with no empty slot.",
+      "Library pages end on a full row, with no empty slot.",
     ],
   },
   {

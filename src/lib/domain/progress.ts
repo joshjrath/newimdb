@@ -6,6 +6,7 @@ import type { EpisodeView, SegmentView } from "./types";
  *  - Intentionally skipped episodes (N/A) are removed from the denominator, and reported
  *    separately as "skipped". They never count as watched.
  *  - Filler is an independent flag; filler episodes count like any other episode.
+ *  - Episodes not out yet (future or unknown air date) are left out until they air.
  *  - Padding cells in the heatmap are visual only and are never episodes.
  */
 export interface ProgressCounts {
@@ -13,17 +14,19 @@ export interface ProgressCounts {
   watched: number;
   rated: number;
   skipped: number;
+  /** Not out yet (and not watched): left out of the denominator until they air. */
+  unaired: number;
 }
 
 export interface Progress extends ProgressCounts {
-  remaining: number; // not watched and not skipped
-  denominator: number; // total - skipped
+  remaining: number; // not watched, not skipped, already out
+  denominator: number; // total - skipped - unaired
   percent: number; // 0–100, watched / denominator
 }
 
 /** The only place the progress maths lives; SQL aggregates and in-memory episodes both feed it. */
 export function progressFromCounts(c: ProgressCounts): Progress {
-  const denominator = c.total - c.skipped;
+  const denominator = c.total - c.skipped - c.unaired;
   return {
     ...c,
     denominator,
@@ -32,12 +35,24 @@ export function progressFromCounts(c: ProgressCounts): Progress {
   };
 }
 
+/**
+ * An episode that isn't out yet: its air date is in the future, it's only known by a future
+ * year, or it's listed with no date ("TBA"). Anything you've watched or rated counts as out.
+ */
+export function isUnaired(e: Pick<EpisodeView, "state" | "rating" | "airDate">, today = new Date().toISOString().slice(0, 10)): boolean {
+  if (e.state !== "unwatched" || e.rating != null || !e.airDate) return false;
+  if (e.airDate === "TBA") return true;
+  if (/^\d{4}$/.test(e.airDate)) return Number(e.airDate) > Number(today.slice(0, 4));
+  return e.airDate.slice(0, 10) > today;
+}
+
 export function computeProgress(episodes: EpisodeView[]): Progress {
-  const c: ProgressCounts = { total: episodes.length, watched: 0, rated: 0, skipped: 0 };
+  const c: ProgressCounts = { total: episodes.length, watched: 0, rated: 0, skipped: 0, unaired: 0 };
   for (const e of episodes) {
     if (e.state === "watched") c.watched++;
     if (e.rating != null) c.rated++;
     if (e.state === "skipped") c.skipped++;
+    if (isUnaired(e)) c.unaired++;
   }
   return progressFromCounts(c);
 }
@@ -88,7 +103,7 @@ export function activePointer(segments: SegmentView[]): ActivePointer {
   flat.forEach((e, i) => {
     if (e.state === "watched") lastIdx = i;
   });
-  const next = flat.slice(lastIdx + 1).find((e) => e.state === "unwatched") ?? null;
+  const next = flat.slice(lastIdx + 1).find((e) => e.state === "unwatched" && !isUnaired(e)) ?? null;
   const lastWatched = lastIdx >= 0 ? flat[lastIdx] : null;
   const pivot = next ?? lastWatched ?? flat[0];
   const segment = pivot ? segments.find((s) => s.id === pivot.segmentId) ?? null : null;

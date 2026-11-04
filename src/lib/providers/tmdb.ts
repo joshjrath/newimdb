@@ -174,6 +174,8 @@ export interface ArtworkMatch {
   overview: string | null;
   tmdbId?: number;
   tvmazeId?: number;
+  /** Whether TMDB knows it as a movie or a show. */
+  kind?: "movie" | "tv";
 }
 
 /** Find a title on TMDB by its IMDb id. Prefers the result kind that matches, falls back to the other. */
@@ -182,7 +184,17 @@ export async function tmdbFindByImdb(imdbId: string, prefer: "movie" | "tv"): Pr
     movie_results: { id: number; poster_path: string | null; backdrop_path: string | null; overview?: string }[];
     tv_results: { id: number; poster_path: string | null; backdrop_path: string | null; overview?: string }[];
   }>(`/find/${encodeURIComponent(imdbId)}`, { external_source: "imdb_id" });
-  const hit = (prefer === "movie" ? [...r.movie_results, ...r.tv_results] : [...r.tv_results, ...r.movie_results])[0];
+  const movies = r.movie_results.map((x) => ({ ...x, kind: "movie" as const }));
+  const tv = r.tv_results.map((x) => ({ ...x, kind: "tv" as const }));
+  const hit = (prefer === "movie" ? [...movies, ...tv] : [...tv, ...movies])[0];
   if (!hit) return null;
-  return { posterUrl: img(hit.poster_path), backdropUrl: img(hit.backdrop_path, "w1280"), overview: hit.overview || null, tmdbId: hit.id };
+  return { posterUrl: img(hit.poster_path), backdropUrl: img(hit.backdrop_path, "w1280"), overview: hit.overview || null, tmdbId: hit.id, kind: hit.kind };
+}
+
+/** A title's TMDB genres and keywords (one request). Keywords power filters like Superhero. */
+export async function tmdbGenresAndKeywords(kind: "movie" | "tv", id: number): Promise<{ genres: string[]; keywords: string[] }> {
+  const r = await get<{ genres?: { name: string }[]; keywords?: { keywords?: { name: string }[]; results?: { name: string }[] } }>(`/${kind}/${id}`, {
+    append_to_response: "keywords",
+  });
+  return { genres: (r.genres ?? []).map((g) => g.name), keywords: (r.keywords?.keywords ?? r.keywords?.results ?? []).map((k) => k.name.toLowerCase()) };
 }

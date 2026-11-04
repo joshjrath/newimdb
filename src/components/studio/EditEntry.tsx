@@ -24,6 +24,7 @@ type Draft = {
   rating: number | null; ratingLabel: string; body: string; watchedOn: string; spoiler: boolean; status: string; featured: boolean;
   tags: string;
   people: number[];
+  genreFilters: number[];
 };
 
 function toDraft(m: MediaView): Draft {
@@ -34,13 +35,14 @@ function toDraft(m: MediaView): Draft {
     malId: s(m.malId), tvmazeId: s(m.tvmazeId), anilistId: s(m.anilistId), letterboxdUrl: s(m.letterboxdUrl), lockedFields: m.lockedFields,
     rating: m.review.rating, ratingLabel: s(m.review.ratingLabel), body: m.review.body, watchedOn: s(m.review.watchedOn),
     spoiler: m.review.spoiler, status: s(m.review.status), featured: m.review.featured, tags: m.tags.join(", "), people: m.people.map((p) => p.id).sort((a, b) => a - b),
+    genreFilters: m.genreFilters.map((g) => g.id).sort((a, b) => a - b),
   };
 }
 
 const num = (v: string) => (v.trim() === "" ? null : Number(v));
 const txt = (v: string) => (v.trim() === "" ? null : v.trim());
 
-function toPatch(d: Draft, version: number) {
+function toPatch(d: Draft, version: number, saved?: Draft) {
   return {
     version,
     metadata: {
@@ -55,12 +57,14 @@ function toPatch(d: Draft, version: number) {
     },
     tags: d.tags.split(",").map((t) => t.trim()).filter(Boolean),
     people: d.people,
+    // Only sent when changed, so untouched genres stay automatic.
+    ...(saved && saved.genreFilters.join() !== d.genreFilters.join() ? { genreFilters: d.genreFilters } : {}),
   };
 }
 
 const LOCKABLE: [keyof Draft, string][] = [["title", "Title"], ["year", "Year"], ["overview", "Overview"], ["posterUrl", "Poster"], ["genres", "Genres"]];
 
-export function EditEntry({ initial, people: allInitial }: { initial: MediaDetail; people: PersonRef[] }) {
+export function EditEntry({ initial, people: allInitial, genres }: { initial: MediaDetail; people: PersonRef[]; genres: { id: number; name: string }[] }) {
   const [allPeople, setAllPeople] = useState(allInitial);
   const router = useRouter();
   const toast = useToast();
@@ -85,7 +89,7 @@ export function EditEntry({ initial, people: allInitial }: { initial: MediaDetai
     setSaving(true);
     setError(null);
     try {
-      const r = await api<{ media: MediaView }>(`/api/media/${id}`, { method: "PATCH", body: toPatch(draft, version) });
+      const r = await api<{ media: MediaView }>(`/api/media/${id}`, { method: "PATCH", body: toPatch(draft, version, saved) });
       setVersion(r.media.version);
       const d = toDraft(r.media);
       setSaved(d);
@@ -210,6 +214,28 @@ export function EditEntry({ initial, people: allInitial }: { initial: MediaDetai
             <span className="hint">Comma separated. Tags become filters in the library.</span>
           </label>
           <PeoplePicker all={allPeople} selected={draft.people} onChange={(ids) => set("people", [...ids].sort((a, b) => a - b))} onPeople={setAllPeople} />
+          {genres.length > 0 && (
+            <div className="field">
+              <span className="label" id="genre-filters-label">Genre filters</span>
+              <div className="chips with-chips" role="group" aria-labelledby="genre-filters-label">
+                {genres.map((g) => {
+                  const on = draft.genreFilters.includes(g.id);
+                  return (
+                    <button
+                      key={g.id}
+                      type="button"
+                      className="chip"
+                      aria-pressed={on}
+                      onClick={() => set("genreFilters", (on ? draft.genreFilters.filter((x) => x !== g.id) : [...draft.genreFilters, g.id]).sort((a, b) => a - b))}
+                    >
+                      {g.name}
+                    </button>
+                  );
+                })}
+              </div>
+              <span className="hint">Tagged automatically from the title&apos;s genres. Tap to add or remove one; your choice sticks. Manage the list in <Link href="/studio/settings">Settings</Link>.</span>
+            </div>
+          )}
           <div className="notice">
             Visibility: <strong>Private</strong>. Publishing and public sharing are switched off in this version.
           </div>

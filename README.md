@@ -83,9 +83,15 @@ These states are kept separate on purpose:
 | `F` badge in the corner | Filler. Works with any state, and keeps the rating. |
 | Empty space, no cell | Padding: that season simply has fewer episodes. It isn't an episode. |
 | Brass outline | Your next episode. |
+| Dashed with `TBA` | Announced but not out yet. Left out of progress until it airs. |
+
+**Fast editing.** Click a cell to select it, then type: `4` rates 4, `4` then `5` (or `.`) rates 4.5. Arrows move, `w` watched, `s` skip, `f` filler, `u` watched up to here, Backspace clears. Shift-click or shift-arrows selects a range, Ctrl/Cmd-click adds cells, and the bar that appears acts on the whole selection. "Edit seasons" on the title page changes the structure in place.
 
 ### Progress policy
-The source requirements left this open, so this is the choice made: **skipped episodes are removed from the total** and listed separately ("12/20 watched, 3 skipped"). They never count as watched. Filler counts like any other episode.
+The source requirements left this open, so this is the choice made: **skipped episodes are removed from the total** and listed separately ("12/20 watched, 3 skipped"). They never count as watched. Filler counts like any other episode. Episodes that aren't out yet (future date, future year, or "TBA") are left out until they air, so a confirmed-but-unreleased season doesn't stop you being at 100%.
+
+### New episodes, automatically
+Every TV show and anime is re-checked in the background (TVmaze, plus TMDB when its key is set): shows you're watching every 6 hours, everything else daily. New episodes are added to the right season, new seasons are created, and nothing you've rated is ever removed. Settings → New episodes shows the last check and has "Check all shows now". Set `EPISODE_SYNC=off` to turn it off.
 
 ### Current season and next episode
 These are worked out from real progress: find the furthest watched episode in watch order, and the next episode is the first later one that isn't watched or skipped. If a season is finished, the next season becomes current. Empty future seasons are never chosen, so you won't see a blank "Season 15" while you're on Season 7.
@@ -158,6 +164,12 @@ How it works:
 - **Title page and library cards:** show who you watched with. Each library has a "Watched with" filter.
 - **Studio's bulk menu:** adds or removes a person on many titles at once.
 - **Removing a person** only takes them off titles. The titles stay. Backups include who you watched with.
+
+### Genre filters
+- **Settings → Genres:** add only the genres you want as filters, from suggestions (Action, True Crime, Superhero, Sitcom…) or your own. Adding one tags every movie, show and anime that fits straight away; new titles are tagged as they arrive.
+- **Rules:** a filter matches any of its genres, all of a set (True Crime = Documentary + Crime), or a TMDB keyword (Superhero, Heist…). Edit a filter to change its rules. Keywords are fetched once per title in the background and need a TMDB key.
+- **Your choice wins:** on a title's Studio page, tap a genre on or off. A genre you removed is never re-added automatically.
+- Each library page has a "Genre" filter row, and Studio has a genre dropdown. Backups include your filters and choices.
 
 ### Editing safety
 - Saves use optimistic versioning. If an entry was changed in another tab, you get a clear conflict message and your form is kept.

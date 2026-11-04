@@ -4,6 +4,7 @@ import { Shell } from "@/components/Shell";
 import { EditEntry } from "@/components/studio/EditEntry";
 import { TYPE_TO_CATEGORY } from "@/lib/domain/types";
 import { listPeople } from "@/lib/repo/people";
+import { listGenres } from "@/lib/repo/genres";
 
 type Params = Promise<{ id: string }>;
 
@@ -19,7 +20,7 @@ export default async function EditPage({ params }: { params: Params }) {
   if (!m) notFound();
   return (
     <Shell active="studio" category={TYPE_TO_CATEGORY[m.type]}>
-      <EditEntry initial={m} people={listPeople().map(({ id, name }) => ({ id, name }))} />
+      <EditEntry initial={m} people={listPeople().map(({ id, name }) => ({ id, name }))} genres={listGenres().map(({ id, name }) => ({ id, name }))} />
     </Shell>
   );
 }

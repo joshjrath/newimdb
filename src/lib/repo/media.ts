@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import { getDb, nowIso, type DB } from "../db";
 import { RepoError } from "../errors";
-import type { EpisodeState, EpisodeView, MediaDetail, MediaType, MediaView, PersonRef, ReviewSource, ReviewView, SegmentView, WatchStatus } from "../domain/types";
+import type { EpisodeState, EpisodeView, GenreRef, MediaDetail, MediaType, MediaView, PersonRef, ReviewSource, ReviewView, SegmentView, WatchStatus } from "../domain/types";
 import { METADATA_KEYS, type BulkAssessAction, type BulkMediaAction, type CreateMediaInput, type MetadataInput, type ProviderEpisode, type ReviewInput, type SegmentInput } from "../schemas";
 import { resolveAssessment, UNASSESSED, type AssessmentPatch } from "../domain/assessment";
 import { activePointer, computeProgress, progressFromCounts, type ActivePointer, type Progress } from "../domain/progress";
@@ -9,6 +9,7 @@ import { normalizeTitle } from "../domain/text";
 import type { SortKey } from "../domain/sort";
 import { audit } from "./audit";
 import { setMediaTags, tagsFor, tagsForMany } from "./tags";
+import { applyGenres, genresForMany, setMediaGenres } from "./genres";
 import { addPersonTo, peopleFor, peopleForMany, removePersonFrom, requirePerson, setMediaPeople } from "./people";
 
 export { RepoError };
@@ -81,7 +82,7 @@ function mapReview(r: Row | undefined, m: MediaRow): ReviewView {
   };
 }
 
-function mapMedia(m: MediaRow, r: Row | undefined, tags: string[], people: PersonRef[]): MediaView {
+function mapMedia(m: MediaRow, r: Row | undefined, tags: string[], people: PersonRef[], genreFilters: GenreRef[]): MediaView {
   const meta = Object.fromEntries(
     METADATA_KEYS.map((k) => {
       const col = METADATA_COLUMNS[k];
@@ -99,6 +100,7 @@ function mapMedia(m: MediaRow, r: Row | undefined, tags: string[], people: Perso
     review: mapReview(r, m),
     tags,
     people,
+    genreFilters,
   };
 }
 
@@ -119,7 +121,7 @@ export function getMedia(id: number, db = getDb()): MediaView | null {
   const m = db.prepare(`SELECT * FROM media WHERE id = ?`).get(id) as MediaRow | undefined;
   if (!m) return null;
   const r = db.prepare(`SELECT * FROM review WHERE media_id = ?`).get(id) as Row | undefined;
-  return mapMedia(m, r, tagsFor(db, id), peopleFor(db, id));
+  return mapMedia(m, r, tagsFor(db, id), peopleFor(db, id), genresForMany(db, [id]).get(id) ?? []);
 }
 
 /** For write paths and routes: the entry must exist. */
@@ -218,6 +220,8 @@ export interface ListQuery {
   tag?: string;
   /** Only titles watched with this person. */
   withPerson?: number;
+  /** Only titles in this genre filter. */
+  genre?: number;
   q?: string;
   featured?: boolean;
   sort?: SortKey;
@@ -250,6 +254,10 @@ export function listMedia(query: ListQuery, db = getDb()): { items: ListItem[]; 
     where.push(`EXISTS (SELECT 1 FROM media_person mp WHERE mp.media_id = m.id AND mp.person_id = ?)`);
     params.push(query.withPerson);
   }
+  if (query.genre) {
+    where.push(`EXISTS (SELECT 1 FROM media_genre mg WHERE mg.media_id = m.id AND mg.genre_id = ? AND mg.state != 'excluded')`);
+    params.push(query.genre);
+  }
   if (query.q?.trim()) {
     where.push(`(m.title LIKE ? ESCAPE '\\' OR m.original_title LIKE ? ESCAPE '\\' OR r.body LIKE ? ESCAPE '\\')`);
     const like = `%${query.q.trim().replace(/[\\%_]/g, (c) => "\\" + c)}%`;
@@ -270,9 +278,10 @@ export function listMedia(query: ListQuery, db = getDb()): { items: ListItem[]; 
   const ids = rows.map((r) => r.id);
   const tags = tagsForMany(db, ids);
   const people = peopleForMany(db, ids);
+  const genres = genresForMany(db, ids);
   const progress = progressFor(db, rows.filter((r) => r.type !== "movie").map((r) => r.id));
   const items = rows.map((row) => ({
-    ...mapMedia(row, { ...row, created_at: row.r_created_at, updated_at: row.r_updated_at }, tags.get(row.id) ?? [], people.get(row.id) ?? []),
+    ...mapMedia(row, { ...row, created_at: row.r_created_at, updated_at: row.r_updated_at }, tags.get(row.id) ?? [], people.get(row.id) ?? [], genres.get(row.id) ?? []),
     progress: progress.get(row.id) ?? null,
   }));
   return { items, total, page, pageSize };
@@ -285,12 +294,17 @@ function progressFor(db: DB, ids: number[]): Map<number, Progress> {
       `SELECT s.media_id AS id, COUNT(e.id) AS total,
               SUM(CASE WHEN a.state = 'watched' THEN 1 ELSE 0 END) AS watched,
               SUM(CASE WHEN a.rating IS NOT NULL THEN 1 ELSE 0 END) AS rated,
-              SUM(CASE WHEN a.state = 'skipped' THEN 1 ELSE 0 END) AS skipped
+              SUM(CASE WHEN a.state = 'skipped' THEN 1 ELSE 0 END) AS skipped,
+              SUM(CASE WHEN COALESCE(a.state, 'unwatched') = 'unwatched' AND a.rating IS NULL AND (
+                    e.air_date = 'TBA'
+                    OR (length(e.air_date) = 4 AND CAST(e.air_date AS INTEGER) > CAST(strftime('%Y', 'now') AS INTEGER))
+                    OR (length(e.air_date) >= 10 AND substr(e.air_date, 1, 10) > date('now'))
+                  ) THEN 1 ELSE 0 END) AS unaired
        FROM segment s JOIN episode e ON e.segment_id = s.id
        LEFT JOIN episode_assessment a ON a.episode_id = e.id
        WHERE s.media_id IN (${placeholders(ids.length)}) GROUP BY s.media_id`,
     )
-    .all(...ids) as { id: number; total: number; watched: number; rated: number; skipped: number }[];
+    .all(...ids) as { id: number; total: number; watched: number; rated: number; skipped: number; unaired: number }[];
   return new Map(rows.map(({ id, ...counts }) => [id, progressFromCounts(counts)]));
 }
 
@@ -342,6 +356,7 @@ function writeColumns(db: DB, table: "media" | "review", key: "id" | "media_id",
 function writeMetadata(db: DB, id: number, meta: Partial<MetadataInput>) {
   const keys = (Object.keys(meta) as (keyof MetadataInput)[]).filter((k) => k in METADATA_COLUMNS);
   writeColumns(db, "media", "id", id, keys.map((k) => [METADATA_COLUMNS[k], meta[k]]));
+  if (keys.includes("genres")) applyGenres(db, { mediaIds: [id] }); // keep genre filters in step with the title's genres
 }
 
 function writeReview(db: DB, id: number, review: Partial<ReviewInput>) {
@@ -399,7 +414,7 @@ export function createMedia(input: CreateMediaInput, opts: CreateOptions = {}, d
 
 export function updateMedia(
   id: number,
-  patch: { version: number; metadata?: Partial<MetadataInput>; review?: Partial<ReviewInput>; tags?: string[]; people?: number[] },
+  patch: { version: number; metadata?: Partial<MetadataInput>; review?: Partial<ReviewInput>; tags?: string[]; people?: number[]; genreFilters?: number[] },
   db = getDb(),
 ): MediaView {
   db.transaction(() => {
@@ -408,12 +423,14 @@ export function updateMedia(
     if (patch.review) writeReview(db, id, patch.review);
     if (patch.tags) setMediaTags(db, id, patch.tags);
     if (patch.people) setMediaPeople(db, id, patch.people);
+    if (patch.genreFilters) setMediaGenres(db, id, patch.genreFilters);
     bumpVersion(db, id);
     audit(db, "update", "media", id, {
       metadata: patch.metadata && Object.keys(patch.metadata),
       review: patch.review && Object.keys(patch.review),
       tags: patch.tags,
       people: patch.people,
+      genreFilters: patch.genreFilters,
     });
   })();
   return getMedia(id, db)!;

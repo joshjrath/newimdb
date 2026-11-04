@@ -161,6 +161,15 @@ export interface MediaView {
   tags: string[];
   /** Who you watched it with: nobody, one person or several. */
   people: PersonRef[];
+  /** Your genre filters from Settings that this title is in (auto-tagged or picked by you). */
+  genreFilters: GenreRef[];
+}
+
+/** One of your genre filters on a title. "auto" came from the rules; "manual" you picked yourself. */
+export interface GenreRef {
+  id: number;
+  name: string;
+  state: "auto" | "manual";
 }
 
 export interface MediaDetail extends MediaView {

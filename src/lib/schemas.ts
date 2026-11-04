@@ -80,8 +80,15 @@ export const mediaPatchSchema = z
     review: reviewSchema.partial().optional(),
     tags: tagsSchema.optional(),
     people: peopleSchema.optional(),
+    /** Exactly which of your genre filters this title is in. */
+    genreFilters: z.array(z.number().int().positive()).max(200).optional(),
   })
   .strict();
+
+const genreList = z.array(z.string().trim().min(1).max(60)).max(30).optional();
+export const genreRulesSchema = z.object({ genres: genreList, allGenres: genreList, keywords: genreList }).strict();
+export const genreCreateSchema = z.object({ name: z.string().trim().min(1).max(40), rules: genreRulesSchema.optional() }).strict();
+export const genrePatchSchema = z.object({ name: z.string().trim().min(1).max(40).optional(), rules: genreRulesSchema.optional() }).strict();
 
 const segmentFields = {
   kind: segmentKindSchema,
