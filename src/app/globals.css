@@ -525,3 +525,6 @@ a.person-count:hover { color: var(--ink); }
 .watched-with .label { margin-right: 2px; }
 .with-chips .chip[aria-current="true"] { background: var(--lilac); color: var(--black); }
 .with-chips .chip[aria-current="true"] .hint { color: rgba(16,16,18,.6); }
+.job-progress { display: grid; gap: 8px; max-width: 640px; }
+.progress-fill.indeterminate { animation: slide 1.4s ease-in-out infinite; }
+@keyframes slide { 0% { transform: translateX(-100%); } 100% { transform: translateX(300%); } }

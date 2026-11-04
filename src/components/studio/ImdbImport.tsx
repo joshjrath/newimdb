@@ -1,7 +1,7 @@
 "use client";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
-import { api } from "@/lib/client/api";
+import { api, ApiError } from "@/lib/client/api";
 import { useToast } from "../Toasts";
 import { Stars } from "../Stars";
 import { useUnsavedGuard } from "./useUnsavedGuard";
@@ -54,6 +54,7 @@ export function ImdbImport() {
   const [page, setPage] = useState(0);
   const [busy, setBusy] = useState<null | "preview" | "import">(null);
   const [error, setError] = useState<string | null>(null);
+  const [progress, setProgress] = useState<{ stage: string; fraction: number | null } | null>(null);
   useUnsavedGuard(Boolean(preview), "You have an IMDb import preview that hasn't been imported. Leave anyway?");
 
   const choiceOf = (t: Title): Choice => choices[t.imdbId] ?? t.guess;
@@ -87,9 +88,26 @@ export function ImdbImport() {
     if (!file) return;
     setBusy("preview");
     setError(null);
+    setProgress({ stage: "Uploading your ratings", fraction: null });
+    type Job = { jobId: string; state: "running" | "done" | "error"; stage: string; fraction: number | null; error: string | null; summary: Preview | null };
     try {
-      const p = await api<Preview>("/api/import/imdb/preview", { body: { csv: file.text, lookupEpisodes: lookup } });
-      setPreview(p);
+      let job = await api<Job>("/api/import/imdb/preview", { body: { csv: file.text, lookupEpisodes: lookup } });
+      let misses = 0;
+      while (job.state === "running") {
+        setProgress({ stage: job.stage, fraction: job.fraction });
+        await new Promise((r) => setTimeout(r, 2000));
+        try {
+          job = await api<Job>(`/api/import/imdb/preview?job=${job.jobId}`);
+          misses = 0;
+        } catch (e) {
+          // A deploy or restart makes the server briefly unreachable; keep waiting for a while.
+          if (e instanceof ApiError && (e.status === 410 || e.status === 401)) throw e;
+          if (++misses > 60) throw new Error("Lost contact with the server for two minutes. Check that the site is running, then try again.");
+          setProgress((p) => ({ stage: `${p?.stage ?? "Working"} (reconnecting…)`, fraction: p?.fraction ?? null }));
+        }
+      }
+      if (job.state === "error" || !job.summary) throw new Error(job.error ?? "Preparing the import failed.");
+      setPreview(job.summary);
       setChoices({});
       setFilter("all");
       setPage(0);
@@ -97,6 +115,7 @@ export function ImdbImport() {
       setError((e as Error).message);
     } finally {
       setBusy(null);
+      setProgress(null);
     }
   };
 
@@ -181,9 +200,25 @@ export function ImdbImport() {
           {error && <div className="notice error" role="alert">{error}</div>}
           <div>
             <button className="btn primary" disabled={!file || busy !== null} onClick={runPreview}>
-              {busy === "preview" ? (lookup ? "Reading and matching episodes… this can take a couple of minutes" : "Reading…") : "Preview import"}
+              {busy === "preview" ? "Preparing preview…" : "Preview import"}
             </button>
           </div>
+          {progress && (
+            <div className="job-progress" role="status" aria-live="polite">
+              <div className="progress">
+                <div className="progress-track">
+                  <div className={`progress-fill${progress.fraction == null ? " indeterminate" : ""}`} style={{ width: progress.fraction == null ? "35%" : `${Math.round(progress.fraction * 100)}%` }} />
+                </div>
+                <span className="progress-label">
+                  {progress.stage}
+                  {progress.fraction != null ? ` · ${Math.round(progress.fraction * 100)}%` : "…"}
+                </span>
+              </div>
+              <p className="hint">
+                The first time, this downloads IMDb&apos;s episode lists and can take a few minutes. You can leave this page open; nothing is imported until you check the preview.
+              </p>
+            </div>
+          )}
         </div>
       )}
 

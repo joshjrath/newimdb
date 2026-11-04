@@ -183,7 +183,7 @@ Personal data (`review`, `episode_assessment`, `media_tag`) is stored apart from
 ## Tests
 
 ```bash
-npm test                         # 65 unit/integration tests (domain, repository, import, backup, providers)
+npm test                         # 66 unit/integration tests (domain, repository, import, backup, providers)
 npm run build && npm run test:e2e   # browser tests against the production build
 ```
 

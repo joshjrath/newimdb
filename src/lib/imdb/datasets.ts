@@ -42,24 +42,43 @@ export interface EpisodeLookup {
   basics: Map<string, BasicsInfo>;
 }
 
+export interface LookupProgress {
+  stage: string;
+  /** 0–1 when known. */
+  fraction: number | null;
+}
+
 export interface LookupOptions {
   dir?: string;
-  download?: (url: string, file: string) => Promise<void>;
+  download?: (url: string, file: string, onBytes?: (done: number, total: number | null) => void) => Promise<void>;
+  onProgress?: (p: LookupProgress) => void;
 }
 
-async function downloadTo(url: string, file: string) {
+async function downloadTo(url: string, file: string, onBytes?: (done: number, total: number | null) => void) {
   const res = await fetch(url, { cache: "no-store" });
   if (!res.ok || !res.body) throw new Error(`IMDb datasets download failed (HTTP ${res.status}).`);
+  const total = Number(res.headers.get("content-length")) || null;
   const tmp = `${file}.part`;
-  await pipeline(Readable.fromWeb(res.body as never), fs.createWriteStream(tmp));
-  fs.renameSync(tmp, file);
+  const body = Readable.fromWeb(res.body as never);
+  let done = 0;
+  body.on("data", (chunk: Buffer) => {
+    done += chunk.length;
+    onBytes?.(done, total);
+  });
+  await pipeline(body, fs.createWriteStream(tmp));
+  fs.renameSync(tmp, file); // only a complete file ever gets the real name
 }
 
-async function ensureFile(name: DatasetName, opts: LookupOptions): Promise<string> {
+async function ensureFile(name: DatasetName, label: string, opts: LookupOptions): Promise<string> {
   const dir = opts.dir ?? dataSubdir("cache/imdb");
   const file = path.join(dir, name);
   const fresh = fs.existsSync(file) && Date.now() - fs.statSync(file).mtimeMs < MAX_AGE_DAYS * 86400_000;
-  if (!fresh) await (opts.download ?? downloadTo)(`${BASE}/${name}`, file);
+  if (!fresh) {
+    opts.onProgress?.({ stage: `Downloading ${label}`, fraction: null });
+    await (opts.download ?? downloadTo)(`${BASE}/${name}`, file, (done, total) =>
+      opts.onProgress?.({ stage: `Downloading ${label}`, fraction: total ? done / total : null }),
+    );
+  }
   return file;
 }
 
@@ -70,8 +89,15 @@ const int = (v: string | undefined) => {
 };
 
 /** Stream a gzipped TSV, calling `row` for each data line (header skipped). */
-async function eachRow(file: string, row: (cols: string[]) => void) {
-  const rl = readline.createInterface({ input: fs.createReadStream(file).pipe(createGunzip()), crlfDelay: Infinity });
+async function eachRow(file: string, row: (cols: string[]) => void, onFraction?: (f: number) => void) {
+  const size = fs.statSync(file).size;
+  const input = fs.createReadStream(file);
+  let read = 0;
+  input.on("data", (chunk) => {
+    read += chunk.length;
+    onFraction?.(size ? read / size : 0);
+  });
+  const rl = readline.createInterface({ input: input.pipe(createGunzip()), crlfDelay: Infinity });
   let first = true;
   for await (const line of rl) {
     if (first) {
@@ -87,13 +113,14 @@ async function eachRow(file: string, row: (cols: string[]) => void) {
  * of those series) and one over title.basics (their titles and genres).
  */
 export async function lookupEpisodes(ratedEpisodeIds: Set<string>, seriesIds: Set<string>, opts: LookupOptions = {}): Promise<EpisodeLookup> {
-  const episodeFile = await ensureFile("title.episode.tsv.gz", opts);
+  const step = (stage: string) => (f: number) => opts.onProgress?.({ stage, fraction: f });
+  const episodeFile = await ensureFile("title.episode.tsv.gz", "IMDb's episode list", opts);
   const toInfo = (c: string[]): EpisodeInfo => ({ imdbId: c[0], parentId: c[1], season: int(c[2]), episode: int(c[3]) });
 
   const episodeOf = new Map<string, EpisodeInfo>();
   await eachRow(episodeFile, (c) => {
     if (ratedEpisodeIds.has(c[0])) episodeOf.set(c[0], toInfo(c));
-  });
+  }, step("Finding the show for each rated episode"));
   const parents = new Set([...seriesIds, ...[...episodeOf.values()].map((e) => e.parentId)]);
 
   const episodesByParent = new Map<string, EpisodeInfo[]>();
@@ -102,12 +129,12 @@ export async function lookupEpisodes(ratedEpisodeIds: Set<string>, seriesIds: Se
     const list = episodesByParent.get(c[1]) ?? [];
     list.push(toInfo(c));
     episodesByParent.set(c[1], list);
-  });
+  }, step("Building each show's seasons"));
 
   const wanted = new Set(parents);
   for (const list of episodesByParent.values()) for (const e of list) wanted.add(e.imdbId);
   const basics = new Map<string, BasicsInfo>();
-  const basicsFile = await ensureFile("title.basics.tsv.gz", opts);
+  const basicsFile = await ensureFile("title.basics.tsv.gz", "IMDb's title list", opts);
   await eachRow(basicsFile, (c) => {
     if (!wanted.has(c[0])) return;
     const title = nul(c[2]) ?? c[0];
@@ -121,6 +148,6 @@ export async function lookupEpisodes(ratedEpisodeIds: Set<string>, seriesIds: Se
       runtimeMin: int(c[7]),
       genres: (nul(c[8]) ?? "").split(",").filter(Boolean),
     });
-  });
+  }, step("Reading episode titles and genres"));
   return { episodeOf, episodesByParent, basics };
 }

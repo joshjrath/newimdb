@@ -1,14 +1,15 @@
 import { z } from "zod";
 import { HttpError, ownerApi, readJson } from "@/lib/guard";
-import { imdbKind, parseImdbRatings } from "@/lib/domain/imdb";
-import { lookupEpisodes } from "@/lib/imdb/datasets";
-import { buildImdbPlan, planSummary, savePlan } from "@/lib/repo/imdbImport";
+import { parseImdbRatings } from "@/lib/domain/imdb";
+import { getJob, startPreviewJob, type PreviewJob } from "@/lib/imdb/jobs";
 
 const schema = z.object({ csv: z.string().min(1).max(30_000_000), lookupEpisodes: z.boolean() });
 
-/** Preview only: reads the export, sorts it, and keeps the plan on disk. Nothing is imported yet. */
+const view = (j: PreviewJob) => ({ jobId: j.id, state: j.state, stage: j.stage, fraction: j.fraction, error: j.error ?? null, summary: j.summary ?? null });
+
+/** Start preparing a preview in the background. Nothing is imported yet. */
 export const POST = ownerApi(async (req) => {
-  const { csv, lookupEpisodes: wantLookup } = await readJson(req, schema);
+  const { csv, lookupEpisodes } = await readJson(req, schema);
   let parsed;
   try {
     parsed = parseImdbRatings(csv);
@@ -16,18 +17,19 @@ export const POST = ownerApi(async (req) => {
     throw new HttpError(400, (e as Error).message);
   }
   if (!parsed.rows.length) throw new HttpError(400, "No ratings found in that file.");
-  const episodeIds = new Set(parsed.rows.filter((r) => imdbKind(r.titleType) === "episode").map((r) => r.imdbId));
-  const seriesIds = new Set(parsed.rows.filter((r) => imdbKind(r.titleType) === "series").map((r) => r.imdbId));
-  let lookup = null;
-  let lookupError: string | null = null;
-  if (wantLookup && (episodeIds.size || seriesIds.size)) {
-    try {
-      lookup = await lookupEpisodes(episodeIds, seriesIds);
-    } catch (e) {
-      lookupError = (e as Error).message;
-    }
+  return view(startPreviewJob(parsed.rows, parsed.invalid, lookupEpisodes));
+});
+
+/** Progress of a preview job; carries the preview once it's ready. */
+export const GET = ownerApi(async (req) => {
+  const id = new URL(req.url).searchParams.get("job") ?? "";
+  const job = getJob(id);
+  if (!job) {
+    throw new HttpError(
+      410,
+      "The server restarted while preparing your import, usually because a new version was deploying. Nothing was imported. Wait until the deploy is finished, then choose Preview import again.",
+      { code: "job_lost" },
+    );
   }
-  const plan = buildImdbPlan(parsed.rows, parsed.invalid, lookup, lookupError);
-  savePlan(plan);
-  return planSummary(plan);
+  return view(job);
 });

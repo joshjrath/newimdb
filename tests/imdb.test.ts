@@ -145,3 +145,19 @@ describe("IMDb import", () => {
     expect(c.created).toBe(5);
   });
 });
+
+describe("IMDb preview job", () => {
+  it("runs in the background, reports its stage, and finishes with the preview", async () => {
+    freshDb();
+    const { startPreviewJob, getJob } = await import("@/lib/imdb/jobs");
+    const { rows, invalid } = parseImdbRatings(CSV);
+    const job = startPreviewJob(rows, invalid, false);
+    expect(job.state).toBe("running");
+    expect(startPreviewJob(rows, invalid, false).id).toBe(job.id); // one at a time
+    for (let i = 0; i < 50 && getJob(job.id)!.state === "running"; i++) await new Promise((r) => setTimeout(r, 10));
+    const done = getJob(job.id)!;
+    expect(done.state).toBe("done");
+    expect(done.summary!.titles.length).toBeGreaterThan(0);
+    expect(getJob("nope")).toBeNull();
+  });
+});
