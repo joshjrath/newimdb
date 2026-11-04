@@ -1,0 +1,325 @@
+import { getDb, nowIso, type DB } from "../db";
+import { normalizeTitle } from "../domain/text";
+import type { MediaType } from "../domain/types";
+import { addSeedResults, becauseOf, matchPercent, pickSeeds, scoreCandidate, tasteProfile, type Candidate, type LibraryTitle, type Seed } from "../domain/recommend";
+import { tmdbConfigured, tmdbFindByImdb, tmdbGenreNames, tmdbRecommendations, tmdbWatchProviders, type TmdbRec, type WatchOption } from "../providers/tmdb";
+import { anilistRecommendations, anilistStreaming, type AniRec } from "../providers/anime";
+
+/**
+ * Builds your Recommended page in the background: favourites from your library → each
+ * one's "if you liked this" list (TMDB for movies and TV, AniList and TMDB for anime) →
+ * scored against your taste → the best per category, with where to watch them.
+ * Refreshed daily, and whenever you ask.
+ */
+
+export interface Recommendation {
+  key: string;
+  type: MediaType;
+  title: string;
+  originalTitle: string | null;
+  year: number | null;
+  posterUrl: string | null;
+  backdropUrl: string | null;
+  overview: string | null;
+  genres: string[];
+  match: number;
+  because: string[];
+  audience: { score: number; votes: number; source: string } | null;
+  tmdb: { kind: "movie" | "tv"; id: number } | null;
+  anilistId: number | null;
+  malId: number | null;
+  watch: WatchOption[];
+}
+
+export interface RecommendState {
+  running: boolean;
+  step: string;
+  done: number;
+  total: number;
+  startedAt: string | null;
+  finishedAt: string | null;
+  error: string | null;
+}
+
+const g = globalThis as unknown as { __recommend?: RecommendState };
+const state = (): RecommendState => (g.__recommend ??= { running: false, step: "", done: 0, total: 0, startedAt: null, finishedAt: null, error: null });
+export const recommendState = () => state();
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+const REGION = () => (process.env.WATCH_REGION || "US").toUpperCase();
+const PER_TYPE = 24;
+
+async function retry<T>(fn: () => Promise<T>): Promise<T> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await fn();
+    } catch (e) {
+      if ((e as { status?: number }).status === 429 && attempt < 3) {
+        await sleep(4000 * (attempt + 1));
+        continue;
+      }
+      throw e;
+    }
+  }
+}
+
+/* ---------------- reads ---------------- */
+
+export function listRecommendations(db = getDb()): { byType: Record<MediaType, Recommendation[]>; computedAt: string | null } {
+  const rows = db.prepare(`SELECT type, data, computed_at FROM recommendation ORDER BY score DESC`).all() as { type: MediaType; data: string; computed_at: string }[];
+  const byType: Record<MediaType, Recommendation[]> = { movie: [], tv: [], anime: [] };
+  for (const r of rows) byType[r.type].push(JSON.parse(r.data));
+  return { byType, computedAt: rows[0]?.computed_at ?? null };
+}
+
+export function getRecommendation(key: string, db = getDb()): Recommendation | null {
+  const r = db.prepare(`SELECT data FROM recommendation WHERE key = ?`).get(key) as { data: string } | undefined;
+  return r ? JSON.parse(r.data) : null;
+}
+
+/** "Not interested": gone now, and never suggested again. */
+export function dismissRecommendation(key: string, db = getDb()) {
+  const rec = getRecommendation(key, db);
+  db.prepare(`INSERT OR REPLACE INTO recommendation_dismissed (key, title, dismissed_at) VALUES (?, ?, ?)`).run(key, rec?.title ?? null, nowIso());
+  db.prepare(`DELETE FROM recommendation WHERE key = ?`).run(key);
+}
+
+export function removeRecommendation(key: string, db = getDb()) {
+  db.prepare(`DELETE FROM recommendation WHERE key = ?`).run(key);
+}
+
+/* ---------------- building ---------------- */
+
+interface LibRow {
+  id: number;
+  type: MediaType;
+  title: string;
+  original_title: string | null;
+  year: number | null;
+  genres: string;
+  tmdb_id: number | null;
+  imdb_id: string | null;
+  anilist_id: number | null;
+  mal_id: number | null;
+  rating: number | null;
+  status: string | null;
+  last_watched_at: string | null;
+}
+
+function loadLibrary(db: DB): LibRow[] {
+  return db
+    .prepare(
+      `SELECT m.id, m.type, m.title, m.original_title, m.year, m.genres, m.tmdb_id, m.imdb_id, m.anilist_id, m.mal_id, r.rating, r.status, r.last_watched_at
+       FROM media m LEFT JOIN review r ON r.media_id = m.id`,
+    )
+    .all() as LibRow[];
+}
+
+const parseList = (s: string) => {
+  try {
+    const a = JSON.parse(s);
+    return Array.isArray(a) ? a.map(String) : [];
+  } catch {
+    return [];
+  }
+};
+
+/** Whatever's already in your library (or you said no to) is never recommended. */
+function exclusions(lib: LibRow[], db: DB) {
+  const tmdb = new Set<string>();
+  const ani = new Set<number>();
+  const mal = new Set<number>();
+  const names = new Map<string, (number | null)[]>();
+  for (const m of lib) {
+    if (m.tmdb_id) tmdb.add(`${m.type === "movie" ? "movie" : "tv"}:${m.tmdb_id}`);
+    if (m.tmdb_id && m.type === "anime") tmdb.add(`movie:${m.tmdb_id}`);
+    if (m.anilist_id) ani.add(m.anilist_id);
+    if (m.mal_id) mal.add(m.mal_id);
+    for (const t of [m.title, m.original_title]) if (t) names.set(normalizeTitle(t), [...(names.get(normalizeTitle(t)) ?? []), m.year]);
+  }
+  const dismissed = new Set((db.prepare(`SELECT key FROM recommendation_dismissed`).all() as { key: string }[]).map((r) => r.key));
+  return (c: { key: string; title: string; originalTitle?: string | null; year: number | null; tmdb?: string | null; anilistId?: number | null; malId?: number | null }) => {
+    if (dismissed.has(c.key)) return true;
+    if (c.tmdb && tmdb.has(c.tmdb)) return true;
+    if (c.anilistId && ani.has(c.anilistId)) return true;
+    if (c.malId && mal.has(c.malId)) return true;
+    for (const t of [c.title, c.originalTitle]) {
+      const years = t ? names.get(normalizeTitle(t)) : undefined;
+      if (years?.some((y) => y == null || c.year == null || Math.abs(y - c.year) <= 1)) return true;
+    }
+    return false;
+  };
+}
+
+const isAnimeRec = (r: TmdbRec) => r.genreIds.includes(16) && r.language === "ja";
+const nameKey = (title: string, year: number | null) => `${normalizeTitle(title)}:${year ?? ""}`;
+
+export async function buildRecommendations(db = getDb()): Promise<{ total: number }> {
+  const s = state();
+  const lib = loadLibrary(db);
+  const library: LibraryTitle[] = lib.map((m) => ({ id: m.id, type: m.type, title: m.title, year: m.year, rating: m.rating, status: m.status, genres: parseList(m.genres), lastWatchedAt: m.last_watched_at }));
+  const taste = tasteProfile(library);
+  const seeds = pickSeeds(library, taste);
+  const seedById = new Map<number, Seed>(seeds.map((x) => [x.id, x]));
+  const libById = new Map(lib.map((m) => [m.id, m]));
+  const excluded = exclusions(lib, db);
+  const keyed = tmdbConfigured();
+  const genreNames = keyed ? await retry(() => tmdbGenreNames()).catch(() => new Map<number, string>()) : new Map<number, string>();
+
+  const pool = new Map<string, Candidate>();
+  const tmdbInfo = new Map<string, TmdbRec>();
+  const aniInfo = new Map<string, AniRec>();
+  // TMDB and AniList can both suggest the same anime: fold them together by name and year.
+  const animeAlias = new Map<string, string>();
+
+  s.total = seeds.length;
+  s.done = 0;
+  s.step = "Reading your favourites";
+  let next = 0;
+  const work = async () => {
+    for (let i = next++; i < seeds.length; i = next++) {
+      const seed = seeds[i];
+      const m = libById.get(seed.id)!;
+      try {
+        if (keyed && (m.tmdb_id || m.imdb_id)) {
+          let kind: "movie" | "tv" = m.type === "movie" ? "movie" : "tv";
+          let id = m.tmdb_id;
+          if (!id && m.imdb_id) {
+            const hit = await retry(() => tmdbFindByImdb(m.imdb_id!, kind));
+            id = hit?.tmdbId ?? null;
+            kind = hit?.kind ?? kind;
+            if (id) db.prepare(`UPDATE media SET tmdb_id = COALESCE(tmdb_id, ?) WHERE id = ?`).run(id, m.id);
+          } else if (m.type === "anime" && !m.mal_id && !m.anilist_id && (m.year != null && !m.genres.includes("TV"))) {
+            // anime stored with a TMDB id: TMDB knows it as a show unless it has no seasons, which we can't tell here
+          }
+          if (id) {
+            const recs = await retry(() => tmdbRecommendations(kind, id!));
+            const rows = recs.map((r) => {
+              const type: MediaType = isAnimeRec(r) ? "anime" : r.kind;
+              let key = `tmdb:${r.kind}:${r.id}`;
+              if (type === "anime") {
+                const alias = animeAlias.get(nameKey(r.title, r.year));
+                if (alias) key = alias;
+                else animeAlias.set(nameKey(r.title, r.year), key);
+              }
+              tmdbInfo.set(key, r);
+              return { key, type, title: r.title, year: r.year, genres: r.genreIds.map((g) => genreNames.get(g)).filter((x): x is string => Boolean(x)), audience: { score: r.voteAverage, votes: r.voteCount } };
+            });
+            addSeedResults(pool, seed, rows.filter((r) => !excluded({ key: r.key, title: r.title, originalTitle: tmdbInfo.get(r.key)?.originalTitle, year: r.year, tmdb: `${tmdbInfo.get(r.key)!.kind}:${tmdbInfo.get(r.key)!.id}` })));
+          }
+        }
+        if (m.type === "anime") {
+          const recs = await retry(() => anilistRecommendations({ anilistId: m.anilist_id, malId: m.mal_id, title: m.anilist_id || m.mal_id ? undefined : m.title }));
+          await sleep(2100); // AniList: about 30 requests a minute
+          const rows = recs.map((r) => {
+            const alias = animeAlias.get(nameKey(r.title, r.year)) ?? (r.originalTitle ? animeAlias.get(nameKey(r.originalTitle, r.year)) : undefined);
+            const key = alias ?? `anilist:${r.id}`;
+            if (!alias) animeAlias.set(nameKey(r.title, r.year), key);
+            aniInfo.set(key, r);
+            return { key, type: "anime" as MediaType, title: r.title, year: r.year, genres: r.genres, audience: r.averageScore != null ? { score: r.averageScore / 10, votes: Math.max(r.votes * 20, r.popularity / 50) } : null };
+          });
+          addSeedResults(pool, seed, rows.filter((r) => !excluded({ key: r.key, title: r.title, originalTitle: aniInfo.get(r.key)?.originalTitle, year: r.year, anilistId: aniInfo.get(r.key)?.id, malId: aniInfo.get(r.key)?.idMal })));
+        }
+      } catch (e) {
+        console.warn(`[recommend] couldn't use ${m.title}:`, (e as Error).message);
+      }
+      s.done++;
+    }
+  };
+  await Promise.all(Array.from({ length: keyed ? 3 : 1 }, work));
+
+  // Score, keep the best per category, then look up where to watch them.
+  s.step = "Finding where to watch";
+  const scored = [...pool.values()].map((c) => ({ c, score: scoreCandidate(c, taste) })).filter((x) => x.score > 0);
+  const best = Math.max(0, ...scored.map((x) => x.score));
+  const chosen = (["anime", "tv", "movie"] as MediaType[]).flatMap((type) =>
+    scored
+      .filter((x) => x.c.type === type)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, PER_TYPE),
+  );
+  s.total = chosen.length;
+  s.done = 0;
+  const out: { rec: Recommendation; score: number }[] = [];
+  next = 0;
+  const watchWork = async () => {
+    for (let i = next++; i < chosen.length; i = next++) {
+      const { c, score } = chosen[i];
+      const t = tmdbInfo.get(c.key);
+      const a = aniInfo.get(c.key);
+      const watch: WatchOption[] = [];
+      try {
+        if (t && keyed) watch.push(...(await retry(() => tmdbWatchProviders(t.kind, t.id, REGION()))));
+        const links = a ? a.streaming : [];
+        for (const l of links) {
+          if (watch.some((w) => w.name.toLowerCase() === l.site.toLowerCase())) continue;
+          watch.push({ name: l.site, logoUrl: l.icon, url: l.url, kind: "stream", color: l.color });
+        }
+      } catch {}
+      s.done++;
+      out.push({
+        score,
+        rec: {
+          key: c.key,
+          type: c.type,
+          title: a?.title ?? t!.title,
+          originalTitle: a?.originalTitle ?? t?.originalTitle ?? null,
+          year: c.year,
+          posterUrl: t?.posterUrl ?? a?.posterUrl ?? null,
+          backdropUrl: t?.backdropUrl ?? a?.backdropUrl ?? null,
+          overview: t?.overview ?? a?.overview ?? null,
+          genres: [...new Set([...(a?.genres ?? []), ...c.genres])].slice(0, 4),
+          match: matchPercent(score, best),
+          because: becauseOf(c, seedById),
+          audience: t ? { score: t.voteAverage, votes: t.voteCount, source: "TMDB" } : a?.averageScore != null ? { score: a.averageScore / 10, votes: a.popularity, source: "AniList" } : null,
+          tmdb: t ? { kind: t.kind, id: t.id } : null,
+          anilistId: a?.id ?? null,
+          malId: a?.idMal ?? null,
+          watch,
+        },
+      });
+    }
+  };
+  await Promise.all(Array.from({ length: keyed ? 4 : 1 }, watchWork));
+
+  const now = nowIso();
+  db.transaction(() => {
+    db.prepare(`DELETE FROM recommendation`).run();
+    const ins = db.prepare(`INSERT OR REPLACE INTO recommendation (key, type, data, score, computed_at) VALUES (?, ?, ?, ?, ?)`);
+    for (const { rec, score } of out) ins.run(rec.key, rec.type, JSON.stringify(rec), score, now);
+  })();
+  return { total: out.length };
+}
+
+export async function runRecommendations(): Promise<RecommendState> {
+  const s = state();
+  if (s.running) return s;
+  Object.assign(s, { running: true, step: "Starting", done: 0, total: 0, startedAt: nowIso(), finishedAt: null, error: null });
+  try {
+    await buildRecommendations();
+  } catch (e) {
+    s.error = (e as Error).message;
+    console.error("[recommend] failed:", e);
+  } finally {
+    s.running = false;
+    s.finishedAt = nowIso();
+  }
+  return s;
+}
+
+/** For the scheduler: refresh once a day (or straight away if there are none yet). */
+export function startRecommendationsIfStale(db = getDb()) {
+  if (state().running) return;
+  const last = (db.prepare(`SELECT MAX(computed_at) t FROM recommendation`).get() as { t: string | null }).t ?? state().finishedAt;
+  if (last && Date.now() - Date.parse(last) < 24 * 3600_000) return;
+  const rated = (db.prepare(`SELECT COUNT(*) n FROM review WHERE rating IS NOT NULL`).get() as { n: number }).n;
+  if (!rated) return;
+  void runRecommendations();
+}
+
+/** Refresh where-to-watch for one pick (used when you open it). */
+export async function watchOptionsFor(rec: Recommendation): Promise<WatchOption[]> {
+  const out: WatchOption[] = [];
+  if (rec.tmdb && tmdbConfigured()) out.push(...(await tmdbWatchProviders(rec.tmdb.kind, rec.tmdb.id, REGION())));
+  if (rec.anilistId) for (const l of await anilistStreaming(rec.anilistId)) if (!out.some((w) => w.name.toLowerCase() === l.site.toLowerCase())) out.push({ name: l.site, logoUrl: l.icon, url: l.url, kind: "stream", color: l.color });
+  return out;
+}

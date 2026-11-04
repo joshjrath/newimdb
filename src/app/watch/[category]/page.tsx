@@ -5,9 +5,10 @@ import { Shell } from "@/components/Shell";
 import { LibraryCard } from "@/components/LibraryCard";
 import { NowStrip } from "@/components/NowStrip";
 import { ReturningStrip } from "@/components/ReturningStrip";
+import { AiringStrip, UpcomingStrip } from "@/components/AiringStrips";
 import { AutoSubmit } from "@/components/AutoSubmit";
 import { pageCount, Pager } from "@/components/Pager";
-import { countMedia, listMedia, listReturning, listWatching } from "@/lib/repo/media";
+import { countMedia, listMedia, listShowSections, listWatching } from "@/lib/repo/media";
 import { SORT_OPTIONS } from "@/lib/domain/sort";
 import { allTags } from "@/lib/repo/tags";
 import { listPeople } from "@/lib/repo/people";
@@ -44,8 +45,8 @@ export default async function LibraryPage({ params, searchParams }: { params: Pr
   const filtered = Boolean(status || tag || q || featured || withPerson || genre);
   const watching = type === "movie" || filtered || page > 1 ? [] : listWatching(type);
   // Shows you'd finished that have a new season: a strip up top, and a badge on their cards.
-  const returning = type === "movie" ? [] : listReturning(type);
-  const returningById = new Map(returning.map((m) => [m.id, m.returning]));
+  const sections = type === "movie" ? { airing: [], upcoming: [], returning: [] } : listShowSections(type);
+  const returningById = new Map(sections.returning.map((m) => [m.id, m.returning]));
   const label = CATEGORY_LABEL[cat];
 
   const href = (patch: SP) => {
@@ -72,8 +73,14 @@ export default async function LibraryPage({ params, searchParams }: { params: Pr
         </nav>
       </header>
 
-      {!filtered && page === 1 && <ReturningStrip items={returning} />}
-      <NowStrip items={watching} />
+      {!filtered && page === 1 && (
+        <>
+          <AiringStrip items={sections.airing} />
+          <ReturningStrip items={sections.returning} />
+          <NowStrip items={watching} />
+          <UpcomingStrip items={sections.upcoming} />
+        </>
+      )}
 
       <div className="filters stack tight">
         <form className="toolbar" method="get" action={`/watch/${cat}`} role="search">

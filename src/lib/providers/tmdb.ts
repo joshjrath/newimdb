@@ -208,3 +208,96 @@ export async function tmdbOrigin(kind: "movie" | "tv", id: number): Promise<{ la
     genres: (r.genres ?? []).map((g) => g.name),
   };
 }
+
+export interface TmdbRec {
+  id: number;
+  kind: "movie" | "tv";
+  title: string;
+  originalTitle: string | null;
+  year: number | null;
+  posterUrl: string | null;
+  backdropUrl: string | null;
+  overview: string | null;
+  genreIds: number[];
+  language: string | null;
+  voteAverage: number;
+  voteCount: number;
+  popularity: number;
+}
+
+/** TMDB's "if you liked this" list for one title. */
+export async function tmdbRecommendations(kind: "movie" | "tv", id: number): Promise<TmdbRec[]> {
+  type R = TmdbSearchItem & { genre_ids?: number[]; original_language?: string; vote_average?: number; vote_count?: number; popularity?: number; backdrop_path?: string | null; adult?: boolean };
+  const r = await get<{ results: R[] }>(`/${kind}/${id}/recommendations`);
+  return r.results
+    .filter((x) => !x.adult)
+    .map((x) => ({
+      id: x.id,
+      kind,
+      title: x.title ?? x.name ?? "Untitled",
+      originalTitle: x.original_title ?? x.original_name ?? null,
+      year: yearOf(x.release_date ?? x.first_air_date),
+      posterUrl: img(x.poster_path),
+      backdropUrl: img(x.backdrop_path, "w1280"),
+      overview: x.overview || null,
+      genreIds: x.genre_ids ?? [],
+      language: x.original_language ?? null,
+      voteAverage: x.vote_average ?? 0,
+      voteCount: x.vote_count ?? 0,
+      popularity: x.popularity ?? 0,
+    }));
+}
+
+/** TMDB genre ids to names, for both movies and TV. */
+export async function tmdbGenreNames(): Promise<Map<number, string>> {
+  const [m, t] = await Promise.all([get<{ genres: { id: number; name: string }[] }>("/genre/movie/list"), get<{ genres: { id: number; name: string }[] }>("/genre/tv/list")]);
+  return new Map([...m.genres, ...t.genres].map((g) => [g.id, g.name]));
+}
+
+export interface WatchOption {
+  name: string;
+  logoUrl: string | null;
+  /** Where clicking the icon goes. */
+  url: string | null;
+  kind: "stream" | "free" | "ads" | "rent" | "buy";
+  color?: string | null;
+}
+
+/** Strip TMDB's per-plan variants so "Netflix" and "Netflix basic with Ads" show as one icon. */
+export function cleanProviderName(n: string): string {
+  return n
+    .replace(/\s+(basic|standard)?\s*with ads$/i, "")
+    .replace(/\s+(amazon|apple tv|roku premium) channel$/i, "")
+    .replace(/^amazon prime video$/i, "Prime Video")
+    .replace(/^apple tv plus$/i, "Apple TV+")
+    .replace(/^disney plus$/i, "Disney+")
+    .replace(/^paramount plus.*$/i, "Paramount+")
+    .replace(/^max amazon channel$/i, "Max")
+    .trim();
+}
+
+/** Where to watch in a region (subscription, free and with-ads first; rent/buy only if nothing else). */
+export async function tmdbWatchProviders(kind: "movie" | "tv", id: number, region: string): Promise<WatchOption[]> {
+  type P = { provider_name: string; logo_path: string | null; display_priority?: number };
+  const r = await get<{ results: Record<string, { link?: string; flatrate?: P[]; free?: P[]; ads?: P[]; rent?: P[]; buy?: P[] }> }>(`/${kind}/${id}/watch/providers`);
+  const at = r.results?.[region.toUpperCase()];
+  if (!at) return [];
+  const out: WatchOption[] = [];
+  const seen = new Set<string>();
+  const add = (list: P[] | undefined, k: WatchOption["kind"]) => {
+    for (const p of [...(list ?? [])].sort((a, b) => (a.display_priority ?? 99) - (b.display_priority ?? 99))) {
+      const name = cleanProviderName(p.provider_name);
+      if (seen.has(name.toLowerCase())) continue;
+      seen.add(name.toLowerCase());
+      out.push({ name, logoUrl: img(p.logo_path, "w92"), url: at.link ?? null, kind: k });
+    }
+  };
+  add(at.flatrate, "stream");
+  add(at.free, "free");
+  add(at.ads, "ads");
+  if (!out.length) {
+    add(at.rent, "rent");
+    add(at.buy, "buy");
+  }
+  return out.slice(0, 8);
+}

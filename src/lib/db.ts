@@ -216,6 +216,43 @@ const MIGRATIONS: string[] = [
   ALTER TABLE media ADD COLUMN type_checked_at TEXT;
   ALTER TABLE media ADD COLUMN type_locked INTEGER NOT NULL DEFAULT 0;
   `,
+  // 8 — recommendations picked from your library, and the ones you said no to
+  `
+  CREATE TABLE recommendation (
+    key         TEXT PRIMARY KEY,
+    type        TEXT NOT NULL CHECK (type IN ('movie', 'tv', 'anime')),
+    data        TEXT NOT NULL,
+    score       REAL NOT NULL,
+    computed_at TEXT NOT NULL
+  );
+  CREATE INDEX recommendation_type ON recommendation(type, score DESC);
+  CREATE TABLE recommendation_dismissed (
+    key          TEXT PRIMARY KEY,
+    title        TEXT,
+    dismissed_at TEXT NOT NULL
+  );
+  -- one-off repairs that have run
+  CREATE TABLE app_flag (key TEXT PRIMARY KEY, at TEXT NOT NULL, detail TEXT);
+  -- where you watched a movie: in a theater, or streaming at home
+  ALTER TABLE review ADD COLUMN watched_in TEXT CHECK (watched_in IS NULL OR watched_in IN ('theater', 'streaming'));
+  -- when you last set a status yourself (automatic status waits until you watch something new)
+  ALTER TABLE review ADD COLUMN status_manual_at TEXT;
+  -- animefillerlist.com: when filler episodes were last applied
+  ALTER TABLE media ADD COLUMN filler_checked_at TEXT;
+  ALTER TABLE media ADD COLUMN filler_note TEXT;
+  -- titles folded into another entry (an anime film into its series): imports find them here
+  CREATE TABLE media_alias (
+    id         INTEGER PRIMARY KEY,
+    media_id   INTEGER NOT NULL REFERENCES media(id) ON DELETE CASCADE,
+    segment_id INTEGER REFERENCES segment(id) ON DELETE SET NULL,
+    imdb_id    TEXT,
+    tmdb_id    INTEGER,
+    title      TEXT NOT NULL,
+    year       INTEGER,
+    created_at TEXT NOT NULL
+  );
+  CREATE INDEX media_alias_imdb ON media_alias(imdb_id);
+  `,
 ];
 
 /** Whether the database was created just now (no earlier data), per connection. */

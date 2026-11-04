@@ -165,6 +165,60 @@ export async function anilistSearch(q: string): Promise<SearchResult[]> {
   }));
 }
 
+export interface AniRec {
+  id: number;
+  idMal: number | null;
+  title: string;
+  originalTitle: string | null;
+  year: number | null;
+  posterUrl: string | null;
+  backdropUrl: string | null;
+  overview: string | null;
+  genres: string[];
+  format: string | null;
+  averageScore: number | null;
+  popularity: number;
+  /** How many AniList users backed this recommendation. */
+  votes: number;
+  streaming: { site: string; url: string; icon: string | null; color: string | null }[];
+}
+
+const REC_FIELDS = `id idMal title { romaji english } startDate { year } coverImage { extraLarge large } bannerImage description(asHtml: false) genres format averageScore popularity externalLinks { site url type icon color }`;
+type AniFull = { id: number; idMal: number | null; title: { romaji: string | null; english: string | null }; startDate: { year: number | null }; coverImage: { extraLarge: string | null; large: string | null }; bannerImage: string | null; description: string | null; genres: string[]; format: string | null; averageScore: number | null; popularity: number | null; externalLinks: { site: string; url: string; type: string; icon: string | null; color: string | null }[] | null };
+
+const toAniRec = (m: AniFull, votes: number): AniRec => ({
+  id: m.id,
+  idMal: m.idMal,
+  title: m.title.english || m.title.romaji || "Untitled",
+  originalTitle: m.title.english ? m.title.romaji : null,
+  year: m.startDate.year,
+  posterUrl: m.coverImage.extraLarge ?? m.coverImage.large,
+  backdropUrl: m.bannerImage,
+  overview: htmlToTextOrNull(m.description),
+  genres: m.genres ?? [],
+  format: m.format,
+  averageScore: m.averageScore,
+  popularity: m.popularity ?? 0,
+  votes,
+  streaming: (m.externalLinks ?? []).filter((l) => l.type === "STREAMING").map(({ site, url, icon, color }) => ({ site, url, icon, color })),
+});
+
+/** AniList's community recommendations for an anime (by AniList id, or found by title). */
+export async function anilistRecommendations(ref: { anilistId?: number | null; malId?: number | null; title?: string }): Promise<AniRec[]> {
+  const q = `query ($id: Int, $mal: Int, $q: String) { Media(id: $id, idMal: $mal, search: $q, type: ANIME) { id recommendations(sort: RATING_DESC, perPage: 15) { nodes { rating mediaRecommendation { ${REC_FIELDS} isAdult } } } } }`;
+  const vars = ref.anilistId ? { id: ref.anilistId } : ref.malId ? { mal: ref.malId } : { q: ref.title };
+  const d = await anilist<{ Media: { recommendations: { nodes: { rating: number; mediaRecommendation: (AniFull & { isAdult?: boolean }) | null }[] } } | null }>(q, vars);
+  return (d.Media?.recommendations.nodes ?? [])
+    .filter((n) => n.mediaRecommendation && !n.mediaRecommendation.isAdult && n.rating > 0)
+    .map((n) => toAniRec(n.mediaRecommendation!, n.rating));
+}
+
+/** Streaming links AniList knows for an anime. */
+export async function anilistStreaming(id: number): Promise<AniRec["streaming"]> {
+  const d = await anilist<{ Media: AniFull | null }>(`query ($id: Int) { Media(id: $id, type: ANIME) { ${REC_FIELDS} } }`, { id });
+  return d.Media ? toAniRec(d.Media, 0).streaming : [];
+}
+
 /** AniList entries with this title (English or romaji), to confirm a title is anime. */
 export async function anilistFind(title: string): Promise<{ titles: string[]; year: number | null; format: string | null; idMal: number | null; id: number }[]> {
   const d = await anilist<{ Page: { media: AniMedia[] } }>(

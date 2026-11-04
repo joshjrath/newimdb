@@ -581,3 +581,10 @@ button.stat-btn:hover { background: var(--raised); }
 }
 .card-new-season.announced { background: transparent; color: var(--cat); box-shadow: inset 0 0 0 1.5px var(--cat); }
 .card:has(.card-new-season) .card-title { padding-right: 78px; }
+.returning-flag.live { background: #ff5d5d; color: #fff; }
+.returning-flag.live::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: #fff; animation: returning-pulse 1.6s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { .returning-flag.live::before { animation: none; } }
+.returning-item.airing { box-shadow: inset 0 0 0 2px rgba(255, 93, 93, .55); }
+.returning-item.airing .now-next b { color: var(--ink); }
+.air-track { height: 5px; border-radius: 99px; background: var(--sunk); overflow: hidden; margin-top: 2px; }
+.air-track span { display: block; height: 100%; background: #ff5d5d; border-radius: inherit; }

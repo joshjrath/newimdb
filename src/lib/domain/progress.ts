@@ -154,10 +154,71 @@ export function returningSeason(segments: SegmentView[], today = new Date().toIS
   const newSegments = segs.slice(last + 1).filter((s) => !s.episodes.some((e) => e.state !== "unwatched"));
   if (!newSegments.length) return null;
   const segment = newSegments[0];
-  const aired = segment.episodes.filter((e) => !isUnaired(e, today)).length;
+  // Only a known date in the past means it's out; an episode with no date at all proves nothing.
+  const aired = segment.episodes.filter((e) => e.airDate && hasAired(e.airDate, today)).length;
+  const announced = segment.episodes.some((e) => e.airDate && !hasAired(e.airDate, today));
+  if (!aired && !announced) return null;
   const upcoming = segment.episodes
     .filter((e) => isUnaired(e, today) && e.airDate && /^\d{4}-\d{2}-\d{2}/.test(e.airDate))
     .map((e) => e.airDate!.slice(0, 10))
     .sort()[0];
   return { segment, newSegments, state: aired > 0 ? "out" : "announced", airedEpisodes: aired, nextAirDate: upcoming ?? null };
+}
+
+/** By date alone (ignoring what you've watched): has this episode aired yet? Episodes with no date count as aired. */
+export function hasAired(airDate: string | null, today = new Date().toISOString().slice(0, 10)): boolean {
+  if (!airDate) return true;
+  if (airDate === "TBA") return false;
+  if (/^\d{4}$/.test(airDate)) return Number(airDate) < Number(today.slice(0, 4));
+  return airDate.slice(0, 10) <= today;
+}
+
+const isFullDate = (d: string | null): d is string => Boolean(d && /^\d{4}-\d{2}-\d{2}/.test(d));
+const mainSeasons = (segments: SegmentView[]) => orderedSegments(segments).filter((s) => (s.kind === "season" || s.kind === "cour") && s.episodes.length > 0);
+
+export interface Airing {
+  /** The season on air right now. */
+  segment: SegmentView;
+  /** Its next episode to premiere. */
+  nextEpisode: EpisodeView;
+  nextAirDate: string | null;
+  aired: number;
+  total: number;
+}
+
+/**
+ * Currently airing: the latest season that has started still has episodes to come. It
+ * leaves on its own when the season finale premieres, and comes back when the next
+ * season's first episode airs.
+ */
+export function airingNow(segments: SegmentView[], today = new Date().toISOString().slice(0, 10)): Airing | null {
+  const seasons = mainSeasons(segments);
+  const started = seasons.filter((s) => s.episodes.some((e) => e.airDate && hasAired(e.airDate, today)));
+  const current = started[started.length - 1];
+  if (!current) return null;
+  const eps = sortedEpisodes(current);
+  const next = eps.find((e) => !hasAired(e.airDate, today));
+  if (!next) return null;
+  return { segment: current, nextEpisode: next, nextAirDate: isFullDate(next.airDate) ? next.airDate.slice(0, 10) : null, aired: eps.filter((e) => hasAired(e.airDate, today)).length, total: eps.length };
+}
+
+export interface Upcoming {
+  premiere: string | null;
+  /** Shown when there's no exact date: the year it's expected, or null. */
+  year: number | null;
+  segment: SegmentView | null;
+}
+
+/** A show that hasn't begun: nothing has aired yet (or it has no episodes and is set for this year or later). */
+export function upcomingPremiere(segments: SegmentView[], year: number | null, today = new Date().toISOString().slice(0, 10)): Upcoming | null {
+  const seasons = mainSeasons(segments);
+  const all = seasons.flatMap((s) => s.episodes);
+  if (!all.length) {
+    // No episodes listed yet: only counts if it's dated to this year or later.
+    return year != null && year >= Number(today.slice(0, 4)) ? { premiere: null, year, segment: null } : null;
+  }
+  if (all.some((e) => hasAired(e.airDate, today))) return null;
+  const dates = all.map((e) => e.airDate).filter(isFullDate).map((d) => d.slice(0, 10)).sort();
+  const years = all.map((e) => e.airDate).filter((d): d is string => Boolean(d && /^\d{4}$/.test(d))).map(Number);
+  return { premiere: dates[0] ?? null, year: dates[0] ? Number(dates[0].slice(0, 4)) : years.length ? Math.min(...years) : year, segment: seasons[0] ?? null };
 }

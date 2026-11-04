@@ -4,7 +4,7 @@ import { RepoError } from "../errors";
 import type { EpisodeState, EpisodeView, GenreRef, MediaDetail, MediaType, MediaView, PersonRef, ReviewSource, ReviewView, SegmentView, WatchStatus } from "../domain/types";
 import { METADATA_KEYS, type BulkAssessAction, type BulkMediaAction, type CreateMediaInput, type MetadataInput, type ProviderEpisode, type ReviewInput, type SegmentInput } from "../schemas";
 import { resolveAssessment, UNASSESSED, type AssessmentPatch } from "../domain/assessment";
-import { activePointer, computeProgress, progressFromCounts, returningSeason, type ActivePointer, type Progress, type Returning } from "../domain/progress";
+import { activePointer, airingNow, computeProgress, progressFromCounts, returningSeason, upcomingPremiere, type ActivePointer, type Airing, type Progress, type Returning, type Upcoming } from "../domain/progress";
 import { normalizeTitle } from "../domain/text";
 import type { SortKey } from "../domain/sort";
 import { audit } from "./audit";
@@ -326,33 +326,51 @@ export function listWatching(type?: MediaType, db = getDb()): WatchingItem[] {
 export interface ReturningItem extends MediaView {
   returning: Returning;
 }
+export interface AiringItem extends MediaView {
+  airing: Airing;
+}
+export interface UpcomingItem extends MediaView {
+  upcoming: Upcoming;
+}
 
 /**
- * "New seasons": shows and anime you'd finished that have a season you haven't started.
- * Ones that are out come first, then announced ones by air date. Dropped shows are left out.
+ * The TV and Anime strips, worked out from each show's episodes and air dates:
+ *  - airing: a season that has started and still has episodes to come
+ *  - upcoming: shows you've added that haven't premiered yet
+ *  - returning: shows you'd finished that have a new season
+ * Dropped shows are left out of all three.
  */
-export function listReturning(type?: MediaType, db = getDb()): ReturningItem[] {
+export function listShowSections(type: MediaType, db = getDb()): { airing: AiringItem[]; upcoming: UpcomingItem[]; returning: ReturningItem[] } {
   const rows = db
-    .prepare(
-      `SELECT DISTINCT s.media_id AS id FROM segment s JOIN episode e ON e.segment_id = s.id JOIN episode_assessment a ON a.episode_id = e.id
-       JOIN media m ON m.id = s.media_id LEFT JOIN review r ON r.media_id = m.id
-       WHERE a.state = 'watched' AND m.type ${type ? "= ?" : "IN ('tv', 'anime')"} AND COALESCE(r.status, '') != 'dropped'`,
-    )
-    .all(...(type ? [type] : [])) as { id: number }[];
+    .prepare(`SELECT m.id FROM media m LEFT JOIN review r ON r.media_id = m.id WHERE m.type = ? AND COALESCE(r.status, '') != 'dropped'`)
+    .all(type) as { id: number }[];
   const ids = rows.map((r) => r.id);
   const segments = segmentsFor(db, ids, { overview: false });
-  const out: ReturningItem[] = [];
+  const media = new Map<number, MediaView>();
+  const view = (id: number) => media.get(id) ?? media.set(id, getMedia(id, db)!).get(id)!;
+  const airing: AiringItem[] = [];
+  const upcoming: UpcomingItem[] = [];
+  const returning: ReturningItem[] = [];
+  const year = (id: number) => (db.prepare(`SELECT year FROM media WHERE id = ?`).get(id) as { year: number | null }).year;
   for (const id of ids) {
-    const returning = returningSeason(segments.get(id) ?? []);
-    if (!returning) continue;
-    out.push({ ...getMedia(id, db)!, returning });
+    const segs = segments.get(id) ?? [];
+    const a = airingNow(segs);
+    if (a) airing.push({ ...view(id), airing: a });
+    const u = a ? null : upcomingPremiere(segs, year(id));
+    if (u) upcoming.push({ ...view(id), upcoming: u });
+    const r = returningSeason(segs);
+    if (r) returning.push({ ...view(id), returning: r });
   }
-  return out.sort(
+  const byDate = (x: string | null, y: string | null) => (x ?? "9999").localeCompare(y ?? "9999");
+  airing.sort((a, b) => byDate(a.airing.nextAirDate, b.airing.nextAirDate) || a.title.localeCompare(b.title));
+  upcoming.sort((a, b) => byDate(a.upcoming.premiere, b.upcoming.premiere) || (a.upcoming.year ?? 9999) - (b.upcoming.year ?? 9999) || a.title.localeCompare(b.title));
+  returning.sort(
     (a, b) =>
       (a.returning.state === "out" ? 0 : 1) - (b.returning.state === "out" ? 0 : 1) ||
-      (a.returning.nextAirDate ?? "9999").localeCompare(b.returning.nextAirDate ?? "9999") ||
+      byDate(a.returning.nextAirDate, b.returning.nextAirDate) ||
       a.title.localeCompare(b.title),
   );
+  return { airing, upcoming, returning };
 }
 
 export function countMedia(db = getDb()) {

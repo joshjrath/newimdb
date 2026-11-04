@@ -164,6 +164,8 @@ describe("new seasons since you finished", () => {
     expect(returningSeason([seg("Season 1", 3), seg("Season 2", 3)], T)).toBeNull();
     // Skipped episodes and ones not out yet don't stop a season counting as finished.
     const s1 = seg("Season 1", 3, { seasonNumber: 1 }, [{ state: "watched" }, { state: "skipped" }, { state: "watched" }]);
-    expect(returningSeason([s1, seg("Season 2", 1, { seasonNumber: 2 })], T)?.segment.label).toBe("Season 2");
+    expect(returningSeason([s1, seg("Season 2", 1, { seasonNumber: 2 }, [{ airDate: "2026-01-01" }])], T)?.segment.label).toBe("Season 2");
+    // A new season with no dates at all isn't shown as out (JJK S4 showed "4 episodes out").
+    expect(returningSeason([s1, seg("Season 2", 4, { seasonNumber: 2 })], T)).toBeNull();
   });
 });

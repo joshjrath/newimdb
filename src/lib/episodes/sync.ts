@@ -2,6 +2,7 @@ import { startKeywordJob } from "../genres/keywords";
 import { startPosterJob } from "../posters/job";
 import { startAnimeCheck } from "../anime/job";
 import { autoMergeDuplicates } from "../repo/duplicates";
+import { repairDone, repairInflatedShows } from "./repair";
 import { getDb } from "../db";
 import { tvmazeEpisodesBySeason, tvmazeLookupImdb } from "../providers/tvmaze";
 import { tmdbConfigured, tmdbFindByImdb, tmdbTv } from "../providers/tmdb";
@@ -104,6 +105,11 @@ export function startEpisodeScheduler() {
   if (g.__episodeTimer || process.env.EPISODE_SYNC === "off") return;
   getDb();
   const tick = () => {
+    // Fix shows the old sync inflated before syncing anything else (once).
+    if (!repairDone()) {
+      void repairInflatedShows().catch((e) => console.error("[repair] failed, will retry:", e));
+      return;
+    }
     autoMergeDuplicates(); // the same film or show never stays twice
     startAnimeCheck(); // anime filed under TV Shows or Movies moves to Anime
     startPosterJob({ quiet: true }); // any title still missing a poster gets one, without pressing a button
