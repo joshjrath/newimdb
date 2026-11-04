@@ -51,3 +51,21 @@ describe("animefillerlist.com", () => {
     expect(getMediaDetail(m.id)!.segments[0].episodes[2].filler).toBe(false);
   });
 });
+
+describe("checking one anime now", () => {
+  it("uses a page you paste, and says why when the site says no", async () => {
+    const { checkFillerFor } = await import("@/lib/anime/filler");
+    const { slugFrom } = await import("@/lib/providers/animefiller");
+    expect(slugFrom("https://www.animefillerlist.com/shows/my-hero-academia")).toBe("my-hero-academia");
+    const ep = (n: number) => ({ number: n, title: null, airDate: "2016", overview: null, providerRef: null });
+    const m = createMedia({ type: "anime", metadata: { title: "Boku no Hero Academia" }, segments: [{ kind: "season", label: "Season 1", seasonNumber: 1, courNumber: null, episodeCount: 4, episodes: [1, 2, 3, 4].map(ep) }] });
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => (url.endsWith("/shows") ? html(index) : url.includes("my-hero-academia") ? html(page(["manga_canon", "manga_canon", "filler", "filler"])) : new Response("no", { status: 403 }))));
+    // Not found by name, and the guessed address is refused:
+    const first = await checkFillerFor(m.id);
+    expect(first.note?.error).toMatch(/refused/);
+    // You paste the right page:
+    const r = await checkFillerFor(m.id, { slug: slugFrom("https://www.animefillerlist.com/shows/my-hero-academia")! });
+    expect(r).toMatchObject({ marked: 2, note: { slug: "my-hero-academia", manual: true } });
+    expect(getMediaDetail(m.id)!.segments[0].episodes.map((e) => e.filler)).toEqual([false, false, true, true]);
+  });
+});

@@ -6,13 +6,15 @@ import { api } from "@/lib/client/api";
 import { useAction } from "./useAction";
 import { Heatmap } from "./Heatmap";
 import { StructureEditor } from "./studio/StructureEditor";
+import { FillerStatus } from "./FillerStatus";
+import type { FillerNote } from "@/lib/anime/filler";
 
 /**
  * Episodes on a show's page: the rating grid, with its seasons editable right here.
  * Anime (and any show with films or OVAs) can switch how episodes are grouped: story
  * order, release order, seasons, cours, arcs, or one long run. The choice is per show.
  */
-export function EpisodesSection({ mediaId, type, title, version: v0, initial, initialSegment, initialView = "story", initialArcs = [] }: {
+export function EpisodesSection({ mediaId, type, title, version: v0, initial, initialSegment, initialView = "story", initialArcs = [], fillerNote = null }: {
   mediaId: number;
   type: MediaType;
   title?: string;
@@ -21,6 +23,8 @@ export function EpisodesSection({ mediaId, type, title, version: v0, initial, in
   initialSegment: number | null;
   initialView?: EpisodeViewKey;
   initialArcs?: Arc[];
+  /** Anime: where its filler marks came from. */
+  fillerNote?: FillerNote | null;
 }) {
   const [segments, setSegments] = useState(initial);
   const [version, setVersion] = useState(v0);
@@ -98,6 +102,7 @@ export function EpisodesSection({ mediaId, type, title, version: v0, initial, in
           <p className="hint">Episodes are numbered 1–{runLength} across all seasons. Filler runs between your arcs are grouped by themselves.</p>
         </div>
       )}
+      {type === "anime" && <FillerStatus mediaId={mediaId} initial={fillerNote} />}
       {editing && (
         <StructureEditor
           mediaId={mediaId}

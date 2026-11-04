@@ -61,6 +61,14 @@ export function findSlug(index: Map<string, string>, titles: (string | null)[]):
   return null;
 }
 
+/** The page's address part from a pasted link or a name: "https://www.animefillerlist.com/shows/bleach" → "bleach". */
+export function slugFrom(input: string): string | null {
+  const m = /animefillerlist\.com\/shows\/([a-z0-9-]+)/i.exec(input);
+  if (m) return m[1].toLowerCase();
+  const s = input.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+  return s || null;
+}
+
 export async function fillerEpisodes(slug: string): Promise<Map<number, EpisodeKind>> {
   const res = await fetchWithTimeout("animefillerlist", `${BASE}/shows/${encodeURIComponent(slug)}`, { headers: HEADERS }, 15000);
   return parseFillerPage(await res.text());
