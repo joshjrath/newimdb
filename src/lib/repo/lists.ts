@@ -1,4 +1,6 @@
+import crypto from "node:crypto";
 import { getDb, nowIso, type DB } from "../db";
+import type { MediaType } from "../domain/types";
 import { RepoError } from "../errors";
 import { audit } from "./audit";
 
@@ -135,4 +137,73 @@ export function reorderList(id: number, mediaIds: number[], db = getDb()) {
 /** Which of your lists a title is on (for the "Add to list" menu). */
 export function listsFor(mediaId: number, db = getDb()): number[] {
   return (db.prepare(`SELECT list_id FROM list_item WHERE media_id = ?`).all(mediaId) as { list_id: number }[]).map((r) => r.list_id);
+}
+
+/* ---------------- sharing (opt-in, per list) ---------------- */
+
+export interface SharedItem {
+  n: number;
+  type: MediaType;
+  title: string;
+  year: number | null;
+  releaseDate: string | null;
+  posterUrl: string | null;
+  watched: boolean;
+  /** Only when you chose to share ratings. */
+  rating: number | null;
+}
+
+export interface SharedList {
+  name: string;
+  description: string;
+  count: number;
+  finished: number;
+  percent: number;
+  showRatings: boolean;
+  items: SharedItem[];
+}
+
+export function shareState(id: number, db = getDb()): { token: string | null; ratings: boolean } {
+  const r = db.prepare(`SELECT share_token, share_ratings FROM list WHERE id = ?`).get(id) as { share_token: string | null; share_ratings: number } | undefined;
+  return { token: r?.share_token ?? null, ratings: Boolean(r?.share_ratings) };
+}
+
+/** Turn sharing on (a new unguessable link), change what it shows, or turn it off (the link dies). */
+export function setSharing(id: number, opts: { on: boolean; ratings?: boolean }, db = getDb()): { token: string | null; ratings: boolean } {
+  requireList(db, id);
+  if (!opts.on) db.prepare(`UPDATE list SET share_token = NULL WHERE id = ?`).run(id);
+  else {
+    const cur = shareState(id, db);
+    const token = cur.token ?? crypto.randomBytes(18).toString("base64url");
+    db.prepare(`UPDATE list SET share_token = ?, share_ratings = ? WHERE id = ?`).run(token, opts.ratings ?? cur.ratings ? 1 : 0, id);
+  }
+  audit(db, opts.on ? "share_list" : "unshare_list", "list", id, { ratings: opts.ratings });
+  return shareState(id, db);
+}
+
+/** What someone with the link sees: titles, posters, dates and progress. Never reviews or anything else. */
+export function getSharedList(token: string, db = getDb()): SharedList | null {
+  if (!/^[A-Za-z0-9_-]{16,64}$/.test(token)) return null;
+  const row = db.prepare(`SELECT id, share_ratings FROM list WHERE share_token = ?`).get(token) as { id: number; share_ratings: number } | undefined;
+  if (!row) return null;
+  const l = getList(row.id, db)!;
+  const showRatings = Boolean(row.share_ratings);
+  return {
+    name: l.name,
+    description: l.description,
+    count: l.count,
+    finished: l.finished,
+    percent: l.percent,
+    showRatings,
+    items: l.items.map((i, n) => ({
+      n: n + 1,
+      type: i.type,
+      title: i.title,
+      year: i.year,
+      releaseDate: i.releaseDate,
+      posterUrl: i.posterUrl,
+      watched: i.done >= 1,
+      rating: showRatings ? i.rating : null,
+    })),
+  };
 }

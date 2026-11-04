@@ -3,6 +3,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { SortPicker } from "../SortPicker";
+import { SharePanel } from "./SharePanel";
 import { api } from "@/lib/client/api";
 import { useAction } from "../useAction";
 import { Poster } from "../Poster";
@@ -142,6 +143,7 @@ export function ListDetail({ initial }: { initial: List }) {
           <>
             <div className="toolbar">
               <h1 className="grow">{list.name}</h1>
+              <SharePanel listId={list.id} />
               <button className="btn small ghost" onClick={() => setEditing(true)}>Edit</button>
               <button className="btn small ghost" onClick={del}>Delete</button>
             </div>

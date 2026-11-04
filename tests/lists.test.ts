@@ -49,3 +49,22 @@ describe("sorting both ways", () => {
     expect(t("year", "asc")).toEqual(["Alpha", "Beta"]);
   });
 });
+
+describe("sharing a list", () => {
+  it("is off until you turn it on, shows only the list, and the link dies when you stop", async () => {
+    const { setSharing, getSharedList, shareState } = await import("@/lib/repo/lists");
+    const m = createMedia({ type: "movie", metadata: { title: "Heat", year: 1995 }, review: { rating: 5, body: "My private review" } });
+    const id = createList({ name: "Crime", mediaIds: [m.id] });
+    expect(shareState(id).token).toBeNull();
+    const { token } = setSharing(id, { on: true });
+    expect(token).toMatch(/^[A-Za-z0-9_-]{24}$/);
+    const shared = getSharedList(token!)!;
+    expect(shared.items[0]).toMatchObject({ title: "Heat", watched: true, rating: null });
+    expect(JSON.stringify(shared)).not.toContain("My private review");
+    setSharing(id, { on: true, ratings: true });
+    expect(getSharedList(token!)!.items[0].rating).toBe(5);
+    setSharing(id, { on: false });
+    expect(getSharedList(token!)).toBeNull();
+    expect(getSharedList("not-a-real-token-at-all")).toBeNull();
+  });
+});

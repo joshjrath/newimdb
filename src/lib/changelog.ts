@@ -12,6 +12,17 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-11-04-share-lists",
+    date: "2026-11-04",
+    title: "Share a list by link",
+    items: [
+      "Any list can be shared by link (Share on the list): friends see a poster page with what's on it and how far you've got, with a preview card when the link is pasted in a chat.",
+      "Off until you turn it on, your ratings only if you choose, never your reviews or the rest of your library. Stop sharing and the link stops working.",
+      "Lists sort by release date to the day, so Supergirl comes before Lanterns.",
+      "Lists have the new sort menu with reverse, and an Unwatched filter.",
+    ],
+  },
+  {
     id: "2026-11-04-picks-with-people-and-airing-fixes",
     date: "2026-11-04",
     title: "Picks for watching together, and smarter \"out\" and \"airing\"",

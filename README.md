@@ -55,6 +55,9 @@ The bell at the top right shows each deploy with what changed, and a badge for o
 
 ## Privacy model
 
+The one exception is a list you choose to share: Share on a list makes an unguessable link (`/s/<token>`) to a read-only page of that list (titles, posters, dates, whether you've watched each, and your ratings only if you tick it). It never shows reviews or anything else, isn't indexed, and stops working the moment you turn sharing off.
+
+
 - **Server-side checks everywhere.** Every page calls `requireOwnerPage()` and every API route is wrapped in `ownerApi()`. Both check the session token against the database. The middleware redirect is only a convenience; security doesn't depend on it.
 - Sessions are random 256-bit tokens, stored only as SHA-256 hashes, in an httpOnly, SameSite=Lax cookie, marked Secure whenever the site is served over https. Failed logins are throttled.
 - Writes need a same-origin `Origin` header (CSRF protection) and a JSON body.
