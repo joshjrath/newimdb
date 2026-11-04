@@ -222,9 +222,25 @@ function ensureDir(dir: string): string {
   return dir;
 }
 
+/** True when `dir` is on a different disk from the container's root: an attached volume. */
+export function onSeparateDisk(dir: string): boolean {
+  try {
+    return fs.statSync(dir).dev !== fs.statSync("/").dev;
+  } catch {
+    return false;
+  }
+}
+
+/** Where the library lives: DATA_DIR, else an attached volume (Railway's variable, or a disk mounted at /data), else ./data. */
+function resolveDataDir(): string {
+  if (process.env.DATA_DIR) return process.env.DATA_DIR;
+  if (process.env.RAILWAY_VOLUME_MOUNT_PATH) return process.env.RAILWAY_VOLUME_MOUNT_PATH;
+  if (onSeparateDisk("/data")) return "/data";
+  return path.join(process.cwd(), "data");
+}
+
 export function dataDir(): string {
-  // DATA_DIR wins; on Railway, an attached volume is used automatically.
-  return ensureDir(path.resolve(process.env.DATA_DIR || process.env.RAILWAY_VOLUME_MOUNT_PATH || path.join(process.cwd(), "data")));
+  return ensureDir(path.resolve(resolveDataDir()));
 }
 
 /** A private folder under DATA_DIR (uploads, poster cache, backups). Created once. */

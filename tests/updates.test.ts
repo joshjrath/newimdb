@@ -85,7 +85,7 @@ describe("update bell", () => {
     env.RAILWAY_ENVIRONMENT = "production";
     delete env.RAILWAY_VOLUME_MOUNT_PATH;
     expect(storageStatus()).toMatchObject({ persistent: false });
-    expect(storageStatus().warning).toMatch(/add a volume/);
+    expect(storageStatus().warning).toMatch(/hasn't told this deployment about any volume/);
     env.RAILWAY_VOLUME_MOUNT_PATH = "/data";
     env.DATA_DIR = tmp();
     expect(storageStatus().persistent).toBe(false); // DATA_DIR outside the volume

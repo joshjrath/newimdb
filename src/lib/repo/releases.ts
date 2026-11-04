@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { CHANGELOG, type ChangelogEntry } from "../changelog";
-import { dataDir, freshDatabases, getDb, nowIso, snapshotSync, type DB } from "../db";
+import { dataDir, freshDatabases, getDb, nowIso, onSeparateDisk, snapshotSync, type DB } from "../db";
 
 /**
  * Deploys, for the update bell. Each running build has a version id (the commit on
@@ -93,22 +93,27 @@ export function markReleasesSeen(db = getDb()) {
 }
 
 /**
- * Is the library on storage that survives a redeploy? On Railway that means an attached
- * volume holding DATA_DIR. Elsewhere we can't tell, so we don't guess.
+ * Is the library on storage that survives a redeploy? On Railway that means the data
+ * folder is on an attached volume, which we check on the disk itself (a volume is a
+ * separate filesystem), not only from Railway's variables. Elsewhere we don't guess.
  */
 export function storageStatus(): { persistent: boolean | null; warning: string | null } {
   const onRailway = Boolean(process.env.RAILWAY_ENVIRONMENT || process.env.RAILWAY_ENVIRONMENT_NAME || process.env.RAILWAY_PROJECT_ID);
   if (!onRailway) return { persistent: null, warning: null };
-  const mount = process.env.RAILWAY_VOLUME_MOUNT_PATH;
-  if (!mount) {
-    return { persistent: false, warning: "Your library isn't on a Railway volume, so the next update or restart will erase it. In Railway, add a volume to this service, then redeploy." };
-  }
   const dir = path.resolve(dataDir());
-  const root = path.resolve(mount);
-  if (dir !== root && !dir.startsWith(root + path.sep)) {
-    return { persistent: false, warning: `DATA_DIR (${dir}) is outside the Railway volume (${root}), so updates will erase it. Remove DATA_DIR or point it inside the volume.` };
-  }
-  return { persistent: true, warning: null };
+  const mount = process.env.RAILWAY_VOLUME_MOUNT_PATH ? path.resolve(process.env.RAILWAY_VOLUME_MOUNT_PATH) : null;
+  const insideMount = mount != null && (dir === mount || dir.startsWith(mount + path.sep));
+  if (onSeparateDisk(dir) || insideMount) return { persistent: true, warning: null };
+
+  const seen = [
+    `The app is saving to ${dir}, which is not a volume.`,
+    mount ? `Railway reports a volume at ${mount}.` : "Railway hasn't told this deployment about any volume.",
+    process.env.DATA_DIR ? `DATA_DIR is set to "${process.env.DATA_DIR}"; remove it or set it to the volume's mount path.` : null,
+  ].filter(Boolean).join(" ");
+  return {
+    persistent: false,
+    warning: `The next update or restart will erase your library. ${seen} Check that the volume is attached to this same service, then redeploy it.`,
+  };
 }
 
 export function updatesSummary(db = getDb()) {
