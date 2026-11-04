@@ -270,6 +270,20 @@ const MIGRATIONS: string[] = [
   );
   CREATE INDEX list_item_media ON list_item(media_id);
   `,
+  // 9 — how an anime's episodes are grouped on its page, and the arcs you define
+  `
+  ALTER TABLE media ADD COLUMN episode_view TEXT;
+  CREATE TABLE arc (
+    id         INTEGER PRIMARY KEY,
+    media_id   INTEGER NOT NULL REFERENCES media(id) ON DELETE CASCADE,
+    name       TEXT NOT NULL,
+    first_ep   INTEGER NOT NULL,
+    last_ep    INTEGER NOT NULL,
+    created_at TEXT NOT NULL,
+    CHECK (first_ep >= 1 AND last_ep >= first_ep)
+  );
+  CREATE INDEX arc_media ON arc(media_id, first_ep);
+  `,
 ];
 
 /** Whether the database was created just now (no earlier data), per connection. */

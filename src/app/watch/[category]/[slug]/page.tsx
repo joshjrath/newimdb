@@ -7,6 +7,7 @@ import { Poster } from "@/components/Poster";
 import { Stars } from "@/components/Stars";
 import { StatusPill } from "@/components/StatusPill";
 import { EpisodesSection } from "@/components/EpisodesSection";
+import { episodeViewOf, listArcs } from "@/lib/repo/arcs";
 import { ShareDialog } from "@/components/ShareDialog";
 import { SpoilerReveal, CopyLink } from "@/components/DetailClient";
 import { mediaHref } from "@/lib/domain/links";
@@ -122,7 +123,7 @@ export default async function DetailPage({ params, searchParams }: { params: Par
         </div>
 
         {m.type !== "movie" && (
-          <EpisodesSection mediaId={m.id} type={m.type} version={m.version} initial={m.segments} initialSegment={Number((await searchParams).segment) || null} />
+          <EpisodesSection mediaId={m.id} type={m.type} version={m.version} initial={m.segments} initialSegment={Number((await searchParams).segment) || null} initialView={episodeViewOf(m.id)} initialArcs={listArcs(m.id)} />
         )}
 
         {(m.overview || about.length > 0) && (

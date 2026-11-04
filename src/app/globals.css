@@ -758,3 +758,8 @@ button.stat-btn:hover { background: var(--raised); }
 }
 .select-group { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
 .select-group .input.small { width: 130px; }
+.view-chips { margin: 0 0 12px; }
+.arc-editor { display: grid; gap: 8px; margin-bottom: 12px; padding: 12px; border-radius: 16px; background: var(--sunk); }
+.arc-editor .chips { list-style: none; margin: 0; padding: 0; }
+.arc-editor .input.num { width: 92px; }
+.chip-x { border: 0; background: none; color: inherit; cursor: pointer; font-size: 15px; line-height: 1; padding: 0 0 0 4px; opacity: .7; }
