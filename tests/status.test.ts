@@ -93,3 +93,19 @@ describe("anime filler doesn't count towards progress", () => {
     expect(listMedia({ type: "tv" }).items.find((x) => x.id === t.id)!.progress).toMatchObject({ denominator: 2 });
   });
 });
+
+describe("a new episode of a finished show", () => {
+  it("moves it from Completed back to Currently watching", async () => {
+    const { syncShowEpisodes } = await import("@/lib/repo/episodeSync");
+    const e = (n: number, d: string) => ({ number: n, title: `E${n}`, airDate: d, overview: null, providerRef: null });
+    const m = createMedia({ type: "tv", metadata: { title: "The Bear" }, segments: [{ kind: "season", label: "Season 1", seasonNumber: 1, courNumber: null, episodeCount: 2, episodes: [e(1, "2022-06-23"), e(2, "2022-06-23")] }] });
+    bulkAssess(m.id, ids(m.id), "watched", undefined);
+    getDb().prepare(`UPDATE episode_assessment SET watched_at = ?`).run(ago(400));
+    applyAutoStatus();
+    expect(getMedia(m.id)!.review.status).toBe("completed");
+    // Season 2 premieres (yesterday): back to watching, not on hold.
+    syncShowEpisodes(m.id, new Map([[1, [e(1, "2022-06-23"), e(2, "2022-06-23")]], [2, [e(1, ago(1).slice(0, 10)), e(2, "2099-01-01")]]]), { provider: "tvmaze", showRef: "1" });
+    applyAutoStatus();
+    expect(getMedia(m.id)!.review.status).toBe("watching");
+  });
+});

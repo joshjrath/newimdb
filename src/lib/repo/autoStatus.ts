@@ -1,5 +1,5 @@
 import { getDb, nowIso, type DB } from "../db";
-import { allEpisodes, hasAired, returningSeason } from "../domain/progress";
+import { allEpisodes, hasAired } from "../domain/progress";
 import type { EpisodeView, SegmentView, WatchStatus } from "../domain/types";
 import { audit } from "./audit";
 import { getSegments } from "./media";
@@ -11,8 +11,9 @@ import { getSegments } from "./media";
  *  - nothing watched for 30 days → On hold; for 90 days → Dropped
  *  - nothing watched yet → left as it is (Plan to watch, or no status)
  * "Out" means aired: episodes that aren't out yet (or have no date and nothing after them
- * has aired) never count against you, and specials/OVAs/films are extras. A show you
- * finished that has a new season stays Completed until you start it. If you pick a status
+ * has aired) never count against you, and specials/OVAs/films are extras. When a show you
+ * finished gets a new episode or season, it goes back to Currently watching (the new
+ * episode's air date counts as activity, so the 30/90-day clock starts then). If you pick a status
  * yourself, it holds until you next watch an episode of that show. The inactivity clock
  * counts from when automatic status started, not from old import dates.
  */
@@ -89,6 +90,17 @@ function markUndatedUpcoming(db: DB, segments: SegmentView[]) {
   if (ids.length) db.prepare(`UPDATE episode SET air_date = 'TBA' WHERE air_date IS NULL AND id IN (${ids.map(() => "?").join(",")})`).run(...ids);
 }
 
+/** The air date of the newest out-but-unwatched episode, if it has a real date. */
+function newestUnwatchedAired(segments: SegmentView[], ignoreFiller: boolean): string | null {
+  let newest: string | null = null;
+  for (const e of allEpisodes(segments.filter((s) => s.kind === "season" || s.kind === "cour"))) {
+    if (e.state !== "unwatched" || e.rating != null || (ignoreFiller && e.filler) || !e.airDate || !/^\d{4}-\d{2}-\d{2}/.test(e.airDate) || !hasAired(e.airDate)) continue;
+    const d = `${e.airDate.slice(0, 10)}T12:00:00.000Z`;
+    if (!newest || d > newest) newest = d;
+  }
+  return newest;
+}
+
 export function applyAutoStatus(db = getDb(), opts: { mediaIds?: number[]; segmentsOf?: (id: number) => SegmentView[] } = {}): number {
   const only = opts.mediaIds?.length ? `AND m.id IN (${opts.mediaIds.map(() => "?").join(",")})` : "";
   const clock = statusClockStart(db);
@@ -113,8 +125,11 @@ export function applyAutoStatus(db = getDb(), opts: { mediaIds?: number[]; segme
       const segs = segmentsOf(r.id);
       markUndatedUpcoming(db, segs);
       const caughtUp = !hasUnwatchedAired(segs, { ignoreFiller: r.type === "anime" });
-      const returning = !caughtUp && Boolean(returningSeason(segs));
-      const lastActivity = !r.last_activity || r.last_activity < clock ? clock : r.last_activity;
+      // A new episode coming out counts as activity: a finished show with something new is
+      // back to Currently watching (not straight to On hold because you finished it long ago).
+      const newest = caughtUp ? null : newestUnwatchedAired(segs, r.type === "anime");
+      const lastActivity = [r.last_activity, clock, newest].filter((x): x is string => Boolean(x)).sort().pop() ?? clock;
+      const returning = false;
       const want = statusFor({ watched: r.watched, denominator: caughtUp ? r.watched : r.watched + 1, lastActivity, returning });
       if (!want || want === r.status) continue;
       set.run(r.id, want, nowIso(), nowIso());

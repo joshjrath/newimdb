@@ -18,6 +18,7 @@ export const CHANGELOG: ChangelogEntry[] = [
     items: [
       "For anime, filler you haven't watched is left out of % watched, so finishing every canon episode is 100% (and Completed).",
       "Up next skips filler, and time left on a show doesn't include it. Filler you did watch still counts.",
+      "When a show you've completed gets a new episode or season, it moves back to Currently watching by itself.",
     ],
   },
   {
