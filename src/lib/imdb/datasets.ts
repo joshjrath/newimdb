@@ -14,7 +14,7 @@ import { dataSubdir } from "../db";
  */
 const BASE = "https://datasets.imdbws.com";
 const MAX_AGE_DAYS = 30;
-type DatasetName = "title.episode.tsv.gz" | "title.basics.tsv.gz";
+type DatasetName = "title.episode.tsv.gz" | "title.basics.tsv.gz" | "title.ratings.tsv.gz";
 
 export interface EpisodeInfo {
   imdbId: string;
@@ -150,4 +150,35 @@ export async function lookupEpisodes(ratedEpisodeIds: Set<string>, seriesIds: Se
     });
   }, step("Reading episode titles and genres"));
   return { episodeOf, episodesByParent, basics };
+}
+
+/** IMDb's public rating (out of 10) and vote count for these titles, from IMDb's daily file. */
+export async function imdbRatings(ids: Set<string>, opts: LookupOptions = {}): Promise<Map<string, { rating: number; votes: number }>> {
+  const out = new Map<string, { rating: number; votes: number }>();
+  if (!ids.size) return out;
+  const file = await ensureFile("title.ratings.tsv.gz", "IMDb's ratings", opts);
+  await eachRow(file, (c) => {
+    if (ids.has(c[0])) out.set(c[0], { rating: Number(c[1]), votes: Number(c[2]) });
+  });
+  return out;
+}
+
+/**
+ * IMDb's episode and title files are large (≈250 MB), so they're deleted a day after
+ * they were last needed; an import or repair downloads them again if it ever needs them.
+ */
+export function pruneDatasetCache(maxAgeHours = 24, dir = dataSubdir("cache/imdb")): number {
+  let freed = 0;
+  for (const name of ["title.episode.tsv.gz", "title.basics.tsv.gz"]) {
+    const file = path.join(dir, name);
+    try {
+      const st = fs.statSync(file);
+      if (Date.now() - Math.max(st.mtimeMs, st.atimeMs) > maxAgeHours * 3600_000) {
+        fs.rmSync(file, { force: true });
+        freed += st.size;
+      }
+    } catch {}
+    fs.rmSync(`${file}.part`, { force: true });
+  }
+  return freed;
 }

@@ -2,13 +2,14 @@ import { norm } from "./genres";
 import type { MediaType } from "./types";
 
 /**
- * How recommendations are scored, from everything in your library:
- *  - Seeds: titles you rated above your own average (and shows you're watching). Each
- *    one's "if you liked this" list counts, weighted by how much you liked it and how
- *    recently you watched. Titles you rated low count against what they recommend.
- *  - Taste: genres you rate above your average lift a pick; ones you rate below lower it.
+ * How recommendations are scored, from every rating you've given:
+ *  - Taste model: every genre, keyword, studio, franchise and decade gets a weight learned
+ *    from ALL your ratings (how far above or below your own average you rate titles that
+ *    have it, shrunk so a single title can't dominate). A pick is scored on its features.
+ *  - Neighbours: your favourites (and, against, your lowest-rated titles) each vote for
+ *    the titles similar to them, weighted by how much you liked them and how recently.
+ *  - Agreement: a pick needs at least two of your favourites pointing at it; more is better.
  *  - Quality: a small nudge from the wider audience score, so obscure flops don't win.
- *  - Agreement: a pick recommended by several of your favourites ranks higher.
  */
 
 export interface LibraryTitle {
@@ -76,7 +77,7 @@ export interface Seed extends LibraryTitle {
 }
 
 /** Your favourites (positive weight) and the ones you didn't like (negative), per category. */
-export function pickSeeds(library: LibraryTitle[], taste: Taste, perType = 12, now = Date.now()): Seed[] {
+export function pickSeeds(library: LibraryTitle[], taste: Taste, perType = 40, now = Date.now()): Seed[] {
   const out: Seed[] = [];
   for (const type of ["movie", "tv", "anime"] as MediaType[]) {
     const mine = library.filter((t) => t.type === type);
@@ -89,7 +90,7 @@ export function pickSeeds(library: LibraryTitle[], taste: Taste, perType = 12, n
     const disliked = mine
       .filter((t) => t.rating != null && t.rating <= Math.min(2, taste.mean - 1))
       .map((t) => ({ ...t, weight: -0.6 * (1 + (taste.mean - t.rating!) / 2) }))
-      .slice(0, Math.ceil(perType / 3));
+      .slice(0, Math.ceil(perType / 4));
     out.push(...liked, ...disliked);
   }
   return out;
@@ -143,4 +144,54 @@ export function becauseOf(c: Candidate, seeds: Map<number, Seed>, n = 2): string
 export function matchPercent(score: number, best: number): number {
   if (best <= 0) return 70;
   return Math.max(55, Math.min(99, Math.round(62 + 37 * Math.max(0, score) / best)));
+}
+
+/* ---------------- the taste model: every rating, every feature ---------------- */
+
+/** What a title is made of, for the model: genres, keywords/studios/franchise, decade, kind. */
+export function featuresOf(t: { type: MediaType; year: number | null; genres: string[]; keywords?: string[] }): string[] {
+  const f = new Set<string>();
+  for (const g of t.genres) for (const k of genreKeys(g)) f.add(`g:${k}`);
+  for (const k of (t.keywords ?? []).slice(0, 30)) f.add(`k:${norm(k)}`);
+  if (t.year) f.add(`d:${Math.floor(t.year / 10) * 10}`);
+  f.add(`t:${t.type}`);
+  return [...f];
+}
+
+export interface TasteModel {
+  mean: number;
+  weights: Map<string, number>;
+  rated: number;
+}
+
+/**
+ * Learn a weight per feature from all your ratings: the average of (your rating − your
+ * mean) over titles with it, shrunk towards zero by 4 "neutral" titles so rare features
+ * need real evidence.
+ */
+export function learnTaste(rated: { rating: number; features: string[] }[]): TasteModel {
+  const mean = rated.length ? rated.reduce((a, r) => a + r.rating, 0) / rated.length : 3.5;
+  const acc = new Map<string, { s: number; n: number }>();
+  for (const r of rated)
+    for (const f of r.features) {
+      const c = acc.get(f) ?? { s: 0, n: 0 };
+      acc.set(f, { s: c.s + (r.rating - mean), n: c.n + 1 });
+    }
+  return { mean, rated: rated.length, weights: new Map([...acc].map(([f, { s, n }]) => [f, s / (n + 4)])) };
+}
+
+/** How much the model expects you to like something, in stars above/below your average. */
+export function predictTaste(model: TasteModel, features: string[]): number {
+  const known = features.map((f) => model.weights.get(f)).filter((w): w is number => w != null);
+  if (!known.length) return 0;
+  return known.reduce((a, b) => a + b, 0) / Math.sqrt(known.length);
+}
+
+/** Favourites that point at a pick (positive votes). */
+export const supporters = (c: Candidate) => [...c.from.values()].filter((v) => v > 0).length;
+
+export function finalScore(c: Candidate & { features?: string[] }, taste: Taste, model: TasteModel | null): number {
+  const base = scoreCandidate(c, taste);
+  const predicted = model && c.features ? predictTaste(model, c.features) : 0;
+  return base + predicted * 2.2;
 }

@@ -763,3 +763,4 @@ button.stat-btn:hover { background: var(--raised); }
 .arc-editor .chips { list-style: none; margin: 0; padding: 0; }
 .arc-editor .input.num { width: 92px; }
 .chip-x { border: 0; background: none; color: inherit; cursor: pointer; font-size: 15px; line-height: 1; padding: 0 0 0 4px; opacity: .7; }
+.error-page { max-width: 620px; margin: 12vh auto; padding: 0 16px; } .error-page h1 { margin-top: 0; }

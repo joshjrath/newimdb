@@ -59,7 +59,8 @@ export function startKeywordJob(opts: { quiet?: boolean } = {}): KeywordJob | nu
     db.prepare(`UPDATE media SET keywords_fetched_at = NULL WHERE keywords_fetched_at IS NOT NULL`).run();
     db.prepare(`INSERT INTO app_flag (key, at) VALUES ('keywords-v2', ?)`).run(nowIso());
   }
-  if (!tmdbConfigured() || !anyKeywordGenres(db)) return null;
+  // Keywords feed genre filters and your recommendations, so they're fetched whenever TMDB is set up.
+  if (!tmdbConfigured()) return null;
   const todo = db
     .prepare(`SELECT id, type, tmdb_id, imdb_id, genres FROM media WHERE keywords_fetched_at IS NULL AND (tmdb_id IS NOT NULL OR imdb_id IS NOT NULL) ORDER BY id`)
     .all() as Todo[];

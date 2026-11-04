@@ -175,6 +175,8 @@ export interface AniRec {
   backdropUrl: string | null;
   overview: string | null;
   genres: string[];
+  /** AniList's strongest tags (e.g. "shounen", "time travel"), used like keywords. */
+  tags: string[];
   format: string | null;
   averageScore: number | null;
   popularity: number;
@@ -183,8 +185,8 @@ export interface AniRec {
   streaming: { site: string; url: string; icon: string | null; color: string | null }[];
 }
 
-const REC_FIELDS = `id idMal title { romaji english } startDate { year } coverImage { extraLarge large } bannerImage description(asHtml: false) genres format averageScore popularity externalLinks { site url type icon color }`;
-type AniFull = { id: number; idMal: number | null; title: { romaji: string | null; english: string | null }; startDate: { year: number | null }; coverImage: { extraLarge: string | null; large: string | null }; bannerImage: string | null; description: string | null; genres: string[]; format: string | null; averageScore: number | null; popularity: number | null; externalLinks: { site: string; url: string; type: string; icon: string | null; color: string | null }[] | null };
+const REC_FIELDS = `id idMal title { romaji english } startDate { year } coverImage { extraLarge large } bannerImage description(asHtml: false) genres tags { name rank } format averageScore popularity externalLinks { site url type icon color }`;
+type AniFull = { id: number; idMal: number | null; title: { romaji: string | null; english: string | null }; startDate: { year: number | null }; coverImage: { extraLarge: string | null; large: string | null }; bannerImage: string | null; description: string | null; genres: string[]; tags?: { name: string; rank: number }[]; format: string | null; averageScore: number | null; popularity: number | null; externalLinks: { site: string; url: string; type: string; icon: string | null; color: string | null }[] | null };
 
 const toAniRec = (m: AniFull, votes: number): AniRec => ({
   id: m.id,
@@ -196,6 +198,7 @@ const toAniRec = (m: AniFull, votes: number): AniRec => ({
   backdropUrl: m.bannerImage,
   overview: htmlToTextOrNull(m.description),
   genres: m.genres ?? [],
+  tags: (m.tags ?? []).filter((t) => t.rank >= 60).map((t) => t.name.toLowerCase()).slice(0, 20),
   format: m.format,
   averageScore: m.averageScore,
   popularity: m.popularity ?? 0,

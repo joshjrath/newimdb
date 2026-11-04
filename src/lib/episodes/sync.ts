@@ -3,6 +3,7 @@ import { startPosterJob } from "../posters/job";
 import { startAnimeCheck } from "../anime/job";
 import { autoMergeDuplicates } from "../repo/duplicates";
 import { repairDone, repairInflatedShows } from "./repair";
+import { pruneDatasetCache } from "../imdb/datasets";
 import { groupAnimeFranchises } from "../repo/franchise";
 import { upgradeGenreRules } from "../repo/genres";
 import { applyAutoStatus } from "../repo/autoStatus";
@@ -115,6 +116,9 @@ export function startEpisodeScheduler() {
     console.error("[genres] upgrade failed:", e);
   }
   const tick = () => {
+    try {
+      pruneDatasetCache(); // IMDb's big files go once they haven't been needed for a day
+    } catch {}
     // Fix shows the old sync inflated before syncing anything else (once).
     if (!repairDone()) {
       void repairInflatedShows().catch((e) => console.error("[repair] failed, will retry:", e));

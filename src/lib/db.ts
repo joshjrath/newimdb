@@ -289,7 +289,7 @@ const MIGRATIONS: string[] = [
 /** Whether the database was created just now (no earlier data), per connection. */
 export const freshDatabases = new WeakSet<DB>();
 
-const MAX_AUTO_SNAPSHOTS = 10;
+const MAX_AUTO_SNAPSHOTS = 5;
 
 /**
  * A consistent copy of the whole database, written synchronously (VACUUM INTO).
@@ -299,9 +299,15 @@ export function snapshotSync(db: DB, file: string, label: string): string | null
   if (file === ":memory:") return null;
   const dir = ensureDir(path.join(path.dirname(path.resolve(file)), "backups"));
   const out = path.join(dir, `watch-${new Date().toISOString().replace(/[:.]/g, "-")}-auto-${label}.db`);
-  db.exec(`VACUUM INTO '${out.replace(/'/g, "''")}'`);
+  // Make room first (oldest automatic copies go), so a full disk doesn't stop the copy.
   const autos = fs.readdirSync(dir).filter((f) => f.includes("-auto-")).sort();
-  for (const old of autos.slice(0, Math.max(0, autos.length - MAX_AUTO_SNAPSHOTS))) fs.rmSync(path.join(dir, old), { force: true });
+  for (const old of autos.slice(0, Math.max(0, autos.length - (MAX_AUTO_SNAPSHOTS - 1)))) fs.rmSync(path.join(dir, old), { force: true });
+  try {
+    db.exec(`VACUUM INTO '${out.replace(/'/g, "''")}'`);
+  } catch (e) {
+    fs.rmSync(out, { force: true }); // never leave a half-written copy taking up space
+    throw e;
+  }
   return out;
 }
 
@@ -312,7 +318,15 @@ function migrate(db: DB, file: string) {
   if (!row) db.prepare(`INSERT INTO schema_version (version) VALUES (0)`).run();
   if (current === 0) freshDatabases.add(db);
   // An update that changes the schema first copies the database, so nothing can be lost.
-  else if (current < MIGRATIONS.length) snapshotSync(db, file, `before-schema-${current + 1}`);
+  else if (current < MIGRATIONS.length) {
+    // If the copy can't be made (e.g. the volume is full), the update still goes ahead:
+    // migrations only ever add, and a failed copy must never stop your library opening.
+    try {
+      snapshotSync(db, file, `before-schema-${current + 1}`);
+    } catch (e) {
+      console.error(`[db] couldn't save a backup before updating (continuing): ${(e as Error).message}`);
+    }
+  }
   while (current < MIGRATIONS.length) {
     const sql = MIGRATIONS[current];
     db.transaction(() => {

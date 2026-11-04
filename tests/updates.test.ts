@@ -36,7 +36,21 @@ describe("updates never lose data", () => {
     expect(countMedia(copy).total).toBe(1);
   });
 
-  it("prunes automatic backups to the newest ten", () => {
+  it("still opens (and updates) your library when a backup can't be written, e.g. a full disk", () => {
+    const dir = tmp();
+    const file = path.join(dir, "watch.db");
+    let db = openDatabase(file);
+    createMedia({ type: "movie", metadata: { title: "Kept" } }, {}, db);
+    db.exec(`DROP TABLE arc; ALTER TABLE media DROP COLUMN episode_view; UPDATE schema_version SET version = 8;`);
+    db.close();
+    fs.rmSync(path.join(dir, "backups"), { recursive: true, force: true });
+    fs.writeFileSync(path.join(dir, "backups"), "not a folder"); // the copy will fail
+    db = openDatabase(file);
+    expect(countMedia(db).total).toBe(1);
+    expect((db.prepare(`SELECT version FROM schema_version`).get() as { version: number }).version).toBeGreaterThanOrEqual(9);
+  });
+
+  it("prunes automatic backups to the newest five", () => {
     const dir = tmp();
     const file = path.join(dir, "watch.db");
     const db = openDatabase(file);
@@ -44,7 +58,7 @@ describe("updates never lose data", () => {
     fs.writeFileSync(path.join(dir, "backups", "watch-manual.db"), "");
     for (let i = 0; i < 13; i++) snapshotSync(db, file, `n${String(i).padStart(2, "0")}`);
     const files = fs.readdirSync(path.join(dir, "backups"));
-    expect(files.filter((f) => f.includes("-auto-"))).toHaveLength(10);
+    expect(files.filter((f) => f.includes("-auto-"))).toHaveLength(5);
     expect(files).toContain("watch-manual.db");
   });
 });
