@@ -10,6 +10,7 @@ import path from "node:path";
 
 export type DB = Database.Database;
 
+/** Forward-only. NEVER edit one that has shipped: add a new one (see 10). */
 const MIGRATIONS: string[] = [
   // 1 — initial schema
   `
@@ -283,6 +284,26 @@ const MIGRATIONS: string[] = [
     CHECK (first_ep >= 1 AND last_ep >= first_ep)
   );
   CREATE INDEX arc_media ON arc(media_id, first_ep);
+  `,
+  // 10 — lists. These were added to migration 8 after it had already run on existing
+  // libraries, so those never got them. IF NOT EXISTS makes this safe for both.
+  `
+  CREATE TABLE IF NOT EXISTS list (
+    id          INTEGER PRIMARY KEY,
+    name        TEXT NOT NULL,
+    description TEXT NOT NULL DEFAULT '',
+    sort        TEXT NOT NULL DEFAULT 'manual' CHECK (sort IN ('manual', 'release', 'watched', 'rating', 'title', 'added')),
+    created_at  TEXT NOT NULL,
+    updated_at  TEXT NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS list_item (
+    list_id  INTEGER NOT NULL REFERENCES list(id) ON DELETE CASCADE,
+    media_id INTEGER NOT NULL REFERENCES media(id) ON DELETE CASCADE,
+    position INTEGER NOT NULL,
+    added_at TEXT NOT NULL,
+    PRIMARY KEY (list_id, media_id)
+  );
+  CREATE INDEX IF NOT EXISTS list_item_media ON list_item(media_id);
   `,
 ];
 

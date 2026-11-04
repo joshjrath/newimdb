@@ -24,16 +24,30 @@ describe("updates never lose data", () => {
     setDbForTests(db);
     createMedia({ type: "movie", metadata: { title: "Kept" } }, {}, db);
     // Undo the newest migration, as if this database came from the previous version.
-    db.exec(`DROP TABLE arc; ALTER TABLE media DROP COLUMN episode_view; UPDATE schema_version SET version = 8;`);
+    db.exec(`UPDATE schema_version SET version = 9;`);
     db.close();
 
     db = openDatabase(file); // "the update"
     expect(countMedia(db).total).toBe(1);
     const backups = fs.readdirSync(path.join(dir, "backups"));
-    expect(backups.some((f) => f.includes("before-schema-9"))).toBe(true);
+    expect(backups.some((f) => f.includes("before-schema-10"))).toBe(true);
     // The backup is a complete, openable copy.
     const copy = openDatabase(path.join(dir, "backups", backups[0]));
     expect(countMedia(copy).total).toBe(1);
+  });
+
+  it("a library from before Lists existed gets the list tables (the crash on Railway)", () => {
+    const dir = tmp();
+    const file = path.join(dir, "watch.db");
+    let db = openDatabase(file);
+    createMedia({ type: "movie", metadata: { title: "Kept" } }, {}, db);
+    // As it was on Railway: migration 8 ran before list tables were part of it.
+    db.exec(`DROP TABLE list_item; DROP TABLE list; UPDATE schema_version SET version = 9;`);
+    db.close();
+    db = openDatabase(file);
+    setDbForTests(db);
+    expect(db.prepare(`SELECT COUNT(*) n FROM list`).get()).toEqual({ n: 0 });
+    expect(countMedia(db).total).toBe(1);
   });
 
   it("still opens (and updates) your library when a backup can't be written, e.g. a full disk", () => {
