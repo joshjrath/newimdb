@@ -2,6 +2,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import { SortPicker } from "../SortPicker";
 import { api } from "@/lib/client/api";
 import { useAction } from "../useAction";
 import { Poster } from "../Poster";
@@ -29,6 +30,31 @@ export function ListDetail({ initial }: { initial: List }) {
   const router = useRouter();
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const onList = new Set(list.items.map((i) => i.mediaId));
+  // Reverse and "Unwatched" are yours to flip per list (remembered on this device).
+  const prefKey = `list-view-${initial.id}`;
+  const [reversed, setReversed] = useState(false);
+  const [onlyLeft, setOnlyLeft] = useState(false);
+  useEffect(() => {
+    try {
+      const v = JSON.parse(localStorage.getItem(prefKey) ?? "null");
+      if (v) {
+        setReversed(Boolean(v.reversed));
+        setOnlyLeft(Boolean(v.onlyLeft));
+      }
+    } catch {}
+  }, [prefKey]);
+  const savePrefs = (next: { reversed: boolean; onlyLeft: boolean }) => {
+    setReversed(next.reversed);
+    setOnlyLeft(next.onlyLeft);
+    try {
+      localStorage.setItem(prefKey, JSON.stringify(next));
+    } catch {}
+  };
+  const ordered = reversed ? [...list.items].reverse() : list.items;
+  const shown = onlyLeft ? ordered.filter((i) => i.done < 1) : ordered;
+  const left = list.items.filter((i) => i.done < 1).length;
+  // Drag and arrows only make sense on your own order, shown in full and not reversed.
+  const canReorder = list.sort === "manual" && !reversed && !onlyLeft;
 
   useEffect(() => {
     if (timer.current) clearTimeout(timer.current);
@@ -159,18 +185,29 @@ export function ListDetail({ initial }: { initial: List }) {
         </label>
         <label>
           <span className="visually-hidden">Sort</span>
-          <select className="select" value={list.sort} onChange={(e) => setSort(e.target.value as ListSort)}>
-            {LIST_SORTS.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
-          </select>
+          <SortPicker
+            options={LIST_SORTS}
+            value={list.sort}
+            reversed={reversed}
+            onChange={(key, r) => {
+              savePrefs({ reversed: r, onlyLeft });
+              if (key !== list.sort) setSort(key);
+            }}
+          />
         </label>
       </div>
-      {list.sort === "manual" && list.items.length > 1 && <p className="hint">Drag titles (or use the arrows) to put them in your order, e.g. story order for the MCU.</p>}
+      <div className="chips" role="group" aria-label="Show">
+        <button type="button" className="chip" aria-pressed={!onlyLeft} onClick={() => savePrefs({ reversed, onlyLeft: false })}>All · {list.items.length}</button>
+        <button type="button" className="chip" aria-pressed={onlyLeft} onClick={() => savePrefs({ reversed, onlyLeft: true })}>Unwatched · {left}</button>
+      </div>
+      {canReorder && list.items.length > 1 && <p className="hint">Drag titles (or use the arrows) to put them in your order, e.g. story order for the MCU.</p>}
+      {onlyLeft && left === 0 && list.items.length > 0 && <p className="notice">You&apos;ve finished everything on this list. 🎉</p>}
 
       <ol className="list-items">
-        {list.items.map((i, idx) => (
+        {shown.map((i, idx) => (
           <li
             key={i.mediaId}
-            draggable={list.sort === "manual"}
+            draggable={canReorder}
             onDragStart={() => setDragging(idx)}
             onDragOver={(e) => e.preventDefault()}
             onDrop={() => {
@@ -193,7 +230,7 @@ export function ListDetail({ initial }: { initial: List }) {
               <ListProgress thin percent={i.done * 100} label={i.type === "movie" ? (i.done ? "Watched" : "Not watched") : `${i.watched}/${i.total} episodes`} />
             </div>
             <div className="list-item-actions">
-              {list.sort === "manual" && (
+              {canReorder && (
                 <>
                   <button className="btn small ghost" disabled={busy || idx === 0} onClick={() => move(idx, -1)} aria-label={`Move ${i.title} up`}>↑</button>
                   <button className="btn small ghost" disabled={busy || idx === list.items.length - 1} onClick={() => move(idx, 1)} aria-label={`Move ${i.title} down`}>↓</button>

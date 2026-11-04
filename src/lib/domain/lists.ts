@@ -2,12 +2,12 @@ import type { MediaType } from "./types";
 
 /** Shared by the Lists pages and the server. */
 export const LIST_SORTS = [
-  { key: "manual", label: "My order" },
-  { key: "release", label: "Release order" },
-  { key: "watched", label: "When I watched" },
-  { key: "rating", label: "My rating" },
-  { key: "title", label: "Title" },
-  { key: "added", label: "Recently added" },
+  { key: "manual", label: "My order", reverse: "My order, reversed", icon: "☰" },
+  { key: "release", label: "Oldest release first", reverse: "Newest release first", icon: "📅" },
+  { key: "watched", label: "First watched first", reverse: "Last watched first", icon: "🕒" },
+  { key: "rating", label: "Highest rated", reverse: "Lowest rated", icon: "★" },
+  { key: "title", label: "Title A → Z", reverse: "Title Z → A", icon: "Aa" },
+  { key: "added", label: "Recently added", reverse: "First added", icon: "＋" },
 ] as const;
 export type ListSort = (typeof LIST_SORTS)[number]["key"];
 
