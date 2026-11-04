@@ -1,5 +1,6 @@
 "use client";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { burstConfetti } from "./confetti";
 import type { EpisodeView, SegmentView } from "@/lib/domain/types";
 import { activePointer, allEpisodes, computeProgress, episodeAverage, episodeCode, isUnaired, orderedSegments, sortedEpisodes } from "@/lib/domain/progress";
 import { RATING_BANDS, RATING_STEPS, formatScore, ratingBand } from "@/lib/domain/rating";
@@ -62,7 +63,7 @@ const EpisodeCell = memo(function EpisodeCell({ seg, ep, isNext, busy, selected,
   );
 });
 
-export function Heatmap({ mediaId, initial, initialSegment, onSegments, ignoreFiller = false }: { mediaId: number; initial: SegmentView[]; initialSegment?: number | null; onSegments?: (s: SegmentView[]) => void; /** Anime: unwatched filler isn't counted, and Up next skips it. */ ignoreFiller?: boolean }) {
+export function Heatmap({ mediaId, initial, initialSegment, onSegments, ignoreFiller = false, title }: { mediaId: number; initial: SegmentView[]; initialSegment?: number | null; onSegments?: (s: SegmentView[]) => void; /** Anime: unwatched filler isn't counted, and Up next skips it. */ ignoreFiller?: boolean; /** For the celebration when you finish it. */ title?: string }) {
   const [segments, setSegments] = useState(initial);
   // Let the page know (e.g. the season editor next to the grid) after each change.
   const reported = useRef(initial);
@@ -322,11 +323,38 @@ export function Heatmap({ mediaId, initial, initialSegment, onSegments, ignoreFi
   );
   const current = view === "grid" ? null : ordered.find((x) => x.id === view);
 
+  // 🎉 The moment you finish a show (not when you open one that's already finished).
+  const lastPercent = useRef(progress.percent);
+  const [celebrate, setCelebrate] = useState(false);
+  useEffect(() => {
+    const was = lastPercent.current;
+    lastPercent.current = progress.percent;
+    if (was < 100 && progress.percent >= 100 && progress.denominator > 0) {
+      burstConfetti();
+      setCelebrate(true);
+      const t = setTimeout(() => setCelebrate(false), 5200);
+      return () => clearTimeout(t);
+    }
+  }, [progress.percent, progress.denominator]);
+
   const shownRows = ordered.map((s) => ({ s, eps: sortedEpisodes(s).filter(visible) })).filter((r) => !filtering || r.eps.length > 0);
   const gridCols = filtering ? Math.max(0, ...shownRows.map((r) => r.eps.length)) : maxCols;
 
   return (
     <div className="stack">
+      {celebrate && (
+        <div className="celebrate" role="status" aria-live="polite">
+          <span className="celebrate-emoji" aria-hidden="true">🎉</span>
+          <div>
+            <b>{title ? `You finished ${title}!` : "You finished it!"}</b>
+            <span>
+              {progress.watched} {progress.watched === 1 ? "episode" : "episodes"}
+              {avg != null ? ` · your average ★ ${avg.toFixed(2)}` : ""}
+            </span>
+          </div>
+          <button type="button" className="btn small ghost" onClick={() => setCelebrate(false)} aria-label="Close">✕</button>
+        </div>
+      )}
       <ProgressBar p={progress} big />
       <div className="stat-row">
         <div className="stat"><span className="v">{avg != null ? avg.toFixed(2) : "–"}</span><span className="k">Episode average (calculated)</span></div>

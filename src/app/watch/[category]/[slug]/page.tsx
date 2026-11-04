@@ -123,7 +123,7 @@ export default async function DetailPage({ params, searchParams }: { params: Par
         </div>
 
         {m.type !== "movie" && (
-          <EpisodesSection mediaId={m.id} type={m.type} version={m.version} initial={m.segments} initialSegment={Number((await searchParams).segment) || null} initialView={episodeViewOf(m.id)} initialArcs={listArcs(m.id)} />
+          <EpisodesSection mediaId={m.id} type={m.type} title={m.title} version={m.version} initial={m.segments} initialSegment={Number((await searchParams).segment) || null} initialView={episodeViewOf(m.id)} initialArcs={listArcs(m.id)} />
         )}
 
         {(m.overview || about.length > 0) && (
