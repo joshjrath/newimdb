@@ -21,6 +21,7 @@ export const CHANGELOG: ChangelogEntry[] = [
       "Currently airing needs a recent episode or a dated next one, so finished shows like Gravity Falls leave it; undated leftovers after old finales are removed.",
       "A season that came out over a year ago isn't shown as \"new\" (The Legend of Korra).",
       "Each show's page has \"Check for new episodes\" to update its air dates right away.",
+      "Lists can hold anything: search finds titles you haven't added too, and adds them to your library as Plan to watch.",
     ],
   },
   {

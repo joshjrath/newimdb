@@ -13,12 +13,14 @@ import { LIST_SORTS, type ListItemView, type ListSort, type ListSummary } from "
 
 type List = ListSummary & { items: ListItemView[] };
 type Hit = { id: number; title: string; year: number | null; type: MediaType; posterUrl: string | null };
+type Ext = { provider: string; providerId: string; type: MediaType; title: string; year: number | null; posterUrl: string | null; note: string | null };
 
 /** One list: reorder (drag or arrows), sort, add from your library, and see progress. */
 export function ListDetail({ initial }: { initial: List }) {
   const [list, setList] = useState(initial);
   const [q, setQ] = useState("");
   const [hits, setHits] = useState<Hit[]>([]);
+  const [ext, setExt] = useState<Ext[]>([]);
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(initial.name);
   const [description, setDescription] = useState(initial.description);
@@ -30,17 +32,38 @@ export function ListDetail({ initial }: { initial: List }) {
 
   useEffect(() => {
     if (timer.current) clearTimeout(timer.current);
-    if (q.trim().length < 2) return setHits([]);
+    if (q.trim().length < 2) {
+      setExt([]);
+      return setHits([]);
+    }
     timer.current = setTimeout(async () => {
+      const term = q.trim();
       try {
-        const r = await api<{ items: Hit[] }>(`/api/media?q=${encodeURIComponent(q.trim())}&pageSize=12&sort=title`);
+        const r = await api<{ items: Hit[] }>(`/api/media?q=${encodeURIComponent(term)}&pageSize=12&sort=title`);
         setHits(r.items);
       } catch {}
-    }, 200);
+      // Anything else, from TMDB / TVmaze / AniList: movies, shows and anime.
+      if (term.length >= 3) {
+        const found = await Promise.all(
+          (["movie", "tv", "anime"] as MediaType[]).map((t) =>
+            api<{ results: Ext[] }>(`/api/metadata/search?type=${t}&q=${encodeURIComponent(term)}`)
+              .then((x) => x.results.slice(0, 5).map((r) => ({ ...r, type: t })))
+              .catch(() => [] as Ext[]),
+          ),
+        );
+        setExt(found.flat());
+      }
+    }, 300);
   }, [q]);
 
   const add = async (h: Hit) => {
     const r = await run(() => api<{ list: List }>(`/api/lists/${list.id}/items`, { body: { mediaIds: [h.id] } }), { ok: `Added ${h.title}.` });
+    if (r) setList(r.list);
+  };
+  const addExternal = async (x: Ext) => {
+    const r = await run(() => api<{ list: List; created: boolean }>(`/api/lists/${list.id}/add`, { body: { type: x.type, provider: x.provider, providerId: x.providerId, title: x.title, year: x.year } }), {
+      ok: (res) => (res.created ? `Added ${x.title} (also in your library as Plan to watch).` : `Added ${x.title}.`),
+    });
     if (r) setList(r.list);
   };
   const remove = async (i: ListItemView) => {
@@ -104,9 +127,10 @@ export function ListDetail({ initial }: { initial: List }) {
       <div className="toolbar">
         <label className="search-add grow">
           <span className="visually-hidden">Add a title from your library</span>
-          <input className="input" type="search" value={q} placeholder="Add a movie, show or anime from your library…" onChange={(e) => setQ(e.target.value)} />
-          {hits.length > 0 && (
+          <input className="input" type="search" value={q} placeholder="Add any movie, show or anime…" onChange={(e) => setQ(e.target.value)} />
+          {(hits.length > 0 || ext.length > 0) && (
             <ul className="search-hits">
+              {hits.length > 0 && <li className="search-hits-h">In your library</li>}
               {hits.map((h) => (
                 <li key={h.id}>
                   <button type="button" disabled={busy || onList.has(h.id)} onClick={() => add(h)}>
@@ -116,6 +140,20 @@ export function ListDetail({ initial }: { initial: List }) {
                   </button>
                 </li>
               ))}
+              {ext.filter((x) => !hits.some((h) => h.type === x.type && h.title.toLowerCase() === x.title.toLowerCase() && (h.year ?? 0) === (x.year ?? 0))).length > 0 && (
+                <li className="search-hits-h">Not in your library yet</li>
+              )}
+              {ext
+                .filter((x) => !hits.some((h) => h.type === x.type && h.title.toLowerCase() === x.title.toLowerCase() && (h.year ?? 0) === (x.year ?? 0)))
+                .map((x) => (
+                  <li key={`${x.provider}:${x.providerId}:${x.type}`}>
+                    <button type="button" disabled={busy} onClick={() => addExternal(x)}>
+                      <Poster url={x.posterUrl} title={x.title} />
+                      <span>{x.title}<small>{TYPE_LABEL[x.type]}{x.year ? ` · ${x.year}` : ""}{x.note ? ` · ${x.note}` : ""}</small></span>
+                      <b>+ Add</b>
+                    </button>
+                  </li>
+                ))}
             </ul>
           )}
         </label>

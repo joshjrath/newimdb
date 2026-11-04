@@ -823,3 +823,4 @@ button.stat-btn:hover { background: var(--raised); }
 .rail-hits .poster-fallback { font-size: 0; }
 .rail-hits .rail-hits-all { display: block; text-align: center; color: var(--cat, #c7b6f6); }
 .rec-with > h2::before { display: none; } .rec-with > h2 .person-avatar { width: 30px; height: 30px; font-size: 13px; }
+.search-hits-h { padding: 8px 10px 4px; font: 700 11px/1 var(--display); letter-spacing: .06em; text-transform: uppercase; color: var(--muted, rgba(255,255,255,.5)); }
