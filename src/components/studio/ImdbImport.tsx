@@ -19,7 +19,6 @@ interface Title {
   title: string;
   originalTitle: string | null;
   year: number | null;
-  titleType: string;
   rating: number | null;
   ratedOn: string | null;
   ratedEpisodes: number;
@@ -39,6 +38,12 @@ interface Preview {
 
 type Filter = "all" | MediaType | "animated" | "existing" | "skip";
 const PAGE = 100;
+
+/** IMDb writes types two ways ("TV Series" in the export, "tvSeries" in its datasets); show one plain form. */
+function friendlyType(t: string): string {
+  const spaced = t.replace(/([a-z])([A-Z])/g, "$1 $2").replace(/^tv\b/i, "TV").trim();
+  return spaced.charAt(0).toUpperCase() + spaced.slice(1);
+}
 const CHOICE_LABEL: Record<Choice, string> = { movie: "Movie", tv: "TV", anime: "Anime", skip: "Skip" };
 
 export function ImdbImport() {
@@ -242,7 +247,7 @@ export function ImdbImport() {
               </summary>
               <ul className="plain-list">
                 {preview.unresolved.slice(0, 200).map((u) => <li key={u.imdbId}>{u.title} <span className="hint">({u.imdbId}) {u.reason}</span></li>)}
-                {preview.skipped.slice(0, 200).map((u) => <li key={u.imdbId}>{u.title} <span className="hint">({u.titleType})</span></li>)}
+                {preview.skipped.slice(0, 200).map((u) => <li key={u.imdbId}>{u.title} <span className="hint">({friendlyType(u.titleType)})</span></li>)}
               </ul>
             </details>
           )}
@@ -270,7 +275,7 @@ export function ImdbImport() {
           <div className="table-wrap">
             <table className="manage">
               <thead>
-                <tr><th>Title</th><th>On IMDb</th><th>Your rating</th><th>Rated</th><th>Episodes</th><th>Import as</th></tr>
+                <tr><th>Title</th><th>Your rating</th><th>Rated</th><th>Episodes</th><th>Import as</th></tr>
               </thead>
               <tbody>
                 {rows.map((t) => (
@@ -279,7 +284,6 @@ export function ImdbImport() {
                       <span className="t">{t.title}</span> <span className="hint">{t.year ?? ""}</span>
                       <div className="hint">{[t.originalTitle, t.imdbId, t.existingId && "already in your library"].filter(Boolean).join(" · ")}</div>
                     </td>
-                    <td className="hint">{t.titleType}</td>
                     <td>{t.rating != null ? <Stars value={t.rating} size={13} /> : <span className="hint">–</span>}</td>
                     <td className="hint">{formatDate(t.ratedOn)}</td>
                     <td className="hint">{t.kind === "show" ? `${t.ratedEpisodes} rated of ${t.episodeCount}` : ""}</td>
@@ -294,7 +298,7 @@ export function ImdbImport() {
                     </td>
                   </tr>
                 ))}
-                {rows.length === 0 && <tr><td colSpan={6} className="hint" style={{ textAlign: "center", padding: 28 }}>Nothing in this view.</td></tr>}
+                {rows.length === 0 && <tr><td colSpan={5} className="hint" style={{ textAlign: "center", padding: 28 }}>Nothing in this view.</td></tr>}
               </tbody>
             </table>
           </div>
