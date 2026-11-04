@@ -5,5 +5,6 @@ export const SORT_OPTIONS = [
   { key: "title", label: "Title" },
   { key: "year", label: "Release year" },
   { key: "added", label: "Recently added" },
+  { key: "progress", label: "Progress (unfinished)" },
 ] as const;
 export type SortKey = (typeof SORT_OPTIONS)[number]["key"];

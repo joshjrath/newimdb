@@ -19,6 +19,7 @@ export function parseListQuery(params: Params, defaults: { sort?: SortKey; pageS
     tag: get("tag"),
     withPerson: Number(get("with")) > 0 ? Number(get("with")) : undefined,
     genre: Number(get("genre")) > 0 ? Number(get("genre")) : undefined,
+    watchedIn: get("where") === "theater" || get("where") === "streaming" ? (get("where") as "theater" | "streaming") : undefined,
     q: get("q"),
     featured: get("featured") === "1" || undefined,
     sort: pick(SORT_OPTIONS.map((s) => s.key), get("sort")) ?? defaults.sort ?? "recent",

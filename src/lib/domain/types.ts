@@ -118,6 +118,8 @@ export interface ReviewView {
   spoiler: boolean;
   status: WatchStatus | null;
   featured: boolean;
+  /** Movies: in a theater or streaming at home. */
+  watchedIn: "theater" | "streaming" | null;
   visibility: "private";
   source: ReviewSource;
   sourceRef: string | null;

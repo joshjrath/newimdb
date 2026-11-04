@@ -121,6 +121,15 @@ export function ManageTable({ items, total, page, pageSize, filters, people, gen
             <button className="btn small" disabled={busy || !tag.trim()} onClick={() => bulk("remove_tag", { tag: tag.trim() })}>Remove tag</button>
           </span>
           <label>
+            <span className="visually-hidden">Where watched</span>
+            <select className="select small" disabled={busy} value="" onChange={(e) => e.target.value && bulk("set_watched_in", { watchedIn: e.target.value === "none" ? null : e.target.value })}>
+              <option value="">Watched in…</option>
+              <option value="theater">🎬 Theater</option>
+              <option value="streaming">📺 Streaming</option>
+              <option value="none">Clear</option>
+            </select>
+          </label>
+          <label>
             <span className="visually-hidden">Move to</span>
             <select className="select small" disabled={busy} value="" onChange={(e) => e.target.value && bulk("set_type", { mediaType: e.target.value }, `Moved to ${TYPE_LABEL[e.target.value as MediaType]}. It'll stay there.`)}>
               <option value="">Move to…</option>

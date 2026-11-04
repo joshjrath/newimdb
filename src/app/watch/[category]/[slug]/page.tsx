@@ -96,9 +96,10 @@ export default async function DetailPage({ params, searchParams }: { params: Par
                   ))}
                 </div>
               )}
-              {(r.watchedOn || m.tags.length > 0) && (
+              {(r.watchedOn || r.watchedIn || m.tags.length > 0) && (
                 <div className="detail-sub">
                   {r.watchedOn && <span>Watched {formatDate(r.watchedOn)}</span>}
+                  {r.watchedIn && <span className={`where-badge ${r.watchedIn}`}>{r.watchedIn === "theater" ? "🎬 In a theater" : "📺 Streaming"}</span>}
                   {m.tags.length > 0 && (
                     <span className="chips">
                       {m.tags.map((t) => (

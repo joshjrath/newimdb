@@ -36,13 +36,13 @@ export default async function LibraryPage({ params, searchParams }: { params: Pr
   const type = CATEGORY_TO_TYPE[cat];
   const sp = await searchParams;
   const query = { ...parseListQuery(sp, { pageSize: LIBRARY_PAGE_SIZE }), type };
-  const { status, tag, q, featured, sort, page = 1, withPerson, genre } = query;
+  const { status, tag, q, featured, sort, page = 1, withPerson, genre, watchedIn } = query;
   const { items, total, pageSize } = listMedia(query);
   const counts = countMedia();
   const tags = allTags(getDb(), type);
   const people = listPeople(getDb(), type).filter((p) => p.count > 0);
   const genres = listGenres(getDb(), type).filter((g) => g.count > 0 || g.id === genre);
-  const filtered = Boolean(status || tag || q || featured || withPerson || genre);
+  const filtered = Boolean(status || tag || q || featured || withPerson || genre || watchedIn);
   const watching = type === "movie" || filtered || page > 1 ? [] : listWatching(type);
   // Shows you'd finished that have a new season: a strip up top, and a badge on their cards.
   const sections = type === "movie" ? { airing: [], upcoming: [], returning: [] } : listShowSections(type);
@@ -96,7 +96,7 @@ export default async function LibraryPage({ params, searchParams }: { params: Pr
             <span className="visually-hidden">Sort</span>
             <AutoSubmit>
               <select className="select" name="sort" defaultValue={sort}>
-                {SORT_OPTIONS.map((s) => (
+                {SORT_OPTIONS.filter((s) => type !== "movie" || s.key !== "progress").map((s) => (
                   <option key={s.key} value={s.key}>{s.label}</option>
                 ))}
               </select>
@@ -113,6 +113,12 @@ export default async function LibraryPage({ params, searchParams }: { params: Pr
             </Link>
           ))}
           <Link className="chip" href={href({ featured: featured ? undefined : "1" })} aria-current={featured ? "true" : undefined}>Featured</Link>
+          {type === "movie" &&
+            (["theater", "streaming"] as const).map((w) => (
+              <Link key={w} className="chip" href={href({ where: watchedIn === w ? undefined : w })} aria-current={watchedIn === w ? "true" : undefined}>
+                {w === "theater" ? "🎬 In theaters" : "📺 Streaming"}
+              </Link>
+            ))}
         </div>
         {genres.length > 0 && (
           <div className="chips with-chips" aria-label="Filter by genre">

@@ -40,6 +40,7 @@ export function LibraryCard({ m, returning }: { m: ListItem; returning?: Returni
           ))}
         {m.progress && <ProgressBar p={m.progress} />}
         <div className="card-meta">
+          {r.watchedIn && <span className={`where-badge ${r.watchedIn}`}>{r.watchedIn === "theater" ? "🎬 Theater" : "📺 Streaming"}</span>}
           {r.watchedOn && <span>Watched {formatDate(r.watchedOn)}</span>}
           {m.people.length > 0 && <span>With {m.people.map((p) => p.name).join(", ")}</span>}
           {m.tags.length > 0 && <span className="tags">{m.tags.join(", ")}</span>}

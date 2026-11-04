@@ -65,6 +65,8 @@ export const reviewSchema = z.object({
   spoiler: z.boolean(),
   status: statusSchema,
   featured: z.boolean(),
+  /** Movies: where you watched it. */
+  watchedIn: z.enum(["theater", "streaming"]).nullable().optional(),
   // Publishing is disabled in this release. Only "private" is accepted.
   visibility: z.literal("private"),
 });
@@ -148,7 +150,7 @@ export const bulkAssessSchema = z.object({
   rating: ratingSchema.optional(),
 });
 
-export const BULK_MEDIA_ACTIONS = ["feature", "unfeature", "delete", "set_status", "add_tag", "remove_tag", "add_person", "remove_person", "set_type"] as const;
+export const BULK_MEDIA_ACTIONS = ["feature", "unfeature", "delete", "set_status", "add_tag", "remove_tag", "add_person", "remove_person", "set_type", "set_watched_in"] as const;
 export type BulkMediaAction = (typeof BULK_MEDIA_ACTIONS)[number];
 
 export const bulkMediaSchema = z.object({
@@ -159,6 +161,8 @@ export const bulkMediaSchema = z.object({
   personId: z.number().int().positive().optional(),
   /** For set_type: move to Movies, TV Shows or Anime (and keep it there). */
   mediaType: mediaTypeSchema.optional(),
+  /** For set_watched_in: theater, streaming, or null to clear. */
+  watchedIn: z.enum(["theater", "streaming"]).nullable().optional(),
 });
 
 export const personNameSchema = z.object({ name: z.string().trim().min(1, "Enter a name.").max(60) });

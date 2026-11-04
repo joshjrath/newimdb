@@ -25,6 +25,7 @@ type Draft = {
   tags: string;
   people: number[];
   genreFilters: number[];
+  watchedIn: string;
 };
 
 function toDraft(m: MediaView): Draft {
@@ -36,6 +37,7 @@ function toDraft(m: MediaView): Draft {
     rating: m.review.rating, ratingLabel: s(m.review.ratingLabel), body: m.review.body, watchedOn: s(m.review.watchedOn),
     spoiler: m.review.spoiler, status: s(m.review.status), featured: m.review.featured, tags: m.tags.join(", "), people: m.people.map((p) => p.id).sort((a, b) => a - b),
     genreFilters: m.genreFilters.map((g) => g.id).sort((a, b) => a - b),
+    watchedIn: s(m.review.watchedIn),
   };
 }
 
@@ -53,7 +55,7 @@ function toPatch(d: Draft, version: number, saved?: Draft) {
     },
     review: {
       rating: d.rating, ratingLabel: txt(d.ratingLabel), body: d.body.replace(/\r\n?/g, "\n"), watchedOn: txt(d.watchedOn),
-      spoiler: d.spoiler, status: (txt(d.status) as never) ?? null, featured: d.featured, visibility: "private" as const,
+      spoiler: d.spoiler, status: (txt(d.status) as never) ?? null, featured: d.featured, watchedIn: (txt(d.watchedIn) as "theater" | "streaming" | null) ?? null, visibility: "private" as const,
     },
     tags: d.tags.split(",").map((t) => t.trim()).filter(Boolean),
     people: d.people,
@@ -208,6 +210,18 @@ export function EditEntry({ initial, people: allInitial, genres }: { initial: Me
             <label className="check"><input type="checkbox" checked={draft.spoiler} onChange={(e) => set("spoiler", e.target.checked)} /> Contains spoilers</label>
             <label className="check"><input type="checkbox" checked={draft.featured} onChange={(e) => set("featured", e.target.checked)} /> Featured</label>
           </div>
+          {type === "movie" && (
+            <div className="field">
+              <span className="label" id="where-label">Where you watched it</span>
+              <div className="chips" role="radiogroup" aria-labelledby="where-label">
+                {[["theater", "🎬 Theater"], ["streaming", "📺 Streaming"], ["", "Not set"]].map(([v, label]) => (
+                  <button key={v} type="button" role="radio" className="chip" aria-checked={draft.watchedIn === v} aria-pressed={draft.watchedIn === v} onClick={() => set("watchedIn", v)}>
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
           <label className="field">
             <span>Tags</span>
             <input className="input" value={draft.tags} onChange={(e) => set("tags", e.target.value)} placeholder="e.g. MCU, True Crime, Sitcom" />

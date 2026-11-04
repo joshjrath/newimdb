@@ -5,6 +5,7 @@ import { autoMergeDuplicates } from "../repo/duplicates";
 import { repairDone, repairInflatedShows } from "./repair";
 import { groupAnimeFranchises } from "../repo/franchise";
 import { upgradeGenreRules } from "../repo/genres";
+import { applyAutoStatus } from "../repo/autoStatus";
 import { getDb } from "../db";
 import { tvmazeEpisodesBySeason, tvmazeLookupImdb } from "../providers/tvmaze";
 import { tmdbConfigured, tmdbFindByImdb, tmdbTv } from "../providers/tmdb";
@@ -118,6 +119,11 @@ export function startEpisodeScheduler() {
       return;
     }
     autoMergeDuplicates(); // the same film or show never stays twice
+    try {
+      applyAutoStatus(); // status follows progress: completed, watching, on hold, dropped
+    } catch (e) {
+      console.error("[status] automatic status failed:", e);
+    }
     try {
       groupAnimeFranchises(); // anime films, OVAs and extra seasons go inside their series
     } catch (e) {

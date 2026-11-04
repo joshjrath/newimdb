@@ -10,6 +10,7 @@ import type { SortKey } from "../domain/sort";
 import { audit } from "./audit";
 import { setMediaTags, tagsFor, tagsForMany } from "./tags";
 import { applyGenres, genresForMany, setMediaGenres } from "./genres";
+import { applyAutoStatus, markStatusManual } from "./autoStatus";
 import { addPersonTo, peopleFor, peopleForMany, removePersonFrom, requirePerson, setMediaPeople } from "./people";
 
 export { RepoError };
@@ -61,6 +62,7 @@ const REVIEW_COLUMNS: Record<keyof ReviewInput, string> = {
   spoiler: "spoiler",
   status: "status",
   featured: "featured",
+  watchedIn: "watched_in",
   visibility: "visibility",
 };
 
@@ -73,6 +75,7 @@ function mapReview(r: Row | undefined, m: MediaRow): ReviewView {
     spoiler: Boolean(r?.spoiler),
     status: (r?.status as WatchStatus | null) ?? null,
     featured: Boolean(r?.featured),
+    watchedIn: (r?.watched_in as "theater" | "streaming" | null) ?? null,
     visibility: "private",
     source: (r?.source as ReviewSource) ?? "manual",
     sourceRef: (r?.source_ref as string | null) ?? null,
@@ -206,7 +209,18 @@ export function getEpisode(episodeId: number, db = getDb()): EpisodeView | null 
 
 export type { SortKey };
 
+/** Not out yet (and not watched or rated): the SQL twin of isUnaired(). Expects `e` (episode) and `a` (assessment). */
+const UNAIRED_SQL = `(COALESCE(a.state, 'unwatched') = 'unwatched' AND a.rating IS NULL AND (
+    e.air_date = 'TBA'
+    OR (length(e.air_date) = 4 AND CAST(e.air_date AS INTEGER) >= CAST(strftime('%Y', 'now') AS INTEGER))
+    OR (length(e.air_date) >= 10 AND substr(e.air_date, 1, 10) > date('now'))))`;
+
+/** A show's percent watched (null when there's nothing to watch), for sorting by progress. */
+const PERCENT_SQL = `(SELECT 100.0 * SUM(a.state = 'watched') / NULLIF(COUNT(e.id) - SUM(COALESCE(a.state, '') = 'skipped') - SUM(${UNAIRED_SQL}), 0)
+   FROM segment s JOIN episode e ON e.segment_id = s.id LEFT JOIN episode_assessment a ON a.episode_id = e.id WHERE s.media_id = m.id)`;
+
 const ORDER_BY: Record<SortKey, string> = {
+  progress: `${PERCENT_SQL} IS NULL, ${PERCENT_SQL} DESC, COALESCE(r.last_watched_at, r.watched_on) DESC`,
   recent: `COALESCE(r.last_watched_at, r.watched_on, r.created_at) DESC, m.id DESC`,
   rating: `r.rating IS NULL, r.rating DESC, COALESCE(r.last_watched_at, r.watched_on) DESC`,
   title: `m.title COLLATE NOCASE ASC`,
@@ -220,6 +234,8 @@ export interface ListQuery {
   tag?: string;
   /** Only titles watched with this person. */
   withPerson?: number;
+  /** Movies watched in a theater or streaming. */
+  watchedIn?: "theater" | "streaming";
   /** Only titles in this genre filter. */
   genre?: number;
   q?: string;
@@ -254,6 +270,10 @@ export function listMedia(query: ListQuery, db = getDb()): { items: ListItem[]; 
     where.push(`EXISTS (SELECT 1 FROM media_person mp WHERE mp.media_id = m.id AND mp.person_id = ?)`);
     params.push(query.withPerson);
   }
+  if (query.watchedIn) {
+    where.push(`r.watched_in = ?`);
+    params.push(query.watchedIn);
+  }
   if (query.genre) {
     where.push(`EXISTS (SELECT 1 FROM media_genre mg WHERE mg.media_id = m.id AND mg.genre_id = ? AND mg.state != 'excluded')`);
     params.push(query.genre);
@@ -263,6 +283,8 @@ export function listMedia(query: ListQuery, db = getDb()): { items: ListItem[]; 
     const like = `%${query.q.trim().replace(/[\\%_]/g, (c) => "\\" + c)}%`;
     params.push(like, like, like);
   }
+  // Sorting by progress lists shows you haven't finished (100% ones are left out).
+  if (query.sort === "progress") where.push(`m.type != 'movie' AND COALESCE(${PERCENT_SQL}, 0) < 100`);
   const whereSql = where.length ? `WHERE ${where.join(" AND ")}` : "";
   const pageSize = Math.min(Math.max(query.pageSize ?? 24, 1), 200);
   const page = Math.max(query.page ?? 1, 1);
@@ -270,7 +292,7 @@ export function listMedia(query: ListQuery, db = getDb()): { items: ListItem[]; 
   const rows = db
     .prepare(
       `SELECT m.*, r.rating, r.rating_label, r.body, r.watched_on, r.spoiler, r.status, r.featured, r.visibility,
-              r.source, r.source_ref, r.last_watched_at, r.created_at AS r_created_at, r.updated_at AS r_updated_at
+              r.source, r.source_ref, r.last_watched_at, r.watched_in, r.created_at AS r_created_at, r.updated_at AS r_updated_at
        FROM media m LEFT JOIN review r ON r.media_id = m.id ${whereSql}
        ORDER BY ${ORDER_BY[query.sort ?? "recent"]} LIMIT ? OFFSET ?`,
     )
@@ -295,11 +317,7 @@ function progressFor(db: DB, ids: number[]): Map<number, Progress> {
               SUM(CASE WHEN a.state = 'watched' THEN 1 ELSE 0 END) AS watched,
               SUM(CASE WHEN a.rating IS NOT NULL THEN 1 ELSE 0 END) AS rated,
               SUM(CASE WHEN a.state = 'skipped' THEN 1 ELSE 0 END) AS skipped,
-              SUM(CASE WHEN COALESCE(a.state, 'unwatched') = 'unwatched' AND a.rating IS NULL AND (
-                    e.air_date = 'TBA'
-                    OR (length(e.air_date) = 4 AND CAST(e.air_date AS INTEGER) >= CAST(strftime('%Y', 'now') AS INTEGER))
-                    OR (length(e.air_date) >= 10 AND substr(e.air_date, 1, 10) > date('now'))
-                  ) THEN 1 ELSE 0 END) AS unaired
+              SUM(CASE WHEN ${UNAIRED_SQL} THEN 1 ELSE 0 END) AS unaired
        FROM segment s JOIN episode e ON e.segment_id = s.id
        LEFT JOIN episode_assessment a ON a.episode_id = e.id
        WHERE s.media_id IN (${placeholders(ids.length)}) GROUP BY s.media_id`,
@@ -470,7 +488,9 @@ export function updateMedia(
   db.transaction(() => {
     checkVersion(db, id, patch.version);
     if (patch.metadata) writeMetadata(db, id, patch.metadata);
+    const before = (db.prepare(`SELECT status FROM review WHERE media_id = ?`).get(id) as { status: string | null } | undefined)?.status ?? null;
     if (patch.review) writeReview(db, id, patch.review);
+    if (patch.review && "status" in patch.review && (patch.review.status ?? null) !== before) markStatusManual(db, id);
     if (patch.tags) setMediaTags(db, id, patch.tags);
     if (patch.people) setMediaPeople(db, id, patch.people);
     if (patch.genreFilters) setMediaGenres(db, id, patch.genreFilters);
@@ -547,7 +567,7 @@ export function deleteMedia(ids: number[], db = getDb()): number {
   })();
 }
 
-export function bulkUpdate(ids: number[], action: BulkMediaAction, opts: { status?: WatchStatus | null; tag?: string; personId?: number; mediaType?: MediaType }, db = getDb()): number {
+export function bulkUpdate(ids: number[], action: BulkMediaAction, opts: { status?: WatchStatus | null; tag?: string; personId?: number; mediaType?: MediaType; watchedIn?: "theater" | "streaming" | null }, db = getDb()): number {
   if (action === "delete") return deleteMedia(ids, db);
   if (action === "set_type") {
     if (!opts.mediaType) throw new RepoError("invalid", "Pick Movies, TV Shows or Anime.");
@@ -560,9 +580,13 @@ export function bulkUpdate(ids: number[], action: BulkMediaAction, opts: { statu
     const existing = (db.prepare(`SELECT id FROM media WHERE id IN (${placeholders(ids.length)})`).all(...ids) as { id: number }[]).map((r) => r.id);
     for (const id of existing) {
       if (action === "feature" || action === "unfeature") writeReview(db, id, { featured: action === "feature" });
-      else if (action === "set_status") writeReview(db, id, { status: opts.status ?? null });
+      else if (action === "set_status") {
+        writeReview(db, id, { status: opts.status ?? null });
+        markStatusManual(db, id);
+      }
       else if (action === "add_tag" && opts.tag) setMediaTags(db, id, [...tagsFor(db, id), opts.tag]);
       else if (action === "remove_tag" && tag) setMediaTags(db, id, tagsFor(db, id).filter((x) => x.toLowerCase() !== tag));
+      else if (action === "set_watched_in") writeReview(db, id, { watchedIn: opts.watchedIn ?? null });
       else if (action === "add_person") addPersonTo(db, id, opts.personId!);
       else if (action === "remove_person") removePersonFrom(db, id, opts.personId!);
       bumpVersion(db, id);
@@ -762,6 +786,7 @@ function writeAssessments(db: DB, mediaId: number, items: { episodeId: number; p
     for (const { episodeId, patch } of items) watched = writeAssessment(db, episodeId, patch, now) || watched;
     if (watched) touchWatched(db, mediaId, now);
     audit(db, action, "media", mediaId, { count: items.length });
+    applyAutoStatus(db, { mediaIds: [mediaId] }); // e.g. the last episode moves it to Completed
   })();
 }
 
