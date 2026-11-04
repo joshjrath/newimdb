@@ -1,5 +1,7 @@
 import fs from "node:fs";
 import { dataDir, getDb } from "@/lib/db";
+import { isOwner } from "@/lib/guard";
+import { recentErrors } from "@/lib/errorLog";
 
 export const dynamic = "force-dynamic";
 
@@ -20,5 +22,9 @@ export async function GET() {
     out.ok = false;
     out.error = String((e as Error).message ?? e).replace(/\/[^\s'"]+/g, "…").slice(0, 300);
   }
+  // Signed in: also the last server errors, so the error page can say what broke.
+  try {
+    if (out.ok && (await isOwner())) out.errors = recentErrors().slice(0, 5);
+  } catch {}
   return Response.json(out, { status: out.ok ? 200 : 503, headers: { "Cache-Control": "no-store" } });
 }

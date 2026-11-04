@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 
 /** Shown instead of a bare "Application error": what happened, and what to try. */
 export default function ErrorPage({ error, reset }: { error: Error & { digest?: string }; reset: () => void }) {
-  const [health, setHealth] = useState<{ ok: boolean; error?: string; diskFreeMb?: number } | null>(null);
+  const [health, setHealth] = useState<{ ok: boolean; error?: string; diskFreeMb?: number; errors?: { digest: string | null; message: string; path: string }[] } | null>(null);
   useEffect(() => {
     fetch("/api/health", { cache: "no-store" })
       .then((r) => r.json())
@@ -23,6 +23,14 @@ export default function ErrorPage({ error, reset }: { error: Error & { digest?: 
           <button className="btn primary" onClick={reset}>Try again</button>
           <a className="btn ghost" href="/">Home</a>
         </div>
+        {(() => {
+          const hit = health?.errors?.find((x) => x.digest === error.digest) ?? health?.errors?.[0];
+          return hit ? (
+            <p className="notice">
+              What broke (send this to Claude): <code>{hit.message}</code> on <code>{hit.path}</code>
+            </p>
+          ) : null;
+        })()}
         {error.digest && <p className="hint">Error code {error.digest}</p>}
       </div>
     </main>
