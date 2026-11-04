@@ -2,6 +2,7 @@ import { z } from "zod";
 import { getDb, nowIso, type DB } from "../db";
 import type { LetterboxdEntry } from "../domain/letterboxd";
 import { audit } from "./audit";
+import { aliasFor } from "./franchise";
 import { findByProviderIds, getMedia, insertMedia, titleMatcher, touchWatched } from "./media";
 import { setMediaTags, tagsFor } from "./tags";
 
@@ -76,6 +77,11 @@ export function previewLetterboxd(entries: LetterboxdEntry[], db = getDb()): Pre
     }
     if (seen.has(key)) {
       return { entry, match: "duplicate_in_batch", mediaId: seen.get(key) ?? null, existingTitle: entry.filmTitle, reason: "Another diary entry for the same film (rewatch). Merged into one review.", defaultAction: "update" };
+    }
+    const alias = aliasFor(db, { tmdbId: entry.tmdbId, title: entry.filmTitle, year: entry.filmYear });
+    if (alias) {
+      const host = getMedia(alias.mediaId, db);
+      if (host) return row("conflict", host.id, host.title, `Part of ${host.title} in your library now (grouped with its series).`, "skip");
     }
     const existing = findByProviderIds("movie", { tmdbId: entry.tmdbId }, db) ?? findByProviderIds("anime", { tmdbId: entry.tmdbId }, db) ?? matchTitle(entry.filmTitle, entry.filmYear);
     if (existing) {

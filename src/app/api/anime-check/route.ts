@@ -1,7 +1,8 @@
 import { ownerApi } from "@/lib/guard";
 import { animeCandidates, animeCheckState, runAnimeCheck } from "@/lib/anime/job";
+import { lastGrouped } from "@/lib/repo/franchise";
 
-const status = () => ({ check: animeCheckState(), unchecked: animeCandidates().length });
+const status = () => ({ check: animeCheckState(), unchecked: animeCandidates().length, grouped: lastGrouped() });
 
 /** Where the automatic anime sorting is up to, and what it moved last time. */
 export const GET = ownerApi(async () => status());

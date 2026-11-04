@@ -86,7 +86,7 @@ export const mediaPatchSchema = z
   .strict();
 
 const genreList = z.array(z.string().trim().min(1).max(60)).max(30).optional();
-export const genreRulesSchema = z.object({ genres: genreList, allGenres: genreList, keywords: genreList }).strict();
+export const genreRulesSchema = z.object({ genres: genreList, allGenres: genreList, keywords: genreList, titles: z.array(z.string().trim().min(1).max(80)).max(200).optional() }).strict();
 export const genreCreateSchema = z.object({ name: z.string().trim().min(1).max(40), rules: genreRulesSchema.optional() }).strict();
 export const genrePatchSchema = z.object({ name: z.string().trim().min(1).max(40).optional(), rules: genreRulesSchema.optional() }).strict();
 

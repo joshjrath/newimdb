@@ -54,6 +54,11 @@ export function startKeywordJob(opts: { quiet?: boolean } = {}): KeywordJob | nu
   const running = g.__keywordJob;
   if (running?.state === "running") return running;
   const db = getDb();
+  // Keywords fetched before studios/franchises were included are fetched again, once.
+  if (!db.prepare(`SELECT 1 FROM app_flag WHERE key = 'keywords-v2'`).get()) {
+    db.prepare(`UPDATE media SET keywords_fetched_at = NULL WHERE keywords_fetched_at IS NOT NULL`).run();
+    db.prepare(`INSERT INTO app_flag (key, at) VALUES ('keywords-v2', ?)`).run(nowIso());
+  }
   if (!tmdbConfigured() || !anyKeywordGenres(db)) return null;
   const todo = db
     .prepare(`SELECT id, type, tmdb_id, imdb_id, genres FROM media WHERE keywords_fetched_at IS NULL AND (tmdb_id IS NOT NULL OR imdb_id IS NOT NULL) ORDER BY id`)

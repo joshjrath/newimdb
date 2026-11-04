@@ -7,6 +7,7 @@ import { guessMediaType, imdbKind, isLikelyAnimeCandidate, type ImdbRating } fro
 import { defaultSegmentLabel, MEDIA_TYPES, type MediaType } from "../domain/types";
 import type { EpisodeLookup } from "../imdb/datasets";
 import { audit } from "./audit";
+import { aliasFor } from "./franchise";
 import { fillEmptyMetadata, insertMedia, restoreAssessments, titleMatcher, touchWatched } from "./media";
 
 /**
@@ -72,7 +73,7 @@ function existingFinder(db: DB) {
     return matchers.get(type)!;
   };
   return (t: { imdbId: string; kind: "movie" | "show"; title: string; originalTitle: string | null; year: number | null }): number | null => {
-    const byId = existingByImdb(db, t.imdbId);
+    const byId = existingByImdb(db, t.imdbId) ?? aliasFor(db, { imdbId: t.imdbId })?.mediaId;
     if (byId) return byId;
     const types: MediaType[] = t.kind === "movie" ? ["movie", "anime"] : ["tv", "anime"];
     for (const type of types) {
@@ -347,6 +348,21 @@ export function commitImdbPlan(plan: ImdbPlan, overrides: Record<string, MediaTy
       const choice = overrides[t.imdbId] ?? t.guess;
       if (choice === "skip") {
         counts.skipped++;
+        continue;
+      }
+      // Already folded into a series (an anime film inside its show): update it there.
+      const alias = aliasFor(db, { imdbId: t.imdbId });
+      if (alias) {
+        if (t.rating != null && alias.segmentId) {
+          const ep = db.prepare(`SELECT id FROM episode WHERE segment_id = ? ORDER BY number LIMIT 1`).get(alias.segmentId) as { id: number } | undefined;
+          if (ep)
+            db.prepare(
+              `INSERT INTO episode_assessment (episode_id, state, rating, filler, watched_at, updated_at) VALUES (?, 'watched', ?, 0, ?, ?)
+               ON CONFLICT(episode_id) DO UPDATE SET rating = COALESCE(episode_assessment.rating, excluded.rating), state = 'watched'`,
+            ).run(ep.id, t.rating, t.ratedOn, nowIso());
+        }
+        counts.updated++;
+        recordImport(db, t.imdbId, alias.mediaId, "merge_alias");
         continue;
       }
       const existing = findExisting(t);

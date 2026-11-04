@@ -16,7 +16,7 @@ const list = (s: string) => s.split(",").map((x) => x.trim()).filter(Boolean);
 export function GenreSettings({ initial }: { initial: GenreState }) {
   const [st, setSt] = useState(initial);
   const [name, setName] = useState("");
-  const [editing, setEditing] = useState<{ id: number; name: string; genres: string; allGenres: string; keywords: string } | null>(null);
+  const [editing, setEditing] = useState<{ id: number; name: string; genres: string; allGenres: string; keywords: string; titles: string } | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<number | null>(null);
   const { busy, run } = useAction();
   const have = new Set(st.genres.map((g) => norm(g.name)));
@@ -48,7 +48,7 @@ export function GenreSettings({ initial }: { initial: GenreState }) {
 
   const save = async () => {
     if (!editing) return;
-    const body = { name: editing.name, rules: { genres: list(editing.genres), allGenres: list(editing.allGenres), keywords: list(editing.keywords) } };
+    const body = { name: editing.name, rules: { genres: list(editing.genres), allGenres: list(editing.allGenres), keywords: list(editing.keywords), titles: list(editing.titles) } };
     const r = await run(() => api<GenreState & { tagged: number }>(`/api/genres/${editing.id}`, { method: "PATCH", body }), { ok: "Saved and re-tagged." });
     if (r) {
       setSt(r);
@@ -129,6 +129,10 @@ export function GenreSettings({ initial }: { initial: GenreState }) {
                     <span className="label">Any of these TMDB keywords</span>
                     <input className="input" value={editing.keywords} placeholder="superhero, heist" onChange={(e) => setEditing({ ...editing, keywords: e.target.value })} />
                   </label>
+                  <label>
+                    <span className="label">Title contains any of</span>
+                    <input className="input" value={editing.titles} placeholder="Spider-Man, Batman" onChange={(e) => setEditing({ ...editing, titles: e.target.value })} />
+                  </label>
                   <div className="toolbar">
                     <button className="btn small primary" disabled={busy || !editing.name.trim()}>Save</button>
                     <button type="button" className="btn small ghost" onClick={() => setEditing(null)}>Cancel</button>
@@ -156,7 +160,7 @@ export function GenreSettings({ initial }: { initial: GenreState }) {
                   <button
                     className="btn small ghost"
                     onClick={() =>
-                      setEditing({ id: g.id, name: g.name, genres: (g.rules.genres ?? []).join(", "), allGenres: (g.rules.allGenres ?? []).join(", "), keywords: (g.rules.keywords ?? []).join(", ") })
+                      setEditing({ id: g.id, name: g.name, genres: (g.rules.genres ?? []).join(", "), allGenres: (g.rules.allGenres ?? []).join(", "), keywords: (g.rules.keywords ?? []).join(", "), titles: (g.rules.titles ?? []).join(", ") })
                     }
                   >
                     Edit

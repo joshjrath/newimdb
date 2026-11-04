@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { openDatabase, setDbForTests } from "@/lib/db";
 import { createMedia, getMedia, listMedia, updateMedia } from "@/lib/repo/media";
-import { applyGenres, createGenre, deleteGenre, listGenres } from "@/lib/repo/genres";
+import { applyGenres, createGenre, deleteGenre, listGenres, upgradeGenreRules } from "@/lib/repo/genres";
 import { matchesGenre, rulesForCustom } from "@/lib/domain/genres";
 import { exportAll, restoreBackup } from "@/lib/repo/backup";
 
@@ -18,7 +18,7 @@ describe("genre rules", () => {
     expect(matchesGenre({ allGenres: ["Documentary", "Crime"] }, ["Crime", "Documentary"], [])).toBe(true);
     expect(matchesGenre({ keywords: ["superhero"] }, ["Action"], ["Superhero"])).toBe(true);
     expect(rulesForCustom("true crime").allGenres).toEqual(["Documentary", "Crime"]);
-    expect(rulesForCustom("Kaiju")).toEqual({ genres: ["Kaiju"], keywords: ["kaiju"] });
+    expect(rulesForCustom("Kaiju")).toEqual({ genres: ["Kaiju"], keywords: ["kaiju"], titles: ["Kaiju"] });
   });
 });
 
@@ -69,5 +69,25 @@ describe("genre filters", () => {
     const items = listMedia({}, db2).items;
     expect(items.length).toBe(2);
     expect(items.every((i) => i.genreFilters.map((g) => g.name).join() === "Action")).toBe(true);
+  });
+});
+
+describe("Marvel and DC", () => {
+  it("match by title without a TMDB key, and by studio or franchise keywords", () => {
+    const db = fresh();
+    const agatha = createMedia({ type: "tv", metadata: { title: "Agatha All Along", genres: ["Comedy", "Drama"] } }, {}, db);
+    const batman = createMedia({ type: "movie", metadata: { title: "The Batman", genres: ["Action"] } }, {}, db);
+    const thing = createMedia({ type: "movie", metadata: { title: "Authority", genres: ["Drama"] } }, {}, db);
+    const mcu = createMedia({ type: "movie", metadata: { title: "Some MCU Film", genres: ["Action"] } }, {}, db);
+    db.prepare(`UPDATE media SET keywords = ? WHERE id = ?`).run(JSON.stringify(["marvel cinematic universe (mcu)", "marvel studios"]), mcu.id);
+    // Added by name before there was a preset: upgraded.
+    db.prepare(`INSERT INTO genre (name, rules, created_at) VALUES ('Marvel', '{"genres":["Marvel"],"keywords":["marvel"]}', '2026-01-01')`).run();
+    createGenre("DC", undefined, db);
+    expect(upgradeGenreRules(db)).toBe(1);
+    const names = (id: number) => getMedia(id, db)!.genreFilters.map((g) => g.name);
+    expect(names(agatha.id)).toEqual(["Marvel"]);
+    expect(names(mcu.id)).toEqual(["Marvel"]);
+    expect(names(batman.id)).toEqual(["DC"]);
+    expect(names(thing.id)).toEqual([]); // "Thor" isn't in "Authority"
   });
 });

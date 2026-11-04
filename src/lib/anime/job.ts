@@ -5,6 +5,7 @@ import { tmdbConfigured, tmdbFindByImdb, tmdbOrigin } from "../providers/tmdb";
 import { anilistFind } from "../providers/anime";
 import { audit } from "../repo/audit";
 import { autoMergeDuplicates } from "../repo/duplicates";
+import { groupAnimeFranchises } from "../repo/franchise";
 import type { MediaType } from "../domain/types";
 
 /**
@@ -136,7 +137,10 @@ export async function runAnimeCheck(opts: { all?: boolean } = {}): Promise<Anime
     s.finishedAt = nowIso();
   }
   // A title moved to Anime may now meet its twin there (e.g. an anime film from Letterboxd).
-  if (s.moved.length) autoMergeDuplicates(db);
+  if (s.moved.length) {
+    autoMergeDuplicates(db);
+    groupAnimeFranchises(db);
+  }
   return s;
 }
 

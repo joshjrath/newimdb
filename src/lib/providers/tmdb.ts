@@ -193,10 +193,16 @@ export async function tmdbFindByImdb(imdbId: string, prefer: "movie" | "tv"): Pr
 
 /** A title's TMDB genres and keywords (one request). Keywords power filters like Superhero. */
 export async function tmdbGenresAndKeywords(kind: "movie" | "tv", id: number): Promise<{ genres: string[]; keywords: string[] }> {
-  const r = await get<{ genres?: { name: string }[]; keywords?: { keywords?: { name: string }[]; results?: { name: string }[] } }>(`/${kind}/${id}`, {
-    append_to_response: "keywords",
-  });
-  return { genres: (r.genres ?? []).map((g) => g.name), keywords: (r.keywords?.keywords ?? r.keywords?.results ?? []).map((k) => k.name.toLowerCase()) };
+  const r = await get<{
+    genres?: { name: string }[];
+    keywords?: { keywords?: { name: string }[]; results?: { name: string }[] };
+    production_companies?: { name: string }[];
+    networks?: { name: string }[];
+    belongs_to_collection?: { name: string } | null;
+  }>(`/${kind}/${id}`, { append_to_response: "keywords" });
+  // Studios and franchise count as keywords too, so filters like Marvel, DC or Pixar can match them.
+  const extra = [...(r.production_companies ?? []), ...(r.networks ?? []), ...(r.belongs_to_collection ? [r.belongs_to_collection] : [])].map((x) => x.name.toLowerCase());
+  return { genres: (r.genres ?? []).map((g) => g.name), keywords: [...new Set([...(r.keywords?.keywords ?? r.keywords?.results ?? []).map((k) => k.name.toLowerCase()), ...extra])] };
 }
 
 /** A title's original language, countries and genres on TMDB. */

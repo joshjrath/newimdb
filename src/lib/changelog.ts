@@ -12,6 +12,18 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-11-04-episode-fixes-airing-grouping",
+    date: "2026-11-04",
+    title: "Fixed episode counts, Currently airing, and grouped anime",
+    items: [
+      "Shows the new-episode check had inflated (like Bleach at ~700 episodes) are put back to IMDb's seasons. The check can no longer add episodes that don't line up.",
+      "New seasons only count episodes with a real air date as out.",
+      "TV Shows and Anime have Currently airing (until the finale, back for the next premiere) and Upcoming rows.",
+      "Anime films, OVAs and extra seasons are grouped into their series (JJK 0 and Season 2 inside Jujutsu Kaisen); Naruto Shippuden and Bleach: TYBW stay separate.",
+      "Marvel, DC, Star Wars, Pixar, Ghibli and A24 genre filters match by title, studio and franchise. Filters you'd already added are upgraded.",
+    ],
+  },
+  {
     id: "2026-11-04-new-seasons",
     date: "2026-11-04",
     title: "New seasons of shows you finished",

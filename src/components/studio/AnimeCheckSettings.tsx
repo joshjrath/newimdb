@@ -6,8 +6,9 @@ import { useAction } from "../useAction";
 import { plural } from "@/lib/domain/text";
 import { TYPE_LABEL } from "@/lib/domain/types";
 import type { AnimeCheckState } from "@/lib/anime/job";
+import type { GroupedTitle } from "@/lib/repo/franchise";
 
-type Res = { check: AnimeCheckState; unchecked: number };
+type Res = { check: AnimeCheckState; unchecked: number; grouped: GroupedTitle[] };
 
 /** Settings → Anime sorting: anime filed under TV Shows or Movies is moved to Anime by itself. */
 export function AnimeCheckSettings() {
@@ -41,7 +42,7 @@ export function AnimeCheckSettings() {
         <span className="hint">Automatic. Anything you move yourself stays where you put it.</span>
       </header>
       <p className="muted">
-        Animated titles are checked against TVmaze, AniList and TMDB (when its key is set). Japanese anime filed under TV Shows or Movies, like Bleach, moves to Anime, and animation that isn&apos;t anime moves out. Reviews, ratings and episodes come along unchanged. To move a title yourself, select it in <Link href="/studio">Studio</Link> and choose &quot;Move to&quot;.
+        Animated titles are checked against TVmaze, AniList and TMDB (when its key is set). Japanese anime filed under TV Shows or Movies, like Bleach, moves to Anime, and animation that isn&apos;t anime moves out. Films, OVAs and extra seasons of the same anime are grouped into one entry (Jujutsu Kaisen 0 and Season 2 go inside Jujutsu Kaisen), while separate series like Naruto Shippuden or Bleach: Thousand-Year Blood War stay their own. Reviews, ratings and episodes come along unchanged. To move a title yourself, select it in <Link href="/studio">Studio</Link> and choose &quot;Move to&quot;.
       </p>
       {c && (
         <div className="stack tight">
@@ -69,6 +70,18 @@ export function AnimeCheckSettings() {
                 </li>
               ))}
             </ul>
+          )}
+          {s.grouped.length > 0 && (
+            <>
+              <p className="hint">Grouped into their series (films, OVAs and extra seasons):</p>
+              <ul className="plain-list">
+                {s.grouped.map((x) => (
+                  <li key={x.id}>
+                    {x.title} <span className="hint">→</span> <Link href={`/studio/${x.intoId}`}>{x.into}</Link>
+                  </li>
+                ))}
+              </ul>
+            </>
           )}
           {!c.running && s.unchecked > 0 && <div><button className="btn" disabled={busy} onClick={() => load(true)}>Check now</button></div>}
         </div>

@@ -1,6 +1,6 @@
 import { getDb, nowIso, type DB } from "../db";
 import { RepoError } from "../errors";
-import { matchesGenre, needsKeywords, rulesForCustom, type GenreRules } from "../domain/genres";
+import { GENRE_PRESETS, isPlainCustomRules, matchesGenre, needsKeywords, norm, rulesForCustom, type GenreRules } from "../domain/genres";
 import { audit } from "./audit";
 import type { GenreRef } from "../domain/types";
 
@@ -25,7 +25,7 @@ const parse = (s: string): GenreRules => {
   }
 };
 const clean = (list?: string[]) => (list ?? []).map((x) => x.replace(/\s+/g, " ").trim()).filter(Boolean).slice(0, 30);
-const cleanRules = (r: GenreRules): GenreRules => ({ genres: clean(r.genres), allGenres: clean(r.allGenres), keywords: clean(r.keywords).map((k) => k.toLowerCase()) });
+const cleanRules = (r: GenreRules): GenreRules => ({ genres: clean(r.genres), allGenres: clean(r.allGenres), keywords: clean(r.keywords).map((k) => k.toLowerCase()), titles: (r.titles ?? []).map((x) => x.replace(/\s+/g, " ").trim()).filter(Boolean).slice(0, 200) });
 
 export function listGenres(db = getDb(), type?: string): GenreWithCount[] {
   const rows = db
@@ -54,8 +54,8 @@ export function applyGenres(db = getDb(), opts: { genreIds?: number[]; mediaIds?
   const genres = getGenres(db, opts.genreIds);
   if (!genres.length) return 0;
   const media = (opts.mediaIds?.length
-    ? db.prepare(`SELECT id, genres, keywords FROM media WHERE id IN (${placeholders(opts.mediaIds.length)})`).all(...opts.mediaIds)
-    : db.prepare(`SELECT id, genres, keywords FROM media`).all()) as { id: number; genres: string; keywords: string | null }[];
+    ? db.prepare(`SELECT id, title, original_title, genres, keywords FROM media WHERE id IN (${placeholders(opts.mediaIds.length)})`).all(...opts.mediaIds)
+    : db.prepare(`SELECT id, title, original_title, genres, keywords FROM media`).all()) as { id: number; title: string; original_title: string | null; genres: string; keywords: string | null }[];
   const existing = new Map<string, string>();
   const byMedia = opts.mediaIds?.length ? ` AND media_id IN (${placeholders(opts.mediaIds.length)})` : "";
   for (const r of db
@@ -76,7 +76,7 @@ export function applyGenres(db = getDb(), opts: { genreIds?: number[]; mediaIds?
       for (const g of genres) {
         const state = existing.get(`${m.id}:${g.id}`);
         if (state === "manual" || state === "excluded") continue;
-        const hit = matchesGenre(g.rules, titleGenres, keywords);
+        const hit = matchesGenre(g.rules, titleGenres, keywords, [m.title, m.original_title ?? ""]);
         if (hit && !state) {
           add.run(m.id, g.id);
           tagged++;
@@ -153,3 +153,19 @@ export function setMediaGenres(db: DB, mediaId: number, genreIds: number[]) {
 }
 
 export const anyKeywordGenres = (db = getDb()) => getGenres(db).some((g) => needsKeywords(g.rules));
+
+/**
+ * Filters you added by name before they had a preset (e.g. "Marvel", "DC") get the
+ * preset's rules, then the library is re-tagged. Rules you edited yourself are left alone.
+ */
+export function upgradeGenreRules(db = getDb()): number {
+  const upgraded: number[] = [];
+  for (const g of getGenres(db)) {
+    const preset = GENRE_PRESETS.find((p) => norm(p.name) === norm(g.name));
+    if (!preset || JSON.stringify(cleanRules(preset.rules)) === JSON.stringify(cleanRules(g.rules)) || !isPlainCustomRules(g.name, g.rules)) continue;
+    db.prepare(`UPDATE genre SET rules = ? WHERE id = ?`).run(JSON.stringify(cleanRules(preset.rules)), g.id);
+    upgraded.push(g.id);
+  }
+  if (upgraded.length) applyGenres(db, { genreIds: upgraded });
+  return upgraded.length;
+}

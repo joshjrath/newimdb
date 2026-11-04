@@ -3,6 +3,8 @@ import { startPosterJob } from "../posters/job";
 import { startAnimeCheck } from "../anime/job";
 import { autoMergeDuplicates } from "../repo/duplicates";
 import { repairDone, repairInflatedShows } from "./repair";
+import { groupAnimeFranchises } from "../repo/franchise";
+import { upgradeGenreRules } from "../repo/genres";
 import { getDb } from "../db";
 import { tvmazeEpisodesBySeason, tvmazeLookupImdb } from "../providers/tvmaze";
 import { tmdbConfigured, tmdbFindByImdb, tmdbTv } from "../providers/tmdb";
@@ -104,6 +106,11 @@ export async function runEpisodeSync(opts: { limit?: number; all?: boolean } = {
 export function startEpisodeScheduler() {
   if (g.__episodeTimer || process.env.EPISODE_SYNC === "off") return;
   getDb();
+  try {
+    upgradeGenreRules(); // e.g. a "Marvel" filter added by name gets the Marvel preset
+  } catch (e) {
+    console.error("[genres] upgrade failed:", e);
+  }
   const tick = () => {
     // Fix shows the old sync inflated before syncing anything else (once).
     if (!repairDone()) {
@@ -111,6 +118,11 @@ export function startEpisodeScheduler() {
       return;
     }
     autoMergeDuplicates(); // the same film or show never stays twice
+    try {
+      groupAnimeFranchises(); // anime films, OVAs and extra seasons go inside their series
+    } catch (e) {
+      console.error("[anime] grouping failed:", e);
+    }
     startAnimeCheck(); // anime filed under TV Shows or Movies moves to Anime
     startPosterJob({ quiet: true }); // any title still missing a poster gets one, without pressing a button
     void runEpisodeSync({ limit: 40 }).catch((e) => console.error("[episodes] sync failed:", e));
