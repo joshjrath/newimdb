@@ -1,8 +1,9 @@
 import { getDb, nowIso, type DB } from "../db";
 import { normalizeTitle } from "../domain/text";
 import type { MediaType } from "../domain/types";
-import { addSeedResults, becauseOf, matchPercent, pickSeeds, scoreCandidate, tasteProfile, type Candidate, type LibraryTitle, type Seed } from "../domain/recommend";
-import { tmdbConfigured, tmdbFindByImdb, tmdbGenreNames, tmdbRecommendations, tmdbWatchProviders, type TmdbRec, type WatchOption } from "../providers/tmdb";
+import { addSeedResults, becauseOf, featuresOf, finalScore, learnTaste, matchPercent, pickSeeds, predictTaste, supporters, tasteProfile, type Candidate, type LibraryTitle, type Seed } from "../domain/recommend";
+import { imdbRatings } from "../imdb/datasets";
+import { tmdbConfigured, tmdbFindByImdb, tmdbGenreNames, tmdbGenresAndKeywords, tmdbRecommendations, tmdbWatchProviders, type TmdbRec, type WatchOption } from "../providers/tmdb";
 import { anilistRecommendations, anilistStreaming, type AniRec } from "../providers/anime";
 
 /**
@@ -25,6 +26,10 @@ export interface Recommendation {
   match: number;
   because: string[];
   audience: { score: number; votes: number; source: string } | null;
+  /** IMDb's rating out of 10, when the title is on IMDb. */
+  imdb: { id: string; rating: number | null; votes: number | null } | null;
+  /** How many of your favourites point here. */
+  supporters: number;
   tmdb: { kind: "movie" | "tv"; id: number } | null;
   anilistId: number | null;
   malId: number | null;
@@ -103,12 +108,13 @@ interface LibRow {
   rating: number | null;
   status: string | null;
   last_watched_at: string | null;
+  keywords: string | null;
 }
 
 function loadLibrary(db: DB): LibRow[] {
   return db
     .prepare(
-      `SELECT m.id, m.type, m.title, m.original_title, m.year, m.genres, m.tmdb_id, m.imdb_id, m.anilist_id, m.mal_id, r.rating, r.status, r.last_watched_at
+      `SELECT m.id, m.type, m.title, m.original_title, m.year, m.genres, m.keywords, m.tmdb_id, m.imdb_id, m.anilist_id, m.mal_id, r.rating, r.status, r.last_watched_at
        FROM media m LEFT JOIN review r ON r.media_id = m.id`,
     )
     .all() as LibRow[];
@@ -158,6 +164,10 @@ export async function buildRecommendations(db = getDb()): Promise<{ total: numbe
   const lib = loadLibrary(db);
   const library: LibraryTitle[] = lib.map((m) => ({ id: m.id, type: m.type, title: m.title, year: m.year, rating: m.rating, status: m.status, genres: parseList(m.genres), lastWatchedAt: m.last_watched_at }));
   const taste = tasteProfile(library);
+  // The taste model learns from every rating you've ever given, not just favourites.
+  const model = learnTaste(
+    lib.filter((m) => m.rating != null).map((m) => ({ rating: m.rating!, features: featuresOf({ type: m.type, year: m.year, genres: parseList(m.genres), keywords: parseList(m.keywords ?? "[]") }) })),
+  );
   const seeds = pickSeeds(library, taste);
   const seedById = new Map<number, Seed>(seeds.map((x) => [x.id, x]));
   const libById = new Map(lib.map((m) => [m.id, m]));
@@ -188,8 +198,6 @@ export async function buildRecommendations(db = getDb()): Promise<{ total: numbe
             id = hit?.tmdbId ?? null;
             kind = hit?.kind ?? kind;
             if (id) db.prepare(`UPDATE media SET tmdb_id = COALESCE(tmdb_id, ?) WHERE id = ?`).run(id, m.id);
-          } else if (m.type === "anime" && !m.mal_id && !m.anilist_id && (m.year != null && !m.genres.includes("TV"))) {
-            // anime stored with a TMDB id: TMDB knows it as a show unless it has no seasons, which we can't tell here
           }
           if (id) {
             const recs = await retry(() => tmdbRecommendations(kind, id!));
@@ -227,16 +235,50 @@ export async function buildRecommendations(db = getDb()): Promise<{ total: numbe
   };
   await Promise.all(Array.from({ length: keyed ? 3 : 1 }, work));
 
-  // Score, keep the best per category, then look up where to watch them.
-  s.step = "Finding where to watch";
-  const scored = [...pool.values()].map((c) => ({ c, score: scoreCandidate(c, taste) })).filter((x) => x.score > 0);
-  const best = Math.max(0, ...scored.map((x) => x.score));
-  const chosen = (["anime", "tv", "movie"] as MediaType[]).flatMap((type) =>
-    scored
-      .filter((x) => x.c.type === type)
+  // First pass: score on what we know (genres, year), keep a shortlist per category.
+  s.step = "Matching picks to your taste";
+  const featuresFor = new Map<string, string[]>();
+  const feat = (c: Candidate, keywords: string[] = []) => featuresOf({ type: c.type, year: c.year, genres: c.genres, keywords });
+  for (const c of pool.values()) featuresFor.set(c.key, feat(c, aniInfo.get(c.key)?.tags ?? []));
+  const prelim = (["anime", "tv", "movie"] as MediaType[]).flatMap((type) =>
+    [...pool.values()]
+      .filter((c) => c.type === type)
+      .map((c) => ({ c, score: finalScore({ ...c, features: featuresFor.get(c.key) }, taste, model) }))
       .sort((a, b) => b.score - a.score)
-      .slice(0, PER_TYPE),
+      .slice(0, PER_TYPE * 3),
   );
+  // Second pass: fetch each shortlisted title's keywords, studios and IMDb id, and re-score.
+  const imdbOf = new Map<string, string>();
+  s.total = prelim.length;
+  s.done = 0;
+  next = 0;
+  await Promise.all(
+    Array.from({ length: keyed ? 4 : 1 }, async () => {
+      for (let i = next++; i < prelim.length; i = next++) {
+        const { c } = prelim[i];
+        const t = tmdbInfo.get(c.key);
+        if (t && keyed) {
+          try {
+            const d = await retry(() => tmdbGenresAndKeywords(t.kind, t.id));
+            featuresFor.set(c.key, feat({ ...c, genres: d.genres.length ? d.genres : c.genres }, [...d.keywords, ...(aniInfo.get(c.key)?.tags ?? [])]));
+            if (d.imdbId) imdbOf.set(c.key, d.imdbId);
+          } catch {}
+        }
+        s.done++;
+      }
+    }),
+  );
+  const rescored = prelim.map(({ c }) => ({ c, score: finalScore({ ...c, features: featuresFor.get(c.key) }, taste, model), n: supporters(c) })).filter((x) => x.score > 0);
+  const best = Math.max(0, ...rescored.map((x) => x.score));
+  // A pick needs at least two of your favourites behind it. Only if a category would be
+  // nearly empty do single-favourite picks that strongly fit your taste fill it.
+  const chosen = (["anime", "tv", "movie"] as MediaType[]).flatMap((type) => {
+    const mine = rescored.filter((x) => x.c.type === type).sort((a, b) => b.score - a.score);
+    const backed = mine.filter((x) => x.n >= 2);
+    const fill = backed.length >= 10 ? [] : mine.filter((x) => x.n < 2 && predictTaste(model, featuresFor.get(x.c.key) ?? []) > 0.25);
+    return [...backed, ...fill].slice(0, PER_TYPE);
+  });
+  s.step = "Finding where to watch";
   s.total = chosen.length;
   s.done = 0;
   const out: { rec: Recommendation; score: number }[] = [];
@@ -269,7 +311,9 @@ export async function buildRecommendations(db = getDb()): Promise<{ total: numbe
           overview: t?.overview ?? a?.overview ?? null,
           genres: [...new Set([...(a?.genres ?? []), ...c.genres])].slice(0, 4),
           match: matchPercent(score, best),
-          because: becauseOf(c, seedById),
+          because: becauseOf(c, seedById, 3),
+          supporters: supporters(c),
+          imdb: imdbOf.has(c.key) ? { id: imdbOf.get(c.key)!, rating: null, votes: null } : null,
           audience: t ? { score: t.voteAverage, votes: t.voteCount, source: "TMDB" } : a?.averageScore != null ? { score: a.averageScore / 10, votes: a.popularity, source: "AniList" } : null,
           tmdb: t ? { kind: t.kind, id: t.id } : null,
           anilistId: a?.id ?? null,
@@ -281,6 +325,17 @@ export async function buildRecommendations(db = getDb()): Promise<{ total: numbe
   };
   await Promise.all(Array.from({ length: keyed ? 4 : 1 }, watchWork));
 
+  // IMDb's own rating for each pick (from IMDb's public ratings file).
+  try {
+    s.step = "Adding IMDb ratings";
+    const ratings = await imdbRatings(new Set(out.flatMap((o) => (o.rec.imdb ? [o.rec.imdb.id] : []))));
+    for (const o of out) {
+      const r = o.rec.imdb && ratings.get(o.rec.imdb.id);
+      if (r && o.rec.imdb) Object.assign(o.rec.imdb, r);
+    }
+  } catch (e) {
+    console.warn("[recommend] IMDb ratings unavailable:", (e as Error).message);
+  }
   const now = nowIso();
   db.transaction(() => {
     db.prepare(`DELETE FROM recommendation`).run();

@@ -1,4 +1,10 @@
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { gzipSync } from "node:zlib";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+process.env.DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "watch-recs-"));
 import { freshDb } from "./helpers";
 import { createMedia } from "@/lib/repo/media";
 import { buildRecommendations, dismissRecommendation, listRecommendations } from "@/lib/recommend/job";
@@ -45,17 +51,20 @@ describe("recommendations", () => {
     vi.stubGlobal("fetch", vi.fn(async (url: string) => {
       if (url.includes("/genre/")) return json({ genres: [{ id: 80, name: "Crime" }, { id: 16, name: "Animation" }] });
       if (url.includes("/949/recommendations")) return json({ results: [rec(10, "Thief"), rec(3, "Already Seen"), rec(20, "Akira", { genre_ids: [16], original_language: "ja" })] });
-      if (url.includes("/1538/recommendations")) return json({ results: [rec(10, "Thief"), rec(11, "Drive")] });
+      if (url.includes("/1538/recommendations")) return json({ results: [rec(10, "Thief"), rec(11, "Drive"), rec(20, "Akira", { genre_ids: [16], original_language: "ja" })] });
+      if (url.includes("/movie/10?")) return json({ genres: [{ name: "Crime" }], imdb_id: "tt0081613", keywords: { keywords: [{ name: "heist" }] } });
+      if (url.includes("title.ratings.tsv.gz")) return new Response(gzipSync("tconst\taverageRating\tnumVotes\ntt0081613\t7.3\t30000\n"), { status: 200 });
       if (url.includes("/watch/providers")) return json({ results: { US: { link: "https://tmdb/watch", flatrate: [{ provider_name: "Netflix", logo_path: "/n.jpg" }, { provider_name: "Netflix basic with Ads", logo_path: "/n2.jpg" }, { provider_name: "Hulu", logo_path: "/h.jpg" }] } } });
       return json({ results: [] });
     }));
     await buildRecommendations();
     const { byType } = listRecommendations();
-    expect(byType.movie.map((r) => r.title)).toEqual(["Thief", "Drive"]); // Thief: both favourites agree
+    expect(byType.movie.map((r) => r.title)).toEqual(["Thief"]); // backed by both favourites; Drive has only one
     expect(byType.movie[0].because).toEqual(["Heat", "Collateral"]);
+    expect(byType.movie[0].imdb).toEqual({ id: "tt0081613", rating: 7.3, votes: 30000 });
     expect(byType.movie[0].watch.map((w) => w.name)).toEqual(["Netflix", "Hulu"]);
     expect(byType.anime.map((r) => r.title)).toEqual(["Akira"]); // Japanese animation goes under Anime
     dismissRecommendation(byType.movie[0].key);
-    expect(listRecommendations().byType.movie.map((r) => r.title)).toEqual(["Drive"]);
+    expect(listRecommendations().byType.movie).toEqual([]);
   });
 });

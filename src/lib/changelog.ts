@@ -12,6 +12,18 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-11-04-smarter-picks-views-filler",
+    date: "2026-11-04",
+    title: "Smarter picks, anime views, filler, and select many",
+    items: [
+      "Recommended learns from every rating you've given (genres, keywords, studios, decades), needs two or more of your favourites behind each pick, and shows its IMDb rating.",
+      "Anime pages can group episodes by story order, release order, seasons, cours, your own arcs, or one long run.",
+      "Filler episodes are marked automatically from animefillerlist.com.",
+      "Tap Select on any library page to pick many titles and add who you watched with, a tag, a genre, a status or a list in one go.",
+      "Placeholder seasons IMDb lists before they exist (like Spider-Man's Season 2–4) are removed.",
+    ],
+  },
+  {
     id: "2026-11-04-stats-recs-lists",
     date: "2026-11-04",
     title: "Recommended, Lists, Statistics, and fairer automatic status",

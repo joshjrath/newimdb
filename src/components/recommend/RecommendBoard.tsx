@@ -15,6 +15,21 @@ const SECTIONS: { type: MediaType; title: string; cat: string }[] = [
   { type: "movie", title: "Movies", cat: "movies" },
 ];
 
+/** IMDb's yellow badge with the rating, linking to the title on IMDb. */
+function ImdbBadge({ r, big }: { r: Recommendation; big?: boolean }) {
+  if (!r.imdb?.rating) return r.audience && !r.imdb ? <span className="aud-badge">{r.audience.source} {r.audience.score.toFixed(1)}</span> : null;
+  return (
+    <a className={`imdb-badge${big ? " big" : ""}`} href={`https://www.imdb.com/title/${r.imdb.id}/`} target="_blank" rel="noopener noreferrer" title={`${r.imdb.votes?.toLocaleString("en-GB") ?? "?"} votes on IMDb`}>
+      <b>IMDb</b> {r.imdb.rating.toFixed(1)}
+    </a>
+  );
+}
+
+const becauseText = (r: Recommendation) => {
+  const more = Math.max(0, r.supporters - r.because.length);
+  return { names: r.because, more };
+};
+
 function ago(iso: string | null) {
   if (!iso) return "never";
   const h = Math.round((Date.now() - Date.parse(iso)) / 3_600_000);
@@ -60,7 +75,7 @@ export function RecommendBoard({ initial, rated }: { initial: Data; rated: numbe
     <div className="recs">
       <div className="recs-bar">
         <span className="hint">
-          From your {rated.toLocaleString("en-GB")} ratings, favourite genres and what you&apos;re watching · updated {ago(d.computedAt)}
+          Learned from all {rated.toLocaleString("en-GB")} of your ratings: every genre, keyword, studio and decade you rate up or down. Each pick is backed by at least two of your favourites · updated {ago(d.computedAt)}
         </span>
         <button className="btn small" disabled={busy || d.state.running} onClick={refresh}>
           {d.state.running ? `Picking… ${d.state.total ? `${d.state.done}/${d.state.total}` : ""}` : "Refresh"}
@@ -84,14 +99,18 @@ export function RecommendBoard({ initial, rated }: { initial: Data; rated: numbe
         <section className="rec-hero" style={hero.backdropUrl ? { backgroundImage: `linear-gradient(90deg, rgba(12,12,14,.96) 30%, rgba(12,12,14,.55) 70%, rgba(12,12,14,.2)), url(${posterSrc(hero.backdropUrl)})` } : undefined}>
           <div className="rec-hero-poster"><Poster url={hero.posterUrl} title={hero.title} priority /></div>
           <div className="rec-hero-body">
-            <span className="rec-match big">{hero.match}% match</span>
+            <div className="toolbar" style={{ gap: 8 }}>
+              <span className="rec-match big">{hero.match}% match</span>
+              <ImdbBadge r={hero} big />
+            </div>
             <h2>{hero.title}</h2>
             <p className="rec-meta">{[hero.year, ...hero.genres.slice(0, 3)].filter(Boolean).join(" · ")}</p>
             {hero.because.length > 0 && <p className="rec-because">
                 Because you loved{" "}
-                {hero.because.map((b, i) => (
-                  <span key={b}>{i > 0 && " and "}<b>{b}</b></span>
+                {becauseText(hero).names.map((b, i, all) => (
+                  <span key={b}>{i > 0 && (i === all.length - 1 && !becauseText(hero).more ? " and " : ", ")}<b>{b}</b></span>
                 ))}
+                {becauseText(hero).more > 0 && <> and {becauseText(hero).more} more of your favourites</>}
               </p>}
             {hero.overview && <p className="rec-overview">{hero.overview}</p>}
             <div className="rec-hero-watch">
@@ -129,8 +148,12 @@ export function RecommendBoard({ initial, rated }: { initial: Data; rated: numbe
                     </div>
                   </div>
                   <h3>{r.title}</h3>
-                  <p className="rec-meta">{[r.year, r.genres[0]].filter(Boolean).join(" · ")}</p>
-                  {r.because[0] && <p className="rec-because small">Because of <b>{r.because[0]}</b></p>}
+                  <p className="rec-meta">{[r.year, r.genres[0]].filter(Boolean).join(" · ")} <ImdbBadge r={r} /></p>
+                  {r.because[0] && (
+                    <p className="rec-because small" title={`Because you loved ${r.because.join(", ")}`}>
+                      Because of <b>{r.because[0]}</b>{r.supporters > 1 ? ` +${r.supporters - 1}` : ""}
+                    </p>
+                  )}
                   <WatchIcons options={r.watch} />
                 </article>
               ))}
