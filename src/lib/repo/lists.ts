@@ -18,7 +18,8 @@ const UNAIRED = `(COALESCE(a.state, 'unwatched') = 'unwatched' AND a.rating IS N
 
 const ORDER: Record<ListSort, (a: ListItemView, b: ListItemView) => number> = {
   manual: (a, b) => a.position - b.position,
-  release: (a, b) => (a.year ?? 9999) - (b.year ?? 9999) || a.position - b.position,
+  // To the day when known (Supergirl in June before Lanterns in August), else by year.
+  release: (a, b) => (a.releaseDate ?? (a.year ? `${a.year}-12-31` : "9999")).localeCompare(b.releaseDate ?? (b.year ? `${b.year}-12-31` : "9999")) || a.position - b.position,
   watched: (a, b) => (a.watchedOn ?? "9999").localeCompare(b.watchedOn ?? "9999") || a.position - b.position,
   rating: (a, b) => (b.rating ?? -1) - (a.rating ?? -1) || a.position - b.position,
   title: (a, b) => a.title.localeCompare(b.title),
@@ -29,6 +30,7 @@ function items(db: DB, listId: number): ListItemView[] {
   const rows = db
     .prepare(
       `SELECT li.media_id AS mediaId, li.position, m.type, m.title, m.year, m.poster_url AS posterUrl, r.rating, r.status,
+              COALESCE(m.release_date, (SELECT MIN(substr(e.air_date, 1, 10)) FROM segment s JOIN episode e ON e.segment_id = s.id WHERE s.media_id = m.id AND length(e.air_date) >= 10)) AS releaseDate,
               COALESCE(r.watched_on, r.last_watched_at) AS watchedOn, r.watched_on AS watchedDate,
               (SELECT SUM(a.state = 'watched') FROM segment s JOIN episode e ON e.segment_id = s.id LEFT JOIN episode_assessment a ON a.episode_id = e.id WHERE s.media_id = m.id) AS watched,
               (SELECT COUNT(e.id) - SUM(COALESCE(a.state, '') = 'skipped') - SUM(${UNAIRED}) - SUM(m.type = 'anime' AND COALESCE(a.filler, 0) = 1 AND COALESCE(a.state, 'unwatched') = 'unwatched' AND a.rating IS NULL AND NOT COALESCE(${UNAIRED}, 0)) FROM segment s JOIN episode e ON e.segment_id = s.id LEFT JOIN episode_assessment a ON a.episode_id = e.id WHERE s.media_id = m.id) AS total

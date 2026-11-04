@@ -34,6 +34,8 @@ export const metadataSchema = z.object({
   title: z.string().trim().min(1, "Title is required.").max(300),
   originalTitle: optText(300),
   year: z.number().int().min(1870).max(2100).nullable(),
+  /** Full release (or premiere) date, YYYY-MM-DD, so lists can sort to the day. */
+  releaseDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
   overview: optText(5000),
   posterUrl: httpUrl,
   backdropUrl: httpUrl,

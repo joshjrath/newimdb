@@ -54,6 +54,11 @@ export function startKeywordJob(opts: { quiet?: boolean } = {}): KeywordJob | nu
   const running = g.__keywordJob;
   if (running?.state === "running") return running;
   const db = getDb();
+  // Once: fetch again for titles without a full release date (it comes with the keywords).
+  if (!db.prepare(`SELECT 1 FROM app_flag WHERE key = 'keywords-v3-dates'`).get()) {
+    db.prepare(`UPDATE media SET keywords_fetched_at = NULL WHERE release_date IS NULL`).run();
+    db.prepare(`INSERT OR IGNORE INTO app_flag (key, at) VALUES ('keywords-v3-dates', ?)`).run(nowIso());
+  }
   // Keywords fetched before studios/franchises were included are fetched again, once.
   if (!db.prepare(`SELECT 1 FROM app_flag WHERE key = 'keywords-v2'`).get()) {
     db.prepare(`UPDATE media SET keywords_fetched_at = NULL WHERE keywords_fetched_at IS NOT NULL`).run();
@@ -69,6 +74,7 @@ export function startKeywordJob(opts: { quiet?: boolean } = {}): KeywordJob | nu
   g.__keywordJob = job;
 
   const save = db.prepare(`UPDATE media SET keywords = ?, keywords_fetched_at = ?, tmdb_id = COALESCE(tmdb_id, ?) WHERE id = ?`);
+  const saveDate = db.prepare(`UPDATE media SET release_date = ? WHERE id = ? AND release_date IS NULL`);
   const fillGenres = db.prepare(`UPDATE media SET genres = ? WHERE id = ? AND genres = '[]'`);
   const touched: number[] = [];
   let next = 0;
@@ -93,6 +99,7 @@ export function startKeywordJob(opts: { quiet?: boolean } = {}): KeywordJob | nu
                 const r = await withRetry(() => tmdbGenresAndKeywords(kind, tmdbId!));
                 keywords = r.keywords;
                 if (r.genres.length && t.genres === "[]") fillGenres.run(JSON.stringify(r.genres), t.id);
+                if (r.releaseDate) saveDate.run(r.releaseDate, t.id);
                 job.found++;
               }
               save.run(JSON.stringify(keywords), nowIso(), tmdbId, t.id);

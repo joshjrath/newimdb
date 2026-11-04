@@ -17,6 +17,8 @@ export interface ListItemView {
   type: MediaType;
   title: string;
   year: number | null;
+  /** YYYY-MM-DD: release (movies) or premiere (shows), from the title or its first episode. */
+  releaseDate: string | null;
   posterUrl: string | null;
   rating: number | null;
   status: string | null;

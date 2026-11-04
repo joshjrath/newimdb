@@ -27,6 +27,15 @@ describe("lists", () => {
   });
 });
 
+describe("release order to the day", () => {
+  it("puts Supergirl (June) before Lanterns (August), same year", async () => {
+    const sg = createMedia({ type: "movie", metadata: { title: "Supergirl", year: 2026, releaseDate: "2026-06-26" } });
+    const ln = createMedia({ type: "tv", metadata: { title: "Lanterns", year: 2026 }, segments: [{ kind: "season", label: "Season 1", seasonNumber: 1, courNumber: null, episodeCount: 1, episodes: [{ number: 1, title: "Pilot", airDate: "2026-08-16", overview: null, providerRef: null }] }] });
+    const id = createList({ name: "DCU", mediaIds: [ln.id, sg.id], sort: "release" });
+    expect(getList(id)!.items.map((i) => [i.title, i.releaseDate])).toEqual([["Supergirl", "2026-06-26"], ["Lanterns", "2026-08-16"]]);
+  });
+});
+
 describe("sorting both ways", () => {
   it("reverses any sort", async () => {
     const { listMedia: lm } = await import("@/lib/repo/media");

@@ -9,6 +9,7 @@ import { Poster } from "../Poster";
 import { ListProgress } from "./ListProgress";
 import { plural } from "@/lib/domain/text";
 import { mediaHref } from "@/lib/domain/links";
+import { formatDate } from "@/lib/format";
 import { TYPE_LABEL, type MediaType } from "@/lib/domain/types";
 import { LIST_SORTS, type ListItemView, type ListSort, type ListSummary } from "@/lib/domain/lists";
 
@@ -225,7 +226,7 @@ export function ListDetail({ initial }: { initial: List }) {
             <div className="list-item-body">
               <Link href={mediaHref({ id: i.mediaId, type: i.type, title: i.title })} className="list-item-title">{i.title}</Link>
               <span className="hint">
-                <span className={`type-dot t-${i.type}`} /> {TYPE_LABEL[i.type]}{i.year ? ` · ${i.year}` : ""}{i.rating != null ? ` · ★ ${i.rating}` : ""}
+                <span className={`type-dot t-${i.type}`} /> {TYPE_LABEL[i.type]}{i.releaseDate ? ` · ${formatDate(i.releaseDate)}` : i.year ? ` · ${i.year}` : ""}{i.rating != null ? ` · ★ ${i.rating}` : ""}
               </span>
               <ListProgress thin percent={i.done * 100} label={i.type === "movie" ? (i.done ? "Watched" : "Not watched") : `${i.watched}/${i.total} episodes`} />
             </div>

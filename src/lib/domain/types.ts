@@ -154,6 +154,8 @@ export interface MediaView {
   letterboxdUrl: string | null;
   metadataSource: string | null;
   lockedFields: string[];
+  /** YYYY-MM-DD when known (movies: release; shows: premiere). */
+  releaseDate?: string | null;
   thirdPartyRating: number | null;
   thirdPartyRatingSource: string | null;
   version: number;

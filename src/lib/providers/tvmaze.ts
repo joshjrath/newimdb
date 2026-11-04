@@ -84,6 +84,7 @@ export async function tvmazeShow(id: string, opts: DetailsOptions = {}): Promise
     metadata: {
       title: show.name,
       year: yearOf(show.premiered),
+      releaseDate: show.premiered && /^\d{4}-\d{2}-\d{2}$/.test(show.premiered) ? show.premiered : null,
       overview: htmlToTextOrNull(show.summary),
       posterUrl: show.image?.original ?? show.image?.medium ?? null,
       runtimeMin: show.averageRuntime ?? show.runtime ?? null,

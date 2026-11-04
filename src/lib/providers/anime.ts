@@ -105,6 +105,7 @@ export async function jikanDetails(malId: string, opts: DetailsOptions = {}): Pr
       title: a.title_english || a.title,
       originalTitle: a.title_english && a.title_english !== a.title ? a.title : a.title_japanese,
       year: a.year ?? yearOf(a.aired?.from),
+      releaseDate: a.aired?.from?.slice(0, 10) ?? null,
       overview: a.synopsis,
       posterUrl: a.images.jpg?.large_image_url ?? a.images.jpg?.image_url ?? null,
       genres: [...(a.genres ?? []), ...(a.themes ?? [])].map((g) => g.name),
@@ -126,7 +127,7 @@ interface AniMedia {
   id: number;
   idMal: number | null;
   title: { romaji: string | null; english: string | null; native: string | null };
-  startDate: { year: number | null };
+  startDate: { year: number | null; month?: number | null; day?: number | null };
   coverImage: { extraLarge: string | null; large: string | null };
   description: string | null;
   episodes: number | null;
@@ -135,7 +136,7 @@ interface AniMedia {
   averageScore: number | null;
 }
 
-const FIELDS = `id idMal title { romaji english native } startDate { year } coverImage { extraLarge large } description(asHtml: false) episodes format genres averageScore`;
+const FIELDS = `id idMal title { romaji english native } startDate { year month day } coverImage { extraLarge large } description(asHtml: false) episodes format genres averageScore`;
 
 async function anilist<T>(query: string, variables: Record<string, unknown>): Promise<T> {
   const r = await fetchJson<{ data: T; errors?: { message: string }[] }>("anilist", ANILIST, {
@@ -247,6 +248,7 @@ export async function anilistDetails(id: string): Promise<ProviderDetails> {
       title: m.title.english || m.title.romaji || "Untitled",
       originalTitle: m.title.english ? m.title.romaji : m.title.native,
       year: m.startDate.year,
+      releaseDate: m.startDate.year && m.startDate.month && m.startDate.day ? `${m.startDate.year}-${String(m.startDate.month).padStart(2, "0")}-${String(m.startDate.day).padStart(2, "0")}` : null,
       overview: htmlToTextOrNull(m.description),
       posterUrl: m.coverImage.extraLarge ?? m.coverImage.large,
       genres: m.genres,

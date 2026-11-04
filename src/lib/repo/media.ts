@@ -36,6 +36,7 @@ const METADATA_COLUMNS: Record<keyof MetadataInput, string> = {
   title: "title",
   originalTitle: "original_title",
   year: "year",
+  releaseDate: "release_date",
   overview: "overview",
   posterUrl: "poster_url",
   backdropUrl: "backdrop_url",
@@ -53,6 +54,8 @@ const METADATA_COLUMNS: Record<keyof MetadataInput, string> = {
   thirdPartyRatingSource: "third_party_rating_source",
 };
 const JSON_COLUMNS = new Set(["genres", "locked_fields"]);
+/** A YYYY-MM-DD date, or null. */
+export const isoDay = (d: string | null | undefined) => (d && /^\d{4}-\d{2}-\d{2}/.test(d) ? d.slice(0, 10) : null);
 
 const REVIEW_COLUMNS: Record<keyof ReviewInput, string> = {
   rating: "rating",

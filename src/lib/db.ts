@@ -309,6 +309,13 @@ const MIGRATIONS: string[] = [
   `
   ALTER TABLE recommendation ADD COLUMN person_id INTEGER;
   `,
+  // 12 — full release dates (lists sort to the day) and shareable list links
+  `
+  ALTER TABLE media ADD COLUMN release_date TEXT;
+  ALTER TABLE list ADD COLUMN share_token TEXT;
+  ALTER TABLE list ADD COLUMN share_ratings INTEGER NOT NULL DEFAULT 0;
+  CREATE UNIQUE INDEX IF NOT EXISTS list_share_token ON list(share_token);
+  `,
 ];
 
 /** Whether the database was created just now (no earlier data), per connection. */
