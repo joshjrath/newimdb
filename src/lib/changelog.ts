@@ -12,6 +12,16 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-11-04-anime-sorting-and-no-duplicates",
+    date: "2026-11-04",
+    title: "Anime in the right place, and no more duplicates",
+    items: [
+      "Anime filed under TV Shows or Movies (like Bleach) moves to Anime by itself, checked against TVmaze, AniList and TMDB.",
+      "Move any title between Movies, TV Shows and Anime from Studio's \"Move to\" menu; your choice is never changed again.",
+      "Duplicates are merged automatically after every import and in the background, matching English or original titles and years one apart. Letterboxd's review always wins.",
+    ],
+  },
+  {
     id: "2026-11-04-posters-automatic",
     date: "2026-11-04",
     title: "Posters fill in by themselves",

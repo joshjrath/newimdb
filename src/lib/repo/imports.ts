@@ -56,7 +56,9 @@ function importRecord(db: DB, externalId: string) {
 
 export function previewLetterboxd(entries: LetterboxdEntry[], db = getDb()): PreviewRow[] {
   const seen = new Map<string, number | null>();
-  const matchTitle = titleMatcher("movie", db);
+  const matchMovie = titleMatcher("movie", db);
+  const matchAnime = titleMatcher("anime", db); // anime films live under Anime
+  const matchTitle = (t: string, y: number | null) => matchMovie(t, y) ?? matchAnime(t, y);
   return entries.map((entry): PreviewRow => {
     const key = filmKey(entry);
     const row = (match: MatchKind, mediaId: number | null, existingTitle: string | null, reason: string, defaultAction: ImportAction) => {
@@ -75,7 +77,7 @@ export function previewLetterboxd(entries: LetterboxdEntry[], db = getDb()): Pre
     if (seen.has(key)) {
       return { entry, match: "duplicate_in_batch", mediaId: seen.get(key) ?? null, existingTitle: entry.filmTitle, reason: "Another diary entry for the same film (rewatch). Merged into one review.", defaultAction: "update" };
     }
-    const existing = findByProviderIds("movie", { tmdbId: entry.tmdbId }, db) ?? matchTitle(entry.filmTitle, entry.filmYear);
+    const existing = findByProviderIds("movie", { tmdbId: entry.tmdbId }, db) ?? findByProviderIds("anime", { tmdbId: entry.tmdbId }, db) ?? matchTitle(entry.filmTitle, entry.filmYear);
     if (existing) {
       const m = getMedia(existing, db)!;
       // Letterboxd wins over IMDb: replace an IMDb-imported rating with this review.

@@ -211,6 +211,11 @@ const MIGRATIONS: string[] = [
   ALTER TABLE media ADD COLUMN keywords TEXT;
   ALTER TABLE media ADD COLUMN keywords_fetched_at TEXT;
   `,
+  // 7 — anime detection: when a title's category was checked, and whether you set it yourself
+  `
+  ALTER TABLE media ADD COLUMN type_checked_at TEXT;
+  ALTER TABLE media ADD COLUMN type_locked INTEGER NOT NULL DEFAULT 0;
+  `,
 ];
 
 /** Whether the database was created just now (no earlier data), per connection. */

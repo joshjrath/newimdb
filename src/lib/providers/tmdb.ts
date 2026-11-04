@@ -198,3 +198,13 @@ export async function tmdbGenresAndKeywords(kind: "movie" | "tv", id: number): P
   });
   return { genres: (r.genres ?? []).map((g) => g.name), keywords: (r.keywords?.keywords ?? r.keywords?.results ?? []).map((k) => k.name.toLowerCase()) };
 }
+
+/** A title's original language, countries and genres on TMDB. */
+export async function tmdbOrigin(kind: "movie" | "tv", id: number): Promise<{ language: string | null; countries: string[]; genres: string[] }> {
+  const r = await get<{ original_language?: string; origin_country?: string[]; production_countries?: { iso_3166_1: string }[]; genres?: { name: string }[] }>(`/${kind}/${id}`);
+  return {
+    language: r.original_language ?? null,
+    countries: r.origin_country ?? (r.production_countries ?? []).map((c) => c.iso_3166_1),
+    genres: (r.genres ?? []).map((g) => g.name),
+  };
+}

@@ -8,7 +8,7 @@ import { parseImdbRatings } from "@/lib/domain/imdb";
 import { buildImdbPlan, commitImdbPlan } from "@/lib/repo/imdbImport";
 import { commitLetterboxd, previewLetterboxd } from "@/lib/repo/imports";
 import { parseLetterboxdRss } from "@/lib/domain/letterboxd";
-import { findDuplicates, mergeDuplicates } from "@/lib/repo/duplicates";
+import { autoMergeDuplicates, findDuplicates, mergeDuplicates } from "@/lib/repo/duplicates";
 import { createPerson } from "@/lib/repo/people";
 
 process.env.DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "watch-dupes-"));
@@ -76,3 +76,44 @@ describe("merging existing duplicates", () => {
     expect(findDuplicates()).toEqual([]);
   });
 });
+
+describe("movies never stay twice", () => {
+  const lb = (title: string, year: number | null, extra: Record<string, unknown> = {}) =>
+    createMedia({ type: "movie", metadata: { title, year, ...extra }, review: { rating: 4.5 } }, { source: "letterboxd" });
+  const imdb = (title: string, year: number | null, extra: Record<string, unknown> = {}) =>
+    createMedia({ type: "movie", metadata: { title, year, ...extra }, review: { rating: 4 } }, { source: "imdb" });
+
+  it("matches by original title, punctuation, a year off by one, or a missing year", () => {
+    const keep = lb("Godzilla Minus One", 2023);
+    imdb("Gojira -1.0", 2023, { originalTitle: "Godzilla Minus One", imdbId: "tt23289160" });
+    const keep2 = lb("Spider-Man: Across the Spider-Verse", 2023);
+    imdb("Spider Man Across the Spider Verse", 2023, { imdbId: "tt9362722" });
+    const keep3 = lb("Perfect Days", 2023);
+    imdb("Perfect Days", 2024, { imdbId: "tt27503384" });
+    const keep4 = lb("Aftersun", null);
+    imdb("Aftersun", 2022, { imdbId: "tt19770238" });
+    expect(autoMergeDuplicates()).toBe(4);
+    expect(countMedia().movie).toBe(4);
+    expect(getMedia(keep.id)).toMatchObject({ imdbId: "tt23289160", review: { rating: 4.5 } });
+    for (const k of [keep2, keep3, keep4]) expect(getMedia(k.id)).not.toBeNull();
+  });
+
+  it("keeps different films apart, even with the same name", () => {
+    imdb("Carrie", 1976, { imdbId: "tt0074285" });
+    imdb("Carrie", 2013, { imdbId: "tt1939659" });
+    imdb("Godzilla Minus One/Minus Color", 2024, { imdbId: "tt31000000" });
+    imdb("Godzilla Minus One", 2023, { imdbId: "tt23289160" });
+    // Same name and year but two different IMDb ids: two different titles.
+    imdb("The Thing", 1982, { imdbId: "tt0084787" });
+    imdb("The Thing", 1982, { imdbId: "tt0000002" });
+    expect(findDuplicates()).toEqual([]);
+  });
+
+  it("folds an anime film from Letterboxd into the IMDb one filed under Anime", () => {
+    createMedia({ type: "anime", metadata: { title: "The Boy and the Heron", year: 2023, imdbId: "tt6587046" } }, { source: "imdb" });
+    lb("The Boy and the Heron", 2023);
+    expect(autoMergeDuplicates()).toBe(1);
+    expect(countMedia().total).toBe(1);
+  });
+});
+

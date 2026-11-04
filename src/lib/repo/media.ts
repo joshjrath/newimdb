@@ -497,8 +497,12 @@ export function deleteMedia(ids: number[], db = getDb()): number {
   })();
 }
 
-export function bulkUpdate(ids: number[], action: BulkMediaAction, opts: { status?: WatchStatus | null; tag?: string; personId?: number }, db = getDb()): number {
+export function bulkUpdate(ids: number[], action: BulkMediaAction, opts: { status?: WatchStatus | null; tag?: string; personId?: number; mediaType?: MediaType }, db = getDb()): number {
   if (action === "delete") return deleteMedia(ids, db);
+  if (action === "set_type") {
+    if (!opts.mediaType) throw new RepoError("invalid", "Pick Movies, TV Shows or Anime.");
+    return setMediaType(ids, opts.mediaType, db);
+  }
   const tag = opts.tag?.toLowerCase();
   if ((action === "add_person" || action === "remove_person") && !opts.personId) throw new RepoError("invalid", "Pick a person.");
   return db.transaction(() => {
@@ -515,6 +519,21 @@ export function bulkUpdate(ids: number[], action: BulkMediaAction, opts: { statu
     }
     audit(db, "bulk_" + action, "media", ids.join(","), opts);
     return existing.length;
+  })();
+}
+
+/**
+ * Move titles to another category. Your choice is kept: the automatic anime check never
+ * moves them again. Reviews, ratings and episodes come along unchanged.
+ */
+export function setMediaType(ids: number[], type: MediaType, db = getDb()): number {
+  if (!ids.length) return 0;
+  return db.transaction(() => {
+    const n = db
+      .prepare(`UPDATE media SET type = ?, type_locked = 1, type_checked_at = ?, version = version + 1, updated_at = ? WHERE id IN (${placeholders(ids.length)})`)
+      .run(type, nowIso(), nowIso(), ...ids).changes;
+    audit(db, "set_type", "media", ids.join(","), { type });
+    return n;
   })();
 }
 

@@ -24,13 +24,13 @@ describe("updates never lose data", () => {
     setDbForTests(db);
     createMedia({ type: "movie", metadata: { title: "Kept" } }, {}, db);
     // Undo the newest migration, as if this database came from the previous version.
-    db.exec(`DROP TABLE media_genre; DROP TABLE genre; ALTER TABLE media DROP COLUMN keywords; ALTER TABLE media DROP COLUMN keywords_fetched_at; UPDATE schema_version SET version = 5;`);
+    db.exec(`ALTER TABLE media DROP COLUMN type_checked_at; ALTER TABLE media DROP COLUMN type_locked; UPDATE schema_version SET version = 6;`);
     db.close();
 
     db = openDatabase(file); // "the update"
     expect(countMedia(db).total).toBe(1);
     const backups = fs.readdirSync(path.join(dir, "backups"));
-    expect(backups.some((f) => f.includes("before-schema-6"))).toBe(true);
+    expect(backups.some((f) => f.includes("before-schema-7"))).toBe(true);
     // The backup is a complete, openable copy.
     const copy = openDatabase(path.join(dir, "backups", backups[0]));
     expect(countMedia(copy).total).toBe(1);

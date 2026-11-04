@@ -165,6 +165,12 @@ How it works:
 - **Studio's bulk menu:** adds or removes a person on many titles at once.
 - **Removing a person** only takes them off titles. The titles stay. Backups include who you watched with.
 
+### Anime sorting
+IMDb doesn't say whether animation is anime ("Bleach" looks just like "The Legend of Korra"), so every animated title is checked once in the background: TVmaze's language and Anime tag, then TMDB's original language (with a key), then AniList by name and year. Japanese anime moves to Anime; animation guessed as anime on import that isn't moves out; Chinese and Korean animation is left where it is. Settings → Anime sorting lists what moved, with "Move back". Studio's "Move to" menu moves titles by hand, and a title you've placed yourself is never moved again.
+
+### No duplicates
+The same film or show is merged into one entry automatically: after every Letterboxd or IMDb import, on start-up and every 15 minutes. Two entries are the same when they share an IMDb, TMDB or Letterboxd id, or the same English or original title (ignoring punctuation and a leading "The") with years at most one apart. Entries with different IMDb ids are never merged. Letterboxd's review wins, then yours, then IMDb's; a database backup is taken before each merge.
+
 ### Genre filters
 - **Settings → Genres:** add only the genres you want as filters, from suggestions (Action, True Crime, Superhero, Sitcom…) or your own. Adding one tags every movie, show and anime that fits straight away; new titles are tagged as they arrive.
 - **Rules:** a filter matches any of its genres, all of a set (True Crime = Documentary + Crime), or a TMDB keyword (Superhero, Heist…). Edit a filter to change its rules. Keywords are fetched once per title in the background and need a TMDB key.

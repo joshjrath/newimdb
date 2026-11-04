@@ -17,6 +17,7 @@ interface Show {
   rating: { average: number | null };
   externals: { imdb: string | null; thetvdb: number | null };
   type?: string;
+  language?: string | null;
 }
 
 interface Episode {
@@ -104,6 +105,19 @@ export async function tvmazeSeason(showId: string, season: number) {
   if (!s) return [];
   const eps = await fetchJson<Episode[]>("tvmaze", `${BASE}/seasons/${s.id}/episodes`);
   return eps.filter((e): e is Episode & { number: number } => e.number != null).map(toEpisode);
+}
+
+/** What TVmaze says about a show's origin, for telling anime from other animation. */
+export async function tvmazeShowInfo(ref: { tvmazeId?: number | null; imdbId?: string | null }): Promise<{ language: string | null; genres: string[]; type: string | null } | null> {
+  try {
+    const url = ref.tvmazeId ? `${BASE}/shows/${ref.tvmazeId}` : ref.imdbId ? `${BASE}/lookup/shows?imdb=${encodeURIComponent(ref.imdbId)}` : null;
+    if (!url) return null;
+    const show = await fetchJson<Show>("tvmaze", url);
+    return { language: show.language ?? null, genres: show.genres ?? [], type: show.type ?? null };
+  } catch (e) {
+    if ((e as { status?: number }).status === 404) return null;
+    throw e;
+  }
 }
 
 /** Find a show on TVmaze by its IMDb id (no key needed). Null when TVmaze doesn't have it. */

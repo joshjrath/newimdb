@@ -2,6 +2,7 @@ import { requireOwnerPage } from "@/lib/guard";
 import { Shell } from "@/components/Shell";
 import { PeopleSettings } from "@/components/studio/PeopleSettings";
 import { EpisodeSyncSettings } from "@/components/studio/EpisodeSyncSettings";
+import { AnimeCheckSettings } from "@/components/studio/AnimeCheckSettings";
 import { listPeople } from "@/lib/repo/people";
 import { GenreSettings } from "@/components/studio/GenreSettings";
 import { genreState } from "@/lib/genres/state";
@@ -22,6 +23,7 @@ export default async function SettingsPage() {
         <PeopleSettings initial={listPeople()} />
         <GenreSettings initial={genreState()} />
         <EpisodeSyncSettings />
+        <AnimeCheckSettings />
       </div>
     </Shell>
   );

@@ -1,5 +1,7 @@
 import { startKeywordJob } from "../genres/keywords";
 import { startPosterJob } from "../posters/job";
+import { startAnimeCheck } from "../anime/job";
+import { autoMergeDuplicates } from "../repo/duplicates";
 import { getDb } from "../db";
 import { tvmazeEpisodesBySeason, tvmazeLookupImdb } from "../providers/tvmaze";
 import { tmdbConfigured, tmdbFindByImdb, tmdbTv } from "../providers/tmdb";
@@ -102,6 +104,8 @@ export function startEpisodeScheduler() {
   if (g.__episodeTimer || process.env.EPISODE_SYNC === "off") return;
   getDb();
   const tick = () => {
+    autoMergeDuplicates(); // the same film or show never stays twice
+    startAnimeCheck(); // anime filed under TV Shows or Movies moves to Anime
     startPosterJob({ quiet: true }); // any title still missing a poster gets one, without pressing a button
     void runEpisodeSync({ limit: 40 }).catch((e) => console.error("[episodes] sync failed:", e));
     startKeywordJob({ quiet: true }); // newly added titles pick up keyword genres (e.g. Superhero) too

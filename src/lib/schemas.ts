@@ -148,7 +148,7 @@ export const bulkAssessSchema = z.object({
   rating: ratingSchema.optional(),
 });
 
-export const BULK_MEDIA_ACTIONS = ["feature", "unfeature", "delete", "set_status", "add_tag", "remove_tag", "add_person", "remove_person"] as const;
+export const BULK_MEDIA_ACTIONS = ["feature", "unfeature", "delete", "set_status", "add_tag", "remove_tag", "add_person", "remove_person", "set_type"] as const;
 export type BulkMediaAction = (typeof BULK_MEDIA_ACTIONS)[number];
 
 export const bulkMediaSchema = z.object({
@@ -157,6 +157,8 @@ export const bulkMediaSchema = z.object({
   status: statusSchema.optional(),
   tag: z.string().trim().min(1).max(40).optional(),
   personId: z.number().int().positive().optional(),
+  /** For set_type: move to Movies, TV Shows or Anime (and keep it there). */
+  mediaType: mediaTypeSchema.optional(),
 });
 
 export const personNameSchema = z.object({ name: z.string().trim().min(1, "Enter a name.").max(60) });

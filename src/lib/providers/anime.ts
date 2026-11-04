@@ -165,6 +165,21 @@ export async function anilistSearch(q: string): Promise<SearchResult[]> {
   }));
 }
 
+/** AniList entries with this title (English or romaji), to confirm a title is anime. */
+export async function anilistFind(title: string): Promise<{ titles: string[]; year: number | null; format: string | null; idMal: number | null; id: number }[]> {
+  const d = await anilist<{ Page: { media: AniMedia[] } }>(
+    `query ($q: String) { Page(perPage: 8) { media(search: $q, type: ANIME, isAdult: false) { id idMal title { romaji english native } synonyms startDate { year } format } } }`,
+    { q: title },
+  );
+  return d.Page.media.map((m) => ({
+    id: m.id,
+    idMal: m.idMal,
+    year: m.startDate.year,
+    format: m.format,
+    titles: [m.title.english, m.title.romaji, ...((m as AniMedia & { synonyms?: string[] }).synonyms ?? [])].filter((x): x is string => Boolean(x)),
+  }));
+}
+
 export async function anilistDetails(id: string): Promise<ProviderDetails> {
   const d = await anilist<{ Media: AniMedia }>(`query ($id: Int) { Media(id: $id, type: ANIME) { ${FIELDS} } }`, { id: Number(id) });
   const m = d.Media;
