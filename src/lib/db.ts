@@ -162,13 +162,46 @@ const MIGRATIONS: string[] = [
   CREATE INDEX review_last_watched ON review(last_watched_at);
   CREATE INDEX review_status ON review(status);
   `,
+  // 3 — deploys, for the update bell
+  `
+  CREATE TABLE release (
+    id          TEXT PRIMARY KEY,
+    commit_sha  TEXT,
+    message     TEXT,
+    changelog   TEXT NOT NULL DEFAULT '[]',
+    deployed_at TEXT NOT NULL,
+    seen_at     TEXT
+  );
+  `,
 ];
 
-function migrate(db: DB) {
+/** Whether the database was created just now (no earlier data), per connection. */
+export const freshDatabases = new WeakSet<DB>();
+
+const MAX_AUTO_SNAPSHOTS = 10;
+
+/**
+ * A consistent copy of the whole database, written synchronously (VACUUM INTO).
+ * Automatic copies are pruned to the newest few; manual ones are never touched.
+ */
+export function snapshotSync(db: DB, file: string, label: string): string | null {
+  if (file === ":memory:") return null;
+  const dir = ensureDir(path.join(path.dirname(path.resolve(file)), "backups"));
+  const out = path.join(dir, `watch-${new Date().toISOString().replace(/[:.]/g, "-")}-auto-${label}.db`);
+  db.exec(`VACUUM INTO '${out.replace(/'/g, "''")}'`);
+  const autos = fs.readdirSync(dir).filter((f) => f.includes("-auto-")).sort();
+  for (const old of autos.slice(0, Math.max(0, autos.length - MAX_AUTO_SNAPSHOTS))) fs.rmSync(path.join(dir, old), { force: true });
+  return out;
+}
+
+function migrate(db: DB, file: string) {
   db.exec(`CREATE TABLE IF NOT EXISTS schema_version (version INTEGER NOT NULL)`);
   const row = db.prepare(`SELECT version FROM schema_version`).get() as { version: number } | undefined;
   let current = row?.version ?? 0;
   if (!row) db.prepare(`INSERT INTO schema_version (version) VALUES (0)`).run();
+  if (current === 0) freshDatabases.add(db);
+  // An update that changes the schema first copies the database, so nothing can be lost.
+  else if (current < MIGRATIONS.length) snapshotSync(db, file, `before-schema-${current + 1}`);
   while (current < MIGRATIONS.length) {
     const sql = MIGRATIONS[current];
     db.transaction(() => {
@@ -223,7 +256,7 @@ export function openDatabase(file: string): DB {
   db.pragma("journal_mode = WAL");
   db.pragma("foreign_keys = ON");
   db.pragma("busy_timeout = 5000");
-  migrate(db);
+  migrate(db, file);
   cachePreparedStatements(db);
   return db;
 }

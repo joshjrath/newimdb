@@ -463,3 +463,50 @@ table.manage input[type="checkbox"] { width: 16px; height: 16px; accent-color: v
 .plain-list { margin: 10px 0 0; padding-left: 18px; display: grid; gap: 4px; max-height: 260px; overflow: auto; }
 .plain-fieldset { border: 0; margin: 0; padding: 0; display: grid; gap: 8px; }
 details.notice summary { cursor: pointer; font-weight: 600; }
+
+/* ── update bell (top right) ───────────────────────────────────────────── */
+.topline { display: flex; justify-content: flex-end; margin: -6px 0 6px; position: relative; z-index: 40; }
+.bell-wrap { position: relative; }
+.bell { position: relative; width: 42px; height: 42px; border-radius: 14px; border: 0; background: var(--rail); color: #9a9aa3; display: grid; place-items: center; cursor: pointer; }
+.bell:hover { background: #26262a; color: #fff; }
+.bell svg { width: 20px; height: 20px; }
+.bell.has { color: #fff; }
+.bell .badge {
+  position: absolute; top: -4px; right: -4px; min-width: 19px; height: 19px; padding: 0 5px; border-radius: 999px;
+  background: var(--salmon); color: var(--black); font: 800 11px/19px var(--display); text-align: center; box-shadow: 0 0 0 3px var(--shell);
+}
+.bell-panel {
+  position: absolute; right: 0; top: 52px; width: min(380px, calc(100vw - 32px)); max-height: min(70vh, 560px); overflow: auto;
+  background: var(--rail); border-radius: var(--r); padding: 20px; display: grid; gap: 14px;
+  box-shadow: 0 0 0 1px var(--line), 0 28px 70px -20px rgba(0, 0, 0, .85);
+}
+.bell-panel h2 { font-size: 19px; }
+.bell-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.bell-list > li { background: var(--card); border-radius: var(--r-m); padding: 14px 16px; display: grid; gap: 10px; }
+.bell-list > li:first-child { background: var(--yellow); color: var(--black); }
+.bell-list > li:first-child .hint, .bell-list > li:first-child .muted { color: rgba(16, 16, 18, .65); }
+.bell-list > li.old { opacity: .75; }
+.bell-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+.bell-head b { font-family: var(--display); font-size: 16px; letter-spacing: -0.025em; }
+.bell-entry strong { font-size: 13.5px; }
+.bell-entry ul { margin: 4px 0 0; padding-left: 18px; font-size: 13px; line-height: 1.5; display: grid; gap: 2px; }
+.bell-warn { background: rgba(242, 104, 94, .16); color: #ffb1aa; border-radius: var(--r-m); padding: 12px 14px; font-size: 13px; font-weight: 600; }
+.update-card {
+  position: fixed; z-index: 95; top: calc(78px + env(safe-area-inset-top, 0px)); right: max(28px, env(safe-area-inset-right, 0px));
+  width: min(360px, calc(100vw - 32px)); background: var(--yellow); color: var(--black); border-radius: var(--r-m); padding: 14px 14px 14px 18px;
+  display: flex; gap: 12px; align-items: flex-start; justify-content: space-between; box-shadow: 0 24px 60px -18px rgba(0, 0, 0, .85);
+  animation: card-in .35s cubic-bezier(.2, .8, .2, 1);
+}
+.update-card b { font-family: var(--display); font-size: 16px; letter-spacing: -0.025em; display: block; }
+.update-card p { font-size: 13px; margin-top: 2px; }
+.update-card-actions { display: flex; gap: 4px; align-items: center; flex: none; }
+.update-card .btn { background: var(--black); color: var(--yellow); }
+.update-card .close { border: 0; background: none; font-size: 18px; cursor: pointer; color: var(--black); opacity: .6; padding: 0 4px; }
+@keyframes card-in { from { transform: translateY(-10px); opacity: 0; } to { transform: none; opacity: 1; } }
+.storage-warning { background: var(--late); color: var(--black); border-radius: var(--r-m); padding: 14px 18px; margin-bottom: 18px; font-size: 13.5px; font-weight: 600; }
+.storage-warning b { font-family: var(--display); font-size: 15px; margin-right: 4px; }
+@media (max-width: 860px) {
+  .topline { margin: 0 0 8px; }
+  /* the bell sits below the rail on phones, so the card takes the top of the screen */
+  .update-card { top: max(16px, env(safe-area-inset-top, 0px)); right: max(16px, env(safe-area-inset-right, 0px)); }
+}

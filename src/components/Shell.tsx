@@ -2,6 +2,8 @@ import Link from "next/link";
 import { countMedia } from "@/lib/repo/media";
 import { CATEGORY_LABEL, CATEGORY_TO_TYPE, type Category } from "@/lib/domain/types";
 import { SignOutButton } from "./ShellClient";
+import { UpdateBell } from "./UpdateBell";
+import { updatesSummary } from "@/lib/repo/releases";
 
 export type ShellActive = Category | "studio" | "new" | "import";
 
@@ -15,6 +17,7 @@ const STUDIO: { key: ShellActive; href: string; label: string }[] = [
 /** Specular's shell: a rounded rail on the left, the page on the right. `category` sets the block colour. */
 export function Shell({ children, active, category }: { children: React.ReactNode; active?: ShellActive; category?: Category }) {
   const counts = countMedia();
+  const updates = updatesSummary();
   const cat = category ?? (CATEGORIES.includes(active as Category) ? (active as Category) : undefined);
   return (
     <div className={`shell${cat ? ` cat-${cat}` : ""}`}>
@@ -50,7 +53,17 @@ export function Shell({ children, active, category }: { children: React.ReactNod
           </div>
         </div>
       </aside>
-      <main id="main">{children}</main>
+      <main id="main">
+        <div className="topline">
+          <UpdateBell initial={updates} />
+        </div>
+        {updates.storage.warning && (
+          <div className="storage-warning" role="alert">
+            <b>Your data isn&apos;t safe yet.</b> {updates.storage.warning}
+          </div>
+        )}
+        {children}
+      </main>
     </div>
   );
 }

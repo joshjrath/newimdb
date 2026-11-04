@@ -45,6 +45,14 @@ The app uses SQLite on local disk, so it needs a host with a **persistent filesy
 
 Back up `DATA_DIR`. `npm run backup` writes a consistent SQLite snapshot to `DATA_DIR/backups/` and is safe to run while the app is up (for example from cron). Studio → Import & backup also exports and restores a full JSON backup, and every restore takes a snapshot first.
 
+### Updates never touch your data
+- Your library lives only in the database on the volume (`DATA_DIR`). Deploying new code never deletes or rewrites it. Database changes only ever add things, and a full copy is saved to `DATA_DIR/backups/` before any of them runs.
+- Every new deploy also saves an automatic backup. The newest 10 automatic backups are kept; backups you make yourself are never deleted.
+- On Railway, if the data isn't on a volume (and so would be wiped by the next deploy), a red warning shows on every page and in the update bell.
+
+### Update bell
+The bell at the top right shows each deploy with what changed, and a badge for ones you haven't opened. A yellow "Update complete" card appears after a deploy, including one that finishes while the site is open (with a Reload button). The "what changed" text comes from `src/lib/changelog.ts`: add an entry there with each update you want announced. Otherwise the bell shows the commit message.
+
 ## Privacy model
 
 - **Server-side checks everywhere.** Every page calls `requireOwnerPage()` and every API route is wrapped in `ownerApi()`. Both check the session token against the database. The middleware redirect is only a convenience; security doesn't depend on it.
@@ -168,7 +176,7 @@ Personal data (`review`, `episode_assessment`, `media_tag`) is stored apart from
 ## Tests
 
 ```bash
-npm test                         # 51 unit/integration tests (domain, repository, import, backup, providers)
+npm test                         # 60 unit/integration tests (domain, repository, import, backup, providers)
 npm run build && npm run test:e2e   # browser tests against the production build
 ```
 
