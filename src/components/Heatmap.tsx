@@ -78,6 +78,30 @@ export function Heatmap({ mediaId, initial, initialSegment, onSegments, ignoreFi
   const typed = useRef<{ digit: number; timer: ReturnType<typeof setTimeout> } | null>(null);
   const [view, setView] = useState<"grid" | number>(initialSegment && initial.some((s) => s.id === initialSegment) ? initialSegment : "grid");
   const [open, setOpen] = useState<OpenEditor | null>(null);
+  // "Unwatched": hide what you've watched or skipped (and episodes not out yet), so a long
+  // anime shows just what's left. For anime, filler can be hidden too. Remembered per show.
+  const prefKey = `eps-filter-${mediaId}`;
+  const [onlyLeft, setOnlyLeft] = useState(false);
+  const [hideFiller, setHideFiller] = useState(false);
+  useEffect(() => {
+    try {
+      const v = JSON.parse(localStorage.getItem(prefKey) ?? "null");
+      if (v) {
+        setOnlyLeft(Boolean(v.onlyLeft));
+        setHideFiller(Boolean(v.hideFiller));
+      }
+    } catch {}
+  }, [prefKey]);
+  const setFilter = (next: { onlyLeft: boolean; hideFiller: boolean }) => {
+    setOnlyLeft(next.onlyLeft);
+    setHideFiller(next.hideFiller);
+    try {
+      localStorage.setItem(prefKey, JSON.stringify(next));
+    } catch {}
+  };
+  const visible = (e: EpisodeView) =>
+    (!onlyLeft || (e.state === "unwatched" && e.rating == null && !isUnaired(e))) && !(hideFiller && e.filler && e.state !== "watched");
+  const filtering = onlyLeft || hideFiller;
   const [busy, setBusy] = useState<ReadonlySet<number>>(new Set());
   const toast = useToast();
 
@@ -298,6 +322,9 @@ export function Heatmap({ mediaId, initial, initialSegment, onSegments, ignoreFi
   );
   const current = view === "grid" ? null : ordered.find((x) => x.id === view);
 
+  const shownRows = ordered.map((s) => ({ s, eps: sortedEpisodes(s).filter(visible) })).filter((r) => !filtering || r.eps.length > 0);
+  const gridCols = filtering ? Math.max(0, ...shownRows.map((r) => r.eps.length)) : maxCols;
+
   return (
     <div className="stack">
       <ProgressBar p={progress} big />
@@ -314,6 +341,18 @@ export function Heatmap({ mediaId, initial, initialSegment, onSegments, ignoreFi
             <span className="v">{pointer.caughtUp ? "Caught up" : "–"}</span>
             <span className="k">Up next</span>
           </div>
+        )}
+      </div>
+
+      <div className="chips ep-filter" role="group" aria-label="Show episodes">
+        <button type="button" className="chip" aria-pressed={!onlyLeft} onClick={() => setFilter({ onlyLeft: false, hideFiller })}>All episodes</button>
+        <button type="button" className="chip" aria-pressed={onlyLeft} onClick={() => setFilter({ onlyLeft: true, hideFiller })}>
+          Unwatched{progress.remaining > 0 ? ` · ${progress.remaining}` : ""}
+        </button>
+        {segments.some((s) => s.episodes.some((e) => e.filler)) && (
+          <button type="button" className="chip" aria-pressed={hideFiller} onClick={() => setFilter({ onlyLeft, hideFiller: !hideFiller })}>
+            {hideFiller ? "Filler hidden" : "Hide filler"}
+          </button>
         )}
       </div>
 
@@ -343,9 +382,12 @@ export function Heatmap({ mediaId, initial, initialSegment, onSegments, ignoreFi
         </div>
       )}
 
+      {filtering && !current && shownRows.length === 0 && (
+        <p className="notice">{onlyLeft ? (progress.remaining > 0 ? "Nothing left with these filters." : "All caught up: nothing left to watch that's out.") : "No episodes to show."}</p>
+      )}
       {current ? (
         <div onKeyDown={onCellKey}>
-          <SeasonList seg={current} cell={cell} ignoreFiller={ignoreFiller} onBulk={(action, rating) => bulk(current, action, rating)} />
+          <SeasonList seg={current} cell={cell} ignoreFiller={ignoreFiller} visible={visible} onBulk={(action, rating) => bulk(current, action, rating)} />
         </div>
       ) : (
         <div className="heatmap-wrap" onKeyDown={onCellKey} aria-label="Episode ratings grid. Scroll sideways for more episodes.">
@@ -353,24 +395,33 @@ export function Heatmap({ mediaId, initial, initialSegment, onSegments, ignoreFi
             <thead>
               <tr>
                 <th scope="col"><span className="visually-hidden">Season</span></th>
-                {Array.from({ length: maxCols }, (_, i) => (
-                  <th key={i} scope="col">{i + 1}</th>
+                {Array.from({ length: gridCols }, (_, i) => (
+                  <th key={i} scope="col">{filtering ? "" : i + 1}</th>
                 ))}
                 <th scope="col"><span className="visually-hidden">Average</span></th>
               </tr>
             </thead>
             <tbody>
-              {ordered.map((s, idx) => {
-                const prev = ordered[idx - 1];
+              {shownRows.map(({ s, eps }, idx) => {
+                const prev = shownRows[idx - 1]?.s;
                 const sameSeason = prev && s.seasonNumber != null && prev.seasonNumber === s.seasonNumber;
                 const segAvg = episodeAverage(s.episodes);
                 return (
                   <tr key={s.id} id={`seg-${s.id}`} className={idx > 0 && !sameSeason ? "sep" : undefined}>
                     <th scope="row" className="row-h">{s.label}</th>
-                    {sortedEpisodes(s).map((e) => (
-                      <td key={e.id}>{cell(s, e)}</td>
+                    {eps.map((e) => (
+                      <td key={e.id}>
+                        {filtering ? (
+                          <div className="cell-num">
+                            {cell(s, e)}
+                            <small>{e.number}</small>
+                          </div>
+                        ) : (
+                          cell(s, e)
+                        )}
+                      </td>
                     ))}
-                    {Array.from({ length: maxCols - s.episodes.length }, (_, i) => (
+                    {Array.from({ length: gridCols - eps.length }, (_, i) => (
                       <td key={`pad${i}`} className="pad" aria-hidden="true" />
                     ))}
                     <td className="avg-cell">{segAvg != null ? `avg ${segAvg.toFixed(2)}` : ""}</td>
@@ -405,7 +456,7 @@ export function Heatmap({ mediaId, initial, initialSegment, onSegments, ignoreFi
 }
 
 /** Single-season view: episode titles plus season-wide quick actions. */
-function SeasonList({ seg, cell, onBulk, ignoreFiller }: { seg: SegmentView; cell: (s: SegmentView, e: EpisodeView) => React.ReactNode; onBulk: (action: BulkAssessAction, rating?: number) => void; ignoreFiller?: boolean }) {
+function SeasonList({ seg, cell, onBulk, ignoreFiller, visible = () => true }: { seg: SegmentView; cell: (s: SegmentView, e: EpisodeView) => React.ReactNode; onBulk: (action: BulkAssessAction, rating?: number) => void; ignoreFiller?: boolean; visible?: (e: EpisodeView) => boolean }) {
   const p = computeProgress(seg.episodes, { ignoreFiller });
   const avg = episodeAverage(seg.episodes);
   return (
@@ -422,7 +473,7 @@ function SeasonList({ seg, cell, onBulk, ignoreFiller }: { seg: SegmentView; cel
         </button>
       </div>
       <div className="ep-list">
-        {sortedEpisodes(seg).map((e) => (
+        {sortedEpisodes(seg).filter(visible).map((e) => (
           <div className="ep-row" key={e.id}>
             {cell(seg, e)}
             <div className="t">

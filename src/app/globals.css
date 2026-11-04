@@ -768,3 +768,6 @@ button.stat-btn:hover { background: var(--raised); }
 .imdb-badge b { background: #000; color: #f5c518; padding: 0 4px; border-radius: 3px; font-weight: 900; letter-spacing: -0.02em; }
 .imdb-badge.big { font-size: 13px; padding: 3px 9px 3px 3px; }
 .aud-badge { font-size: 11px; color: var(--muted, rgba(255, 255, 255, .6)); }
+.ep-filter { margin-bottom: -2px; }
+.cell-num { display: grid; justify-items: center; gap: 2px; }
+.cell-num small { font-size: 10px; line-height: 1; color: var(--muted, rgba(255, 255, 255, .55)); }
