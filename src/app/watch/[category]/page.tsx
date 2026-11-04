@@ -4,9 +4,10 @@ import { requireOwnerPage } from "@/lib/guard";
 import { Shell } from "@/components/Shell";
 import { LibraryCard } from "@/components/LibraryCard";
 import { NowStrip } from "@/components/NowStrip";
+import { ReturningStrip } from "@/components/ReturningStrip";
 import { AutoSubmit } from "@/components/AutoSubmit";
 import { pageCount, Pager } from "@/components/Pager";
-import { countMedia, listMedia, listWatching } from "@/lib/repo/media";
+import { countMedia, listMedia, listReturning, listWatching } from "@/lib/repo/media";
 import { SORT_OPTIONS } from "@/lib/domain/sort";
 import { allTags } from "@/lib/repo/tags";
 import { listPeople } from "@/lib/repo/people";
@@ -42,6 +43,9 @@ export default async function LibraryPage({ params, searchParams }: { params: Pr
   const genres = listGenres(getDb(), type).filter((g) => g.count > 0 || g.id === genre);
   const filtered = Boolean(status || tag || q || featured || withPerson || genre);
   const watching = type === "movie" || filtered || page > 1 ? [] : listWatching(type);
+  // Shows you'd finished that have a new season: a strip up top, and a badge on their cards.
+  const returning = type === "movie" ? [] : listReturning(type);
+  const returningById = new Map(returning.map((m) => [m.id, m.returning]));
   const label = CATEGORY_LABEL[cat];
 
   const href = (patch: SP) => {
@@ -68,6 +72,7 @@ export default async function LibraryPage({ params, searchParams }: { params: Pr
         </nav>
       </header>
 
+      {!filtered && page === 1 && <ReturningStrip items={returning} />}
       <NowStrip items={watching} />
 
       <div className="filters stack tight">
@@ -141,7 +146,7 @@ export default async function LibraryPage({ params, searchParams }: { params: Pr
       {items.length ? (
         <div className="library">
           {items.map((m) => (
-            <LibraryCard key={m.id} m={m} />
+            <LibraryCard key={m.id} m={m} returning={returningById.get(m.id)} />
           ))}
         </div>
       ) : (

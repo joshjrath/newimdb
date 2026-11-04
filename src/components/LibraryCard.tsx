@@ -7,11 +7,21 @@ import { StatusPill } from "./StatusPill";
 import { Poster } from "./Poster";
 import { ProgressBar } from "./ProgressBar";
 import { formatDate } from "@/lib/format";
+import { segmentCode, type Returning } from "@/lib/domain/progress";
 
-export function LibraryCard({ m }: { m: ListItem }) {
+export function LibraryCard({ m, returning }: { m: ListItem; returning?: Returning }) {
   const r = m.review;
   return (
     <article className="card">
+      {returning && (
+        <Link
+          className={`card-new-season ${returning.state}`}
+          href={`${mediaHref(m)}?segment=${returning.segment.id}#seg-${returning.segment.id}`}
+          title={returning.state === "out" ? "A new season is out since you finished" : "A new season has been announced"}
+        >
+          {returning.state === "out" ? "New" : "Soon"} · {segmentCode(returning.segment)}
+        </Link>
+      )}
       <Poster url={m.posterUrl} title={m.title} />
       <div className="card-body">
         <h3 className="card-title">

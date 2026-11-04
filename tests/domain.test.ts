@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { activePointer, computeProgress, episodeAverage } from "@/lib/domain/progress";
+import { activePointer, computeProgress, episodeAverage, returningSeason } from "@/lib/domain/progress";
 import { exportEpisodeText, parseEpisodeText, resolveAssignments } from "@/lib/domain/episodeText";
 import { isValidRating, parseRating, ratingBand } from "@/lib/domain/rating";
 import { decodeEntities, htmlToText, idFromSlug, slugify } from "@/lib/domain/text";
@@ -144,5 +144,26 @@ describe("shared rules", () => {
     expect(await verifyPasswordHash("correct horse", h)).toBe(true);
     expect(await verifyPasswordHash("wrong", h)).toBe(false);
     expect(await verifyPasswordHash("x", "garbage")).toBe(false);
+  });
+});
+
+describe("new seasons since you finished", () => {
+  const T = "2026-11-04";
+  const w = (n: number) => Array.from({ length: n }, () => ({ state: "watched" as const }));
+  it("spots a new season that's out, or announced with a date", () => {
+    const s1 = seg("Season 1", 3, { seasonNumber: 1 }, w(3));
+    const s2 = seg("Season 2", 2, { seasonNumber: 2 }, [{ airDate: "2026-10-01" }, { airDate: "2026-11-20" }]);
+    expect(returningSeason([s1, s2], T)).toMatchObject({ segment: { id: s2.id }, state: "out", airedEpisodes: 1, nextAirDate: "2026-11-20" });
+    const s3 = seg("Season 3", 2, { seasonNumber: 3 }, [{ airDate: "2027-03-01" }, { airDate: "TBA" }]);
+    expect(returningSeason([s1, s3], T)).toMatchObject({ state: "announced", airedEpisodes: 0, nextAirDate: "2027-03-01" });
+  });
+  it("ignores shows you're mid-way through, haven't started, or are caught up on", () => {
+    const done = seg("Season 1", 3, { seasonNumber: 1 }, w(3));
+    expect(returningSeason([done], T)).toBeNull();
+    expect(returningSeason([seg("Season 1", 3, { seasonNumber: 1 }, w(2)), seg("Season 2", 2, { seasonNumber: 2 })], T)).toBeNull();
+    expect(returningSeason([seg("Season 1", 3), seg("Season 2", 3)], T)).toBeNull();
+    // Skipped episodes and ones not out yet don't stop a season counting as finished.
+    const s1 = seg("Season 1", 3, { seasonNumber: 1 }, [{ state: "watched" }, { state: "skipped" }, { state: "watched" }]);
+    expect(returningSeason([s1, seg("Season 2", 1, { seasonNumber: 2 })], T)?.segment.label).toBe("Season 2");
   });
 });

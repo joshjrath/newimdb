@@ -88,7 +88,10 @@ These states are kept separate on purpose:
 **Fast editing.** Click a cell to select it, then type: `4` rates 4, `4` then `5` (or `.`) rates 4.5. Arrows move, `w` watched, `s` skip, `f` filler, `u` watched up to here, Backspace clears. Shift-click or shift-arrows selects a range, Ctrl/Cmd-click adds cells, and the bar that appears acts on the whole selection. "Edit seasons" on the title page changes the structure in place.
 
 ### Progress policy
-The source requirements left this open, so this is the choice made: **skipped episodes are removed from the total** and listed separately ("12/20 watched, 3 skipped"). They never count as watched. Filler counts like any other episode. Episodes that aren't out yet (future date, future year, or "TBA") are left out until they air, so a confirmed-but-unreleased season doesn't stop you being at 100%.
+The source requirements left this open, so this is the choice made: **skipped episodes are removed from the total** and listed separately ("12/20 watched, 3 skipped"). They never count as watched. Filler counts like any other episode. Episodes that aren't out yet (future date, "TBA", or only a year that's this year or later, as IMDb lists announced episodes) are left out until they air, so a confirmed-but-unreleased season doesn't stop you being at 100%.
+
+### New seasons of shows you finished
+TV Shows and Anime open with a **New seasons** row: shows where you'd watched everything that was out, and a later season you haven't started has appeared. "New season out" shows how many of its episodes have aired; "Announced" shows the start date when there is one. Their library cards get a **New** / **Soon** badge linking to that season. It's worked out from your episodes, so it updates by itself as new seasons arrive; set a show to Dropped to leave it out.
 
 ### New episodes, automatically
 Every TV show and anime is re-checked in the background (TVmaze, plus TMDB when its key is set): shows you're watching every 6 hours, everything else daily. New episodes are added to the right season, new seasons are created, and nothing you've rated is ever removed. Settings → New episodes shows the last check and has "Check all shows now". Set `EPISODE_SYNC=off` to turn it off.

@@ -550,3 +550,34 @@ button.stat-btn:hover { background: var(--raised); }
 .genre-edit { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; padding: 6px 0; align-items: end; }
 .genre-edit label { display: flex; flex-direction: column; gap: 4px; }
 .chips button.chip { cursor: pointer; }
+
+/* New seasons: shows you finished that are back */
+.returning-strip { margin: 0 0 18px; }
+.returning-strip > h2 { margin: 0 4px 12px; display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.returning-strip > h2 .hint { font-family: var(--body, inherit); font-size: 13px; font-weight: 500; letter-spacing: 0; }
+.returning-item {
+  scroll-snap-align: start; display: grid; grid-template-columns: 76px minmax(0, 1fr); gap: 14px; align-items: start;
+  padding: 14px; border-radius: var(--r); background: var(--card); color: var(--ink); text-decoration: none;
+  box-shadow: inset 0 0 0 2px var(--cat);
+}
+.returning-item:hover { background: var(--raised); }
+.returning-item .poster { border-radius: 14px; }
+.returning-item strong { font-family: var(--display); font-size: 15px; font-weight: 700; letter-spacing: -0.025em; line-height: 1.2; display: block; margin-top: 8px; }
+.returning-item .now-next { color: var(--muted, rgba(255, 255, 255, .65)); }
+.returning-item .now-next b { color: var(--cat); }
+.returning-item.announced { box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--cat) 35%, transparent); }
+.returning-item.announced .now-next b { color: var(--ink); opacity: .6; }
+.returning-flag {
+  display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px; border-radius: 999px;
+  background: var(--cat); color: var(--black); font: 800 11px/1.3 var(--display); letter-spacing: .02em; text-transform: uppercase;
+}
+.returning-item.out .returning-flag::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--black); animation: returning-pulse 1.6s ease-in-out infinite; }
+.returning-item.announced .returning-flag { background: transparent; color: var(--cat); box-shadow: inset 0 0 0 1.5px var(--cat); }
+@keyframes returning-pulse { 50% { opacity: .25; } }
+@media (prefers-reduced-motion: reduce) { .returning-item.out .returning-flag::before { animation: none; } }
+.card-new-season {
+  position: absolute; top: 10px; right: 10px; padding: 3px 9px; border-radius: 999px; background: var(--cat); color: var(--black);
+  font: 800 11px/1.3 var(--display); letter-spacing: .02em; text-decoration: none;
+}
+.card-new-season.announced { background: transparent; color: var(--cat); box-shadow: inset 0 0 0 1.5px var(--cat); }
+.card:has(.card-new-season) .card-title { padding-right: 78px; }

@@ -36,13 +36,15 @@ export function progressFromCounts(c: ProgressCounts): Progress {
 }
 
 /**
- * An episode that isn't out yet: its air date is in the future, it's only known by a future
- * year, or it's listed with no date ("TBA"). Anything you've watched or rated counts as out.
+ * An episode that isn't out yet: its air date is in the future, it's only known by a year
+ * that's this year or later, or it's listed with no date ("TBA"). Anything you've watched or rated counts as out.
  */
 export function isUnaired(e: Pick<EpisodeView, "state" | "rating" | "airDate">, today = new Date().toISOString().slice(0, 10)): boolean {
   if (e.state !== "unwatched" || e.rating != null || !e.airDate) return false;
   if (e.airDate === "TBA") return true;
-  if (/^\d{4}$/.test(e.airDate)) return Number(e.airDate) > Number(today.slice(0, 4));
+  // Only a year (IMDb lists announced episodes like this): this year or later isn't out yet,
+  // since there's no date to say it has aired. A real date replaces it once TVmaze/TMDB list it.
+  if (/^\d{4}$/.test(e.airDate)) return Number(e.airDate) >= Number(today.slice(0, 4));
   return e.airDate.slice(0, 10) > today;
 }
 
@@ -120,4 +122,42 @@ export function segmentCode(s: Pick<SegmentView, "kind" | "label" | "seasonNumbe
 export function episodeCode(s: SegmentView, e: Pick<EpisodeView, "number">): string {
   const code = segmentCode(s);
   return /^S\d+/.test(code) ? `${code}E${e.number}` : `${code} · E${e.number}`;
+}
+
+export interface Returning {
+  /** The first new season (or cour/part) you haven't started. */
+  segment: SegmentView;
+  /** Every new season after where you finished. */
+  newSegments: SegmentView[];
+  /** "out": episodes of it have aired. "announced": listed, but nothing has aired yet. */
+  state: "out" | "announced";
+  airedEpisodes: number;
+  /** Earliest known air date of the next episode, when there is one. */
+  nextAirDate: string | null;
+}
+
+/**
+ * A show you'd finished that has since got a new season: every episode that was out up to
+ * the last season you watched is watched (or skipped), and a later season with no watched
+ * episodes has appeared. Null when you're mid-way, haven't started, or there's nothing new.
+ */
+export function returningSeason(segments: SegmentView[], today = new Date().toISOString().slice(0, 10)): Returning | null {
+  const segs = orderedSegments(segments).filter((s) => s.episodes.length > 0);
+  const watchedIn = (s: SegmentView) => s.episodes.some((e) => e.state === "watched");
+  let last = -1;
+  segs.forEach((s, i) => {
+    if (watchedIn(s)) last = i;
+  });
+  if (last < 0) return null;
+  const finished = segs.slice(0, last + 1).every((s) => s.episodes.every((e) => e.state !== "unwatched" || isUnaired(e, today)));
+  if (!finished) return null;
+  const newSegments = segs.slice(last + 1).filter((s) => !s.episodes.some((e) => e.state !== "unwatched"));
+  if (!newSegments.length) return null;
+  const segment = newSegments[0];
+  const aired = segment.episodes.filter((e) => !isUnaired(e, today)).length;
+  const upcoming = segment.episodes
+    .filter((e) => isUnaired(e, today) && e.airDate && /^\d{4}-\d{2}-\d{2}/.test(e.airDate))
+    .map((e) => e.airDate!.slice(0, 10))
+    .sort()[0];
+  return { segment, newSegments, state: aired > 0 ? "out" : "announced", airedEpisodes: aired, nextAirDate: upcoming ?? null };
 }

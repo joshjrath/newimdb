@@ -12,6 +12,16 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-11-04-new-seasons",
+    date: "2026-11-04",
+    title: "New seasons of shows you finished",
+    items: [
+      "TV Shows and Anime open with a \"New seasons\" row: shows you'd finished that are back, with how many new episodes are out, or when an announced season starts.",
+      "Their cards get a \"New\" or \"Soon\" badge that jumps straight to the new season. Set a show to Dropped to hide it.",
+      "An announced episode IMDb only lists by this year (like the next Tires premiere) no longer counts against your progress.",
+    ],
+  },
+  {
     id: "2026-11-04-anime-sorting-and-no-duplicates",
     date: "2026-11-04",
     title: "Anime in the right place, and no more duplicates",

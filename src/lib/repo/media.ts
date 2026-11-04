@@ -4,7 +4,7 @@ import { RepoError } from "../errors";
 import type { EpisodeState, EpisodeView, GenreRef, MediaDetail, MediaType, MediaView, PersonRef, ReviewSource, ReviewView, SegmentView, WatchStatus } from "../domain/types";
 import { METADATA_KEYS, type BulkAssessAction, type BulkMediaAction, type CreateMediaInput, type MetadataInput, type ProviderEpisode, type ReviewInput, type SegmentInput } from "../schemas";
 import { resolveAssessment, UNASSESSED, type AssessmentPatch } from "../domain/assessment";
-import { activePointer, computeProgress, progressFromCounts, type ActivePointer, type Progress } from "../domain/progress";
+import { activePointer, computeProgress, progressFromCounts, returningSeason, type ActivePointer, type Progress, type Returning } from "../domain/progress";
 import { normalizeTitle } from "../domain/text";
 import type { SortKey } from "../domain/sort";
 import { audit } from "./audit";
@@ -297,7 +297,7 @@ function progressFor(db: DB, ids: number[]): Map<number, Progress> {
               SUM(CASE WHEN a.state = 'skipped' THEN 1 ELSE 0 END) AS skipped,
               SUM(CASE WHEN COALESCE(a.state, 'unwatched') = 'unwatched' AND a.rating IS NULL AND (
                     e.air_date = 'TBA'
-                    OR (length(e.air_date) = 4 AND CAST(e.air_date AS INTEGER) > CAST(strftime('%Y', 'now') AS INTEGER))
+                    OR (length(e.air_date) = 4 AND CAST(e.air_date AS INTEGER) >= CAST(strftime('%Y', 'now') AS INTEGER))
                     OR (length(e.air_date) >= 10 AND substr(e.air_date, 1, 10) > date('now'))
                   ) THEN 1 ELSE 0 END) AS unaired
        FROM segment s JOIN episode e ON e.segment_id = s.id
@@ -321,6 +321,38 @@ export function listWatching(type?: MediaType, db = getDb()): WatchingItem[] {
     const segs = segments.get(m.id) ?? [];
     return { ...m, progress: m.progress ?? computeProgress([]), pointer: activePointer(segs) };
   });
+}
+
+export interface ReturningItem extends MediaView {
+  returning: Returning;
+}
+
+/**
+ * "New seasons": shows and anime you'd finished that have a season you haven't started.
+ * Ones that are out come first, then announced ones by air date. Dropped shows are left out.
+ */
+export function listReturning(type?: MediaType, db = getDb()): ReturningItem[] {
+  const rows = db
+    .prepare(
+      `SELECT DISTINCT s.media_id AS id FROM segment s JOIN episode e ON e.segment_id = s.id JOIN episode_assessment a ON a.episode_id = e.id
+       JOIN media m ON m.id = s.media_id LEFT JOIN review r ON r.media_id = m.id
+       WHERE a.state = 'watched' AND m.type ${type ? "= ?" : "IN ('tv', 'anime')"} AND COALESCE(r.status, '') != 'dropped'`,
+    )
+    .all(...(type ? [type] : [])) as { id: number }[];
+  const ids = rows.map((r) => r.id);
+  const segments = segmentsFor(db, ids, { overview: false });
+  const out: ReturningItem[] = [];
+  for (const id of ids) {
+    const returning = returningSeason(segments.get(id) ?? []);
+    if (!returning) continue;
+    out.push({ ...getMedia(id, db)!, returning });
+  }
+  return out.sort(
+    (a, b) =>
+      (a.returning.state === "out" ? 0 : 1) - (b.returning.state === "out" ? 0 : 1) ||
+      (a.returning.nextAirDate ?? "9999").localeCompare(b.returning.nextAirDate ?? "9999") ||
+      a.title.localeCompare(b.title),
+  );
 }
 
 export function countMedia(db = getDb()) {

@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { freshDb } from "./helpers";
 import { activePointer, computeProgress, isUnaired } from "@/lib/domain/progress";
-import { createMedia, getMediaDetail, listMedia, setAssessment } from "@/lib/repo/media";
+import { bulkAssess, createMedia, getMediaDetail, listMedia, setAssessment } from "@/lib/repo/media";
 import { dueShows, markSynced, syncShowEpisodes } from "@/lib/repo/episodeSync";
 import { runEpisodeSync } from "@/lib/episodes/sync";
 import type { EpisodeView } from "@/lib/domain/types";
@@ -20,7 +20,9 @@ describe("episodes that aren't out yet", () => {
     expect(isUnaired(ep({ airDate: "TBA" }), today)).toBe(true);
     expect(isUnaired(ep({ airDate: "2027-01-10" }), today)).toBe(true);
     expect(isUnaired(ep({ airDate: "2027" }), today)).toBe(true);
-    expect(isUnaired(ep({ airDate: "2026" }), today)).toBe(false);
+    // Only a year, and it is this year: no date yet, so not counted as out (Tires S4 on IMDb).
+    expect(isUnaired(ep({ airDate: "2026" }), today)).toBe(true);
+    expect(isUnaired(ep({ airDate: "2025" }), today)).toBe(false);
     expect(isUnaired(ep({ airDate: "2026-11-01" }), today)).toBe(false);
     expect(isUnaired(ep({ airDate: null }), today)).toBe(false);
     expect(isUnaired(ep({ airDate: "TBA", state: "watched" }), today)).toBe(false);
@@ -103,4 +105,21 @@ describe("new episodes arrive by themselves", () => {
     expect(d.tvmazeId).toBe(77);
     expect(d.segments[0].episodes.map((e) => [e.title, e.airDate])).toEqual([["One", "2024-01-01"], ["Two", "2024-01-08"], ["Three", "TBA"]]);
   }, 15000);
+});
+
+describe("Tires: IMDb lists the S4 premiere with only this year", () => {
+  it("is 100% once every aired episode is watched", () => {
+    const year = new Date().toISOString().slice(0, 4);
+    const show = createMedia({
+      type: "tv",
+      metadata: { title: "Tires" },
+      segments: [
+        { kind: "season", label: "Season 1", seasonNumber: 1, courNumber: null, episodeCount: 2, episodes: [1, 2].map((n) => ({ number: n, title: null, airDate: "2024", overview: null, providerRef: null })) },
+        { kind: "season", label: "Season 4", seasonNumber: 4, courNumber: null, episodeCount: 1, episodes: [{ number: 1, title: null, airDate: year, overview: null, providerRef: null }] },
+      ],
+    });
+    const s1 = getMediaDetail(show.id)!.segments[0].episodes.map((e) => e.id);
+    bulkAssess(show.id, s1, "watched", undefined);
+    expect(listMedia({ type: "tv" }).items[0].progress).toMatchObject({ watched: 2, unaired: 1, denominator: 2, percent: 100 });
+  });
 });
