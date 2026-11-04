@@ -109,3 +109,24 @@ describe("a new episode of a finished show", () => {
     expect(getMedia(m.id)!.review.status).toBe("watching");
   });
 });
+
+describe("one-time Dropped for shows untouched in 6 months", () => {
+  it("drops unfinished shows last watched over 6 months ago, once, and it sticks", async () => {
+    const { dropStaleOnce } = await import("@/lib/repo/autoStatus");
+    const old = show("Old", 4);
+    const done = show("Done", 2);
+    const recent = show("Recent", 4);
+    bulkAssess(old.id, ids(old.id).slice(0, 2), "watched", undefined);
+    bulkAssess(done.id, ids(done.id), "watched", undefined);
+    bulkAssess(recent.id, ids(recent.id).slice(0, 1), "watched", undefined);
+    getDb().prepare(`UPDATE episode_assessment SET watched_at = ? WHERE episode_id IN (SELECT e.id FROM episode e JOIN segment s ON s.id = e.segment_id WHERE s.media_id IN (?, ?))`).run(ago(200), old.id, done.id);
+    expect(dropStaleOnce()).toBe(1);
+    applyAutoStatus();
+    expect(getMedia(old.id)!.review.status).toBe("dropped"); // the 30-day clock doesn't undo it
+    expect(getMedia(done.id)!.review.status).toBe("completed");
+    expect(getMedia(recent.id)!.review.status).toBe("watching");
+    expect(dropStaleOnce()).toBe(0); // only ever once
+    bulkAssess(old.id, ids(old.id).slice(2, 3), "watched", undefined); // you pick it back up
+    expect(getMedia(old.id)!.review.status).toBe("watching");
+  });
+});

@@ -121,7 +121,7 @@ export function applyAutoStatus(db = getDb(), opts: { mediaIds?: number[]; segme
   db.transaction(() => {
     for (const r of rows) {
       // Your own pick holds until you watch something newer.
-      if (r.status_manual_at && (!r.last_activity || r.status_manual_at >= r.last_activity)) continue;
+      if (r.status_manual_at && (!r.last_activity || r.status_manual_at > r.last_activity)) continue;
       const segs = segmentsOf(r.id);
       markUndatedUpcoming(db, segs);
       const caughtUp = !hasUnwatchedAired(segs, { ignoreFiller: r.type === "anime" });
@@ -144,4 +144,40 @@ export function applyAutoStatus(db = getDb(), opts: { mediaIds?: number[]; segme
 /** Called when you set a status yourself. */
 export function markStatusManual(db: DB, mediaId: number) {
   db.prepare(`UPDATE review SET status_manual_at = ? WHERE media_id = ?`).run(nowIso(), mediaId);
+}
+
+const STALE_FLAG = "one-time-drop-6-months";
+
+/**
+ * Once: every show you started but haven't touched in 6 months (and isn't finished) is
+ * set to Dropped. It counts as your own choice, so automatic status leaves it there until
+ * you watch an episode of it again.
+ */
+export function dropStaleOnce(db = getDb(), now = Date.now()): number {
+  if (db.prepare(`SELECT 1 FROM app_flag WHERE key = ?`).get(STALE_FLAG)) return 0;
+  const cutoff = new Date(now - 182 * 86_400_000).toISOString();
+  const rows = db
+    .prepare(
+      `SELECT m.id, m.type, r.status,
+              MAX(CASE WHEN a.state = 'watched' OR a.rating IS NOT NULL THEN COALESCE(a.watched_at, a.updated_at) END) AS last
+       FROM media m LEFT JOIN review r ON r.media_id = m.id
+       JOIN segment s ON s.media_id = m.id JOIN episode e ON e.segment_id = s.id LEFT JOIN episode_assessment a ON a.episode_id = e.id
+       WHERE m.type IN ('tv', 'anime') GROUP BY m.id HAVING last IS NOT NULL AND last < ?`,
+    )
+    .all(cutoff) as { id: number; type: string; status: string | null; last: string }[];
+  const dropped: number[] = [];
+  db.transaction(() => {
+    for (const r of rows) {
+      if (r.status === "dropped" || r.status === "completed") continue;
+      if (!hasUnwatchedAired(getSegments(r.id, db, { overview: false }), { ignoreFiller: r.type === "anime" })) continue; // finished what's out
+      db.prepare(
+        `INSERT INTO review (media_id, status, status_manual_at, created_at, updated_at) VALUES (?, 'dropped', ?, ?, ?)
+         ON CONFLICT(media_id) DO UPDATE SET status = 'dropped', status_manual_at = excluded.status_manual_at, updated_at = excluded.updated_at`,
+      ).run(r.id, nowIso(), nowIso(), nowIso());
+      dropped.push(r.id);
+    }
+    db.prepare(`INSERT INTO app_flag (key, at, detail) VALUES (?, ?, ?)`).run(STALE_FLAG, nowIso(), JSON.stringify({ dropped: dropped.length }));
+    if (dropped.length) audit(db, "drop_stale_once", "library", null, { dropped: dropped.length, ids: dropped.slice(0, 500) });
+  })();
+  return dropped.length;
 }

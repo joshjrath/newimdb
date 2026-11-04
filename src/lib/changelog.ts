@@ -12,6 +12,18 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-11-04-sort-both-ways",
+    date: "2026-11-04",
+    title: "Sort both ways, and more quick filters",
+    items: [
+      "A new sort menu with an ↑↓ arrow to reverse any sort: Recently ↔ Oldest watched, Highest ↔ Lowest rated, A→Z ↔ Z→A and more.",
+      "Watched with: tap several people to see only what you watched with all of them.",
+      "Select mode on Movies has Theater and Streaming buttons.",
+      "One-time tidy-up: shows you started but haven't touched in 6 months are set to Dropped (watch an episode to bring one back).",
+      "Episode grids have an Unwatched filter and Hide filler.",
+    ],
+  },
+  {
     id: "2026-11-04-anime-filler-progress",
     date: "2026-11-04",
     title: "Anime filler doesn't count against you",

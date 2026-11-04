@@ -17,12 +17,17 @@ export function parseListQuery(params: Params, defaults: { sort?: SortKey; pageS
     type: pick<MediaType>(MEDIA_TYPES, get("type")),
     status: status === "none" ? "none" : pick<WatchStatus>(WATCH_STATUSES, status),
     tag: get("tag"),
-    withPerson: Number(get("with")) > 0 ? Number(get("with")) : undefined,
+    // ?with=3,7 → watched with both
+    withPeople: (() => {
+      const ids = [...new Set((get("with") ?? "").split(",").map(Number).filter((n) => Number.isInteger(n) && n > 0))].slice(0, 20);
+      return ids.length ? ids : undefined;
+    })(),
     genre: Number(get("genre")) > 0 ? Number(get("genre")) : undefined,
     watchedIn: get("where") === "theater" || get("where") === "streaming" ? (get("where") as "theater" | "streaming") : undefined,
     q: get("q"),
     featured: get("featured") === "1" || undefined,
     sort: pick(SORT_OPTIONS.map((s) => s.key), get("sort")) ?? defaults.sort ?? "recent",
+    dir: get("dir") === "asc" || get("dir") === "desc" ? (get("dir") as "asc" | "desc") : undefined,
     page: Math.max(1, Number(get("page")) || 1),
     pageSize: Number(get("pageSize")) || defaults.pageSize,
   };

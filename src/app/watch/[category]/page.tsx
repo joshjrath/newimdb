@@ -3,15 +3,15 @@ import { notFound } from "next/navigation";
 import { requireOwnerPage } from "@/lib/guard";
 import { Shell } from "@/components/Shell";
 import { LibraryCard } from "@/components/LibraryCard";
+import { SortMenu } from "@/components/SortMenu";
+import { Suspense } from "react";
 import { SelectableGrid } from "@/components/SelectableGrid";
 import { listLists } from "@/lib/repo/lists";
 import { NowStrip } from "@/components/NowStrip";
 import { ReturningStrip } from "@/components/ReturningStrip";
 import { AiringStrip, UpcomingStrip } from "@/components/AiringStrips";
-import { AutoSubmit } from "@/components/AutoSubmit";
 import { pageCount, Pager } from "@/components/Pager";
 import { countMedia, listMedia, listShowSections, listWatching } from "@/lib/repo/media";
-import { SORT_OPTIONS } from "@/lib/domain/sort";
 import { allTags } from "@/lib/repo/tags";
 import { listPeople } from "@/lib/repo/people";
 import { listGenres } from "@/lib/repo/genres";
@@ -38,13 +38,13 @@ export default async function LibraryPage({ params, searchParams }: { params: Pr
   const type = CATEGORY_TO_TYPE[cat];
   const sp = await searchParams;
   const query = { ...parseListQuery(sp, { pageSize: LIBRARY_PAGE_SIZE }), type };
-  const { status, tag, q, featured, sort, page = 1, withPerson, genre, watchedIn } = query;
+  const { status, tag, q, featured, sort, page = 1, withPeople = [], genre, watchedIn } = query;
   const { items, total, pageSize } = listMedia(query);
   const counts = countMedia();
   const tags = allTags(getDb(), type);
   const people = listPeople(getDb(), type).filter((p) => p.count > 0);
   const genres = listGenres(getDb(), type).filter((g) => g.count > 0 || g.id === genre);
-  const filtered = Boolean(status || tag || q || featured || withPerson || genre || watchedIn);
+  const filtered = Boolean(status || tag || q || featured || withPeople.length || genre || watchedIn);
   const watching = type === "movie" || filtered || page > 1 ? [] : listWatching(type);
   // Shows you'd finished that have a new season: a strip up top, and a badge on their cards.
   const sections = type === "movie" ? { airing: [], upcoming: [], returning: [] } : listShowSections(type);
@@ -90,22 +90,19 @@ export default async function LibraryPage({ params, searchParams }: { params: Pr
           {status && <input type="hidden" name="status" value={status} />}
           {tag && <input type="hidden" name="tag" value={tag} />}
           {featured && <input type="hidden" name="featured" value="1" />}
-          {withPerson && <input type="hidden" name="with" value={withPerson} />}
+          {withPeople.length > 0 && <input type="hidden" name="with" value={withPeople.join(",")} />}
           <label className="grow">
             <span className="visually-hidden">Search {label}</span>
             <input className="input" type="search" name="q" defaultValue={q} placeholder={`Search ${label.toLowerCase()} and reviews`} />
           </label>
-          <label>
-            <span className="visually-hidden">Sort</span>
-            <AutoSubmit>
-              <select className="select" name="sort" defaultValue={sort}>
-                {SORT_OPTIONS.filter((s) => type !== "movie" || s.key !== "progress").map((s) => (
-                  <option key={s.key} value={s.key}>{s.label}</option>
-                ))}
-              </select>
-            </AutoSubmit>
-          </label>
+          {genre && <input type="hidden" name="genre" value={genre} />}
+          {watchedIn && <input type="hidden" name="where" value={watchedIn} />}
+          {sort && <input type="hidden" name="sort" value={sort} />}
+          {query.dir && <input type="hidden" name="dir" value={query.dir} />}
           <button className="btn" type="submit">Search</button>
+          <Suspense fallback={null}>
+            <SortMenu sort={sort ?? "recent"} dir={query.dir} exclude={type === "movie" ? ["progress"] : []} />
+          </Suspense>
         </form>
 
         <div className="chips" aria-label="Filter by status">
@@ -137,7 +134,13 @@ export default async function LibraryPage({ params, searchParams }: { params: Pr
           <div className="chips with-chips" aria-label="Filter by who you watched with">
             <span className="label" style={{ alignSelf: "center", marginRight: 2 }}>Watched with</span>
             {people.map((p) => (
-              <Link key={p.id} className="chip" href={href({ with: withPerson === p.id ? undefined : String(p.id) })} aria-current={withPerson === p.id ? "true" : undefined}>
+              <Link
+                key={p.id}
+                className="chip"
+                // Tap several: only titles you watched with all of them.
+                href={href({ with: (withPeople.includes(p.id) ? withPeople.filter((x) => x !== p.id) : [...withPeople, p.id]).join(",") || undefined })}
+                aria-current={withPeople.includes(p.id) ? "true" : undefined}
+              >
                 {p.name} <span className="hint">{p.count}</span>
               </Link>
             ))}
@@ -161,6 +164,7 @@ export default async function LibraryPage({ params, searchParams }: { params: Pr
 
       {items.length ? (
         <SelectableGrid
+          movies={type === "movie"}
           pageIds={items.map((m) => m.id)}
           people={listPeople().map(({ id, name }) => ({ id, name }))}
           genres={listGenres().map(({ id, name }) => ({ id, name }))}

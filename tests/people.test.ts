@@ -24,8 +24,10 @@ describe("watched with", () => {
     const c = createMedia({ type: "movie", metadata: { title: "Film C" } });
     expect(getMedia(a.id)!.people.map((p) => p.name)).toEqual(["Alex", "Sam"]);
     expect(getMedia(c.id)!.people).toEqual([]);
-    expect(listMedia({ withPerson: sam.id }).items.map((m) => m.title).sort()).toEqual(["Show A", "Show B"]);
-    expect(listMedia({ withPerson: alex.id, type: "tv" }).total).toBe(1);
+    expect(listMedia({ withPeople: [sam.id] }).items.map((m) => m.title).sort()).toEqual(["Show A", "Show B"]);
+    expect(listMedia({ withPeople: [alex.id], type: "tv" }).total).toBe(1);
+    // Both people: only what you watched with both of them.
+    expect(listMedia({ withPeople: [sam.id, alex.id] }).items.map((m) => m.title)).toEqual(["Show A"]);
     expect(listPeople().map((p) => [p.name, p.count])).toEqual([["Alex", 1], ["Sam", 2]]);
     expect(listPeople(db, "movie").every((p) => p.count === 0)).toBe(true);
 
@@ -55,9 +57,9 @@ describe("watched with", () => {
     const sam = createPerson("Sam");
     const ids = [createMedia({ type: "movie", metadata: { title: "A" } }).id, createMedia({ type: "movie", metadata: { title: "B" } }).id];
     expect(bulkUpdate(ids, "add_person", { personId: sam.id })).toBe(2);
-    expect(listMedia({ withPerson: sam.id }).total).toBe(2);
+    expect(listMedia({ withPeople: [sam.id] }).total).toBe(2);
     bulkUpdate([ids[0]], "remove_person", { personId: sam.id });
-    expect(listMedia({ withPerson: sam.id }).total).toBe(1);
+    expect(listMedia({ withPeople: [sam.id] }).total).toBe(1);
   });
 
   it("survives a backup and restore", async () => {

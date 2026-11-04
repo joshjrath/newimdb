@@ -17,7 +17,9 @@ export default async function StudioPage({ searchParams }: { searchParams: Promi
   const counts = countMedia();
   const people = listPeople();
   const genres = listGenres();
-  const withName = query.withPerson ? people.find((p) => p.id === query.withPerson)?.name : undefined;
+  const withName = query.withPeople?.length
+    ? query.withPeople.map((id) => people.find((p) => p.id === id)?.name).filter(Boolean).join(" and ")
+    : undefined;
   return (
     <Shell active="studio">
       <div className="page-head">
@@ -49,7 +51,7 @@ export default async function StudioPage({ searchParams }: { searchParams: Promi
         total={data.total}
         page={data.page}
         pageSize={data.pageSize}
-        filters={{ type: query.type ?? "", status: query.status ?? "", q: query.q ?? "", sort: query.sort ?? "added", with: query.withPerson ? String(query.withPerson) : "", genre: query.genre ? String(query.genre) : "" }}
+        filters={{ type: query.type ?? "", status: query.status ?? "", q: query.q ?? "", sort: query.sort ?? "added", with: query.withPeople?.join(",") ?? "", genre: query.genre ? String(query.genre) : "" }}
         genres={genres.map(({ id, name }) => ({ id, name }))}
         people={people.map(({ id, name }) => ({ id, name }))}
       />

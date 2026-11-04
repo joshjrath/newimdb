@@ -14,13 +14,15 @@ const KEY = "library-selection";
  * and filters), then tag them all in one go: who you watched with, a tag, a genre, a
  * status, or a list.
  */
-export function SelectableGrid({ children, pageIds, people, genres, lists, statuses }: {
+export function SelectableGrid({ children, pageIds, people, genres, lists, statuses, movies }: {
   children: React.ReactNode;
   pageIds: number[];
   people: Ref[];
   genres: Ref[];
   lists: Ref[];
   statuses: { key: string; label: string }[];
+  /** Movies: quick Theater / Streaming buttons. */
+  movies?: boolean;
 }) {
   const [on, setOn] = useState(false);
   const [sel, setSel] = useState<Set<number>>(new Set());
@@ -110,6 +112,13 @@ export function SelectableGrid({ children, pageIds, people, genres, lists, statu
                   + {p.name}
                 </button>
               ))}
+            </div>
+          )}
+          {movies && (
+            <div className="select-group">
+              <span className="label">Watched in</span>
+              <button className="chip" disabled={busy} onClick={() => bulk("set_watched_in", { watchedIn: "theater" }, `🎬 ${what} marked as seen in a theater.`)}>🎬 Theater</button>
+              <button className="chip" disabled={busy} onClick={() => bulk("set_watched_in", { watchedIn: "streaming" }, `📺 ${what} marked as streamed.`)}>📺 Streaming</button>
             </div>
           )}
           <div className="select-group">

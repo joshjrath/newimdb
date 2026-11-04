@@ -26,3 +26,17 @@ describe("lists", () => {
     expect(listLists()[0]).toMatchObject({ name: "MCU", count: 3, finished: 1 });
   });
 });
+
+describe("sorting both ways", () => {
+  it("reverses any sort", async () => {
+    const { listMedia: lm } = await import("@/lib/repo/media");
+    createMedia({ type: "movie", metadata: { title: "Alpha", year: 1990 }, review: { rating: 2 } });
+    createMedia({ type: "movie", metadata: { title: "Beta", year: 2020 }, review: { rating: 5 } });
+    const t = (sort: "rating" | "title" | "year", dir?: "asc" | "desc") => lm({ type: "movie", sort, dir }).items.map((m) => m.title);
+    expect(t("rating")).toEqual(["Beta", "Alpha"]);
+    expect(t("rating", "asc")).toEqual(["Alpha", "Beta"]);
+    expect(t("title")).toEqual(["Alpha", "Beta"]);
+    expect(t("title", "desc")).toEqual(["Beta", "Alpha"]);
+    expect(t("year", "asc")).toEqual(["Alpha", "Beta"]);
+  });
+});

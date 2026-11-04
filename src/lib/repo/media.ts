@@ -6,7 +6,7 @@ import { METADATA_KEYS, type BulkAssessAction, type BulkMediaAction, type Create
 import { resolveAssessment, UNASSESSED, type AssessmentPatch } from "../domain/assessment";
 import { activePointer, airingNow, computeProgress, progressFromCounts, returningSeason, upcomingPremiere, type ActivePointer, type Airing, type Progress, type Returning, type Upcoming } from "../domain/progress";
 import { normalizeTitle } from "../domain/text";
-import type { SortKey } from "../domain/sort";
+import { naturalDir, type SortDir, type SortKey } from "../domain/sort";
 import { audit } from "./audit";
 import { setMediaTags, tagsFor, tagsForMany } from "./tags";
 import { applyGenres, genresForMany, setMediaGenre, setMediaGenres } from "./genres";
@@ -222,21 +222,23 @@ const SKIPPABLE_FILLER_SQL = `(m.type = 'anime' AND COALESCE(a.filler, 0) = 1 AN
 const PERCENT_SQL = `(SELECT 100.0 * SUM(a.state = 'watched') / NULLIF(COUNT(e.id) - SUM(COALESCE(a.state, '') = 'skipped') - SUM(${UNAIRED_SQL}) - SUM(${SKIPPABLE_FILLER_SQL}), 0)
    FROM segment s JOIN episode e ON e.segment_id = s.id LEFT JOIN episode_assessment a ON a.episode_id = e.id WHERE s.media_id = m.id)`;
 
-const ORDER_BY: Record<SortKey, string> = {
-  progress: `${PERCENT_SQL} IS NULL, ${PERCENT_SQL} DESC, COALESCE(r.last_watched_at, r.watched_on) DESC`,
-  recent: `COALESCE(r.last_watched_at, r.watched_on, r.created_at) DESC, m.id DESC`,
-  rating: `r.rating IS NULL, r.rating DESC, COALESCE(r.last_watched_at, r.watched_on) DESC`,
-  title: `m.title COLLATE NOCASE ASC`,
-  year: `m.year IS NULL, m.year DESC, m.title COLLATE NOCASE`,
-  added: `m.created_at DESC, m.id DESC`,
+/** Each sort, both ways. The first is the natural direction (what the menu shows first). */
+const lastWatched = `COALESCE(r.last_watched_at, r.watched_on, r.created_at)`;
+const ORDER_BY: Record<SortKey, Record<SortDir, string>> = {
+  recent: { desc: `${lastWatched} DESC, m.id DESC`, asc: `${lastWatched} IS NULL, ${lastWatched} ASC, m.id ASC` },
+  rating: { desc: `r.rating IS NULL, r.rating DESC, ${lastWatched} DESC`, asc: `r.rating IS NULL, r.rating ASC, ${lastWatched} DESC` },
+  title: { asc: `m.title COLLATE NOCASE ASC`, desc: `m.title COLLATE NOCASE DESC` },
+  year: { desc: `m.year IS NULL, m.year DESC, m.title COLLATE NOCASE`, asc: `m.year IS NULL, m.year ASC, m.title COLLATE NOCASE` },
+  added: { desc: `m.created_at DESC, m.id DESC`, asc: `m.created_at ASC, m.id ASC` },
+  progress: { desc: `${PERCENT_SQL} IS NULL, ${PERCENT_SQL} DESC, ${lastWatched} DESC`, asc: `${PERCENT_SQL} IS NULL, ${PERCENT_SQL} ASC, ${lastWatched} DESC` },
 };
 
 export interface ListQuery {
   type?: MediaType;
   status?: WatchStatus | "none";
   tag?: string;
-  /** Only titles watched with this person. */
-  withPerson?: number;
+  /** Only titles watched with ALL of these people. */
+  withPeople?: number[];
   /** Movies watched in a theater or streaming. */
   watchedIn?: "theater" | "streaming";
   /** Only titles in this genre filter. */
@@ -244,6 +246,8 @@ export interface ListQuery {
   q?: string;
   featured?: boolean;
   sort?: SortKey;
+  /** Reverse a sort (e.g. oldest watched first). Defaults to the sort's natural direction. */
+  dir?: SortDir;
   page?: number;
   pageSize?: number;
 }
@@ -269,9 +273,9 @@ export function listMedia(query: ListQuery, db = getDb()): { items: ListItem[]; 
     where.push(`EXISTS (SELECT 1 FROM media_tag mt JOIN tag t ON t.id = mt.tag_id WHERE mt.media_id = m.id AND t.name = ? COLLATE NOCASE)`);
     params.push(query.tag);
   }
-  if (query.withPerson) {
+  for (const p of query.withPeople ?? []) {
     where.push(`EXISTS (SELECT 1 FROM media_person mp WHERE mp.media_id = m.id AND mp.person_id = ?)`);
-    params.push(query.withPerson);
+    params.push(p);
   }
   if (query.watchedIn) {
     where.push(`r.watched_in = ?`);
@@ -297,7 +301,7 @@ export function listMedia(query: ListQuery, db = getDb()): { items: ListItem[]; 
       `SELECT m.*, r.rating, r.rating_label, r.body, r.watched_on, r.spoiler, r.status, r.featured, r.visibility,
               r.source, r.source_ref, r.last_watched_at, r.watched_in, r.created_at AS r_created_at, r.updated_at AS r_updated_at
        FROM media m LEFT JOIN review r ON r.media_id = m.id ${whereSql}
-       ORDER BY ${ORDER_BY[query.sort ?? "recent"]} LIMIT ? OFFSET ?`,
+       ORDER BY ${ORDER_BY[query.sort ?? "recent"][query.dir ?? naturalDir(query.sort ?? "recent")]} LIMIT ? OFFSET ?`,
     )
     .all(...params, pageSize, (page - 1) * pageSize) as MediaRow[];
   const ids = rows.map((r) => r.id);
