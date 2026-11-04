@@ -167,3 +167,22 @@ export async function tmdbTv(id: string, opts: DetailsOptions = {}): Promise<Pro
     warnings,
   };
 }
+
+export interface ArtworkMatch {
+  posterUrl: string | null;
+  backdropUrl: string | null;
+  overview: string | null;
+  tmdbId?: number;
+  tvmazeId?: number;
+}
+
+/** Find a title on TMDB by its IMDb id. Prefers the result kind that matches, falls back to the other. */
+export async function tmdbFindByImdb(imdbId: string, prefer: "movie" | "tv"): Promise<ArtworkMatch | null> {
+  const r = await get<{
+    movie_results: { id: number; poster_path: string | null; backdrop_path: string | null; overview?: string }[];
+    tv_results: { id: number; poster_path: string | null; backdrop_path: string | null; overview?: string }[];
+  }>(`/find/${encodeURIComponent(imdbId)}`, { external_source: "imdb_id" });
+  const hit = (prefer === "movie" ? [...r.movie_results, ...r.tv_results] : [...r.tv_results, ...r.movie_results])[0];
+  if (!hit) return null;
+  return { posterUrl: img(hit.poster_path), backdropUrl: img(hit.backdrop_path, "w1280"), overview: hit.overview || null, tmdbId: hit.id };
+}

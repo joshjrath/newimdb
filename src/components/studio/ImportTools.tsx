@@ -8,6 +8,8 @@ import { Stars } from "../Stars";
 import { useUnsavedGuard } from "./useUnsavedGuard";
 import { excerpt } from "@/lib/domain/text";
 import { ImdbImport } from "./ImdbImport";
+import { PosterFetch } from "./PosterFetch";
+import { DuplicatesPanel, LIBRARY_CHANGED } from "./DuplicatesPanel";
 
 const MATCH_LABEL: Record<PreviewRow["match"], string> = {
   new: "New",
@@ -35,6 +37,8 @@ const ACTION_LABEL: Record<ImportAction, string> = {
 export function ImportTools() {
   return (
     <div className="stack loose">
+      <DuplicatesPanel />
+      <PosterFetch />
       <ImdbImport />
       <LetterboxdImport />
       <Backup />
@@ -76,6 +80,7 @@ function LetterboxdImport() {
       toast.push("ok", `Imported: ${r.counts.created} added, ${r.counts.updated} updated, ${r.counts.linked} linked, ${r.counts.skipped} skipped. All private.`);
       setRows(null);
       setValue("");
+      window.dispatchEvent(new Event(LIBRARY_CHANGED));
       router.refresh();
     } catch (err) {
       toast.push("error", `Import not applied: ${(err as Error).message}`);

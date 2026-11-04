@@ -78,6 +78,8 @@ export function previewLetterboxd(entries: LetterboxdEntry[], db = getDb()): Pre
     const existing = findByProviderIds("movie", { tmdbId: entry.tmdbId }, db) ?? matchTitle(entry.filmTitle, entry.filmYear);
     if (existing) {
       const m = getMedia(existing, db)!;
+      // Letterboxd wins over IMDb: replace an IMDb-imported rating with this review.
+      if (m.review.source === "imdb") return row("conflict", existing, m.title, "Already here from IMDb. Letterboxd's rating and review will replace it.", "overwrite");
       const reason = m.review.source === "manual" ? "You already wrote a review for this film here." : "Already in your library from another source.";
       return row("conflict", existing, m.title, reason, "link");
     }

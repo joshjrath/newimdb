@@ -227,7 +227,10 @@ main { padding: 28px 28px 96px 8px; }
 .filters { background: var(--card); border-radius: var(--r); padding: 14px; margin-bottom: 14px; }
 .count-line { color: var(--dim); font-size: 13px; margin: 0 4px 12px; }
 .count-line a { color: var(--ink2); }
-.library { display: grid; gap: 14px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 380px), 1fr)); }
+/* Cards wrap and grow, so a last row that isn't full stretches to fill it: no empty slot at the bottom right. */
+.library { display: flex; flex-wrap: wrap; gap: 14px; }
+.library > .card { flex: 1 1 380px; min-width: min(100%, 380px); }
+.library > .card .card-excerpt { max-width: 72ch; }
 .card {
   display: grid; grid-template-columns: 118px minmax(0, 1fr); gap: 16px; align-items: start; position: relative;
   background: var(--card); border-radius: var(--r); padding: 14px; color: var(--ink);
@@ -528,3 +531,6 @@ a.person-count:hover { color: var(--ink); }
 .job-progress { display: grid; gap: 8px; max-width: 640px; }
 .progress-fill.indeterminate { animation: slide 1.4s ease-in-out infinite; }
 @keyframes slide { 0% { transform: translateX(-100%); } 100% { transform: translateX(300%); } }
+.plain-list.dupes { max-height: 320px; }
+.plain-list.dupes a { text-decoration: none; }
+.plain-list.dupes a:hover { text-decoration: underline; }

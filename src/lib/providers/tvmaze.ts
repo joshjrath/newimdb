@@ -105,3 +105,14 @@ export async function tvmazeSeason(showId: string, season: number) {
   const eps = await fetchJson<Episode[]>("tvmaze", `${BASE}/seasons/${s.id}/episodes`);
   return eps.filter((e): e is Episode & { number: number } => e.number != null).map(toEpisode);
 }
+
+/** Find a show on TVmaze by its IMDb id (no key needed). Null when TVmaze doesn't have it. */
+export async function tvmazeLookupImdb(imdbId: string): Promise<{ posterUrl: string | null; overview: string | null; tvmazeId: number } | null> {
+  try {
+    const show = await fetchJson<Show>("tvmaze", `${BASE}/lookup/shows?imdb=${encodeURIComponent(imdbId)}`);
+    return { posterUrl: show.image?.original ?? show.image?.medium ?? null, overview: htmlToTextOrNull(show.summary), tvmazeId: show.id };
+  } catch (e) {
+    if ((e as { status?: number }).status === 404) return null;
+    throw e;
+  }
+}

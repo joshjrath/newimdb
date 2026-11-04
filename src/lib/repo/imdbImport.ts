@@ -7,7 +7,7 @@ import { guessMediaType, imdbKind, isLikelyAnimeCandidate, type ImdbRating } fro
 import { defaultSegmentLabel, MEDIA_TYPES, type MediaType } from "../domain/types";
 import type { EpisodeLookup } from "../imdb/datasets";
 import { audit } from "./audit";
-import { insertMedia, restoreAssessments, touchWatched } from "./media";
+import { fillEmptyMetadata, insertMedia, restoreAssessments, titleMatcher, touchWatched } from "./media";
 
 /**
  * A one-time IMDb ratings import, in two steps: build a plan (preview), then commit it
@@ -58,10 +58,34 @@ export interface ImdbPlan {
 const existingByImdb = (db: DB, imdbId: string) =>
   (db.prepare(`SELECT id FROM media WHERE imdb_id = ? ORDER BY id LIMIT 1`).get(imdbId) as { id: number } | undefined)?.id ?? null;
 
+/**
+ * Is this title already in the library? First by IMDb id; otherwise by title and year,
+ * because entries from Letterboxd or added by hand often have no IMDb id. One title is
+ * only ever reviewed once.
+ */
+function existingFinder(db: DB) {
+  const matchers = new Map<MediaType, ReturnType<typeof titleMatcher>>();
+  const matcher = (type: MediaType) => {
+    if (!matchers.has(type)) matchers.set(type, titleMatcher(type, db));
+    return matchers.get(type)!;
+  };
+  return (t: { imdbId: string; kind: "movie" | "show"; title: string; originalTitle: string | null; year: number | null }): number | null => {
+    const byId = existingByImdb(db, t.imdbId);
+    if (byId) return byId;
+    const types: MediaType[] = t.kind === "movie" ? ["movie", "anime"] : ["tv", "anime"];
+    for (const type of types) {
+      const hit = matcher(type)(t.title, t.year) ?? (t.originalTitle ? matcher(type)(t.originalTitle, t.year) : null);
+      if (hit) return hit;
+    }
+    return null;
+  };
+}
+
 const latest = (a: string | null, b: string | null) => (!a ? b : !b ? a : a > b ? a : b);
 
 export function buildImdbPlan(rows: ImdbRating[], invalid: number, lookup: EpisodeLookup | null, lookupError: string | null = null, db = getDb()): ImdbPlan {
   const titles = new Map<string, PlanTitle>();
+  const findExisting = existingFinder(db);
   const unresolved: ImdbPlan["unresolved"] = [];
   const skipped: ImdbPlan["skipped"] = [];
 
@@ -72,7 +96,7 @@ export function buildImdbPlan(rows: ImdbRating[], invalid: number, lookup: Episo
       animated: isLikelyAnimeCandidate(t.genres),
       seasons: [],
       ratedEpisodes: 0,
-      existingId: existingByImdb(db, t.imdbId),
+      existingId: findExisting(t),
     };
     titles.set(t.imdbId, pt);
     return pt;
@@ -262,9 +286,13 @@ function createTitle(db: DB, t: PlanTitle, type: MediaType): { id: number; episo
 
 /** Merge into an entry that already exists here (same IMDb id). Never deletes anything. */
 function mergeTitle(db: DB, id: number, t: PlanTitle, mode: "fill" | "overwrite"): { episodes: number; notPlaced: number } {
-  if (t.rating != null) {
+  const source = (db.prepare(`SELECT source FROM review WHERE media_id = ?`).get(id) as { source: string } | undefined)?.source;
+  // Letterboxd's rating and review always win over IMDb's.
+  if (t.rating != null && source !== "letterboxd") {
     db.prepare(`UPDATE review SET rating = ?, updated_at = ? WHERE media_id = ? AND (? = 'overwrite' OR rating IS NULL)`).run(t.rating, nowIso(), id, mode);
   }
+  // Remember the IMDb id (so the next import matches instantly) and fill any empty details.
+  fillEmptyMetadata(id, { imdbId: t.imdbId, year: t.year, originalTitle: t.originalTitle, genres: t.genres, runtimeMin: t.runtimeMin, thirdPartyRating: t.imdbRating, thirdPartyRatingSource: t.imdbRating != null ? "IMDb" : null }, db);
   if (t.ratedOn) touchWatched(db, id, t.ratedOn);
   const segs = db.prepare(`SELECT id, season_number FROM segment WHERE media_id = ? AND cour_number IS NULL`).all(id) as { id: number; season_number: number | null }[];
   const hasAny = Boolean(db.prepare(`SELECT 1 FROM segment WHERE media_id = ?`).get(id));
@@ -311,13 +339,14 @@ function mergeTitle(db: DB, id: number, t: PlanTitle, mode: "fill" | "overwrite"
 export function commitImdbPlan(plan: ImdbPlan, overrides: Record<string, MediaType | "skip">, mode: "fill" | "overwrite", db = getDb()) {
   const counts = { created: 0, updated: 0, skipped: 0, episodes: 0, notPlaced: 0, byType: { movie: 0, tv: 0, anime: 0 } as Record<MediaType, number> };
   db.transaction(() => {
+    const findExisting = existingFinder(db);
     for (const t of plan.titles) {
       const choice = overrides[t.imdbId] ?? t.guess;
       if (choice === "skip") {
         counts.skipped++;
         continue;
       }
-      const existing = existingByImdb(db, t.imdbId);
+      const existing = findExisting(t);
       if (existing) {
         const r = mergeTitle(db, existing, t, mode);
         counts.updated++;

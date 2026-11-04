@@ -436,6 +436,37 @@ export function applyMetadataRefresh(id: number, meta: Partial<MetadataInput>, d
   return getMedia(id, db)!;
 }
 
+/**
+ * Fill only what's empty (poster, backdrop, overview, provider ids) and never a locked field.
+ * Used by the background poster fetch, so it never overwrites anything you set yourself.
+ */
+export function fillEmptyMetadata(id: number, meta: Partial<MetadataInput>, db = getDb()): string[] {
+  const cur = getMedia(id, db);
+  if (!cur) return [];
+  const locked = new Set(cur.lockedFields);
+  const fill = Object.fromEntries(
+    (Object.entries(meta) as [keyof MetadataInput, unknown][]).filter(([k, v]) => {
+      const empty = (x: unknown) => x == null || x === "" || (Array.isArray(x) && x.length === 0);
+      return !empty(v) && !locked.has(k) && empty(cur[k]);
+    }),
+  ) as Partial<MetadataInput>;
+  const keys = Object.keys(fill);
+  if (!keys.length) return [];
+  db.transaction(() => {
+    writeMetadata(db, id, fill);
+    bumpVersion(db, id); // an edit form open on this title then asks to reload instead of blanking the poster
+    audit(db, "fill_metadata", "media", id, { fields: keys });
+  })();
+  return keys;
+}
+
+/** Titles with an IMDb id and no poster, oldest first. */
+export function missingPosterIds(db = getDb()): { id: number; type: MediaType; imdbId: string }[] {
+  return db
+    .prepare(`SELECT id, type, imdb_id AS imdbId FROM media WHERE (poster_url IS NULL OR poster_url = '') AND imdb_id IS NOT NULL AND imdb_id != '' ORDER BY id`)
+    .all() as { id: number; type: MediaType; imdbId: string }[];
+}
+
 export function deleteMedia(ids: number[], db = getDb()): number {
   return db.transaction(() => {
     let n = 0;

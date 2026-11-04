@@ -12,6 +12,17 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-11-04-posters-and-duplicates",
+    date: "2026-11-04",
+    title: "Posters, and one review per title",
+    items: [
+      "Titles imported from IMDb get their posters filled in automatically.",
+      "A film from both Letterboxd and IMDb is only kept once, with Letterboxd's rating and review.",
+      "Import & backup can merge any duplicates already in your library.",
+      "Library cards fill the last row, with no empty slot.",
+    ],
+  },
+  {
     id: "2026-11-04-watched-with",
     date: "2026-11-04",
     title: "Who you watched with",

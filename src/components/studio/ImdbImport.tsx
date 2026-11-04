@@ -5,6 +5,7 @@ import { api, ApiError } from "@/lib/client/api";
 import { useToast } from "../Toasts";
 import { Stars } from "../Stars";
 import { useUnsavedGuard } from "./useUnsavedGuard";
+import { POSTERS_STARTED } from "./PosterFetch";
 import { formatDate } from "@/lib/format";
 import { plural } from "@/lib/domain/text";
 import { MEDIA_TYPES, typePluralLabel, type MediaType } from "@/lib/domain/types";
@@ -138,6 +139,11 @@ export function ImdbImport() {
       );
       setPreview(null);
       setFile(null);
+      // Imported titles have no artwork yet: start filling in posters straight away.
+      fetch("/api/posters", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" })
+        .then(() => window.dispatchEvent(new Event(POSTERS_STARTED)))
+        .then(() => window.dispatchEvent(new Event("library:changed")))
+        .catch(() => {});
       router.refresh();
     } catch (e) {
       toast.push("error", `Import not applied, nothing changed: ${(e as Error).message}`);
