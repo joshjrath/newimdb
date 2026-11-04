@@ -13,7 +13,7 @@ import { getDb } from "../db";
 import { tvmazeEpisodesBySeason, tvmazeLookupImdb } from "../providers/tvmaze";
 import { tmdbConfigured, tmdbFindByImdb, tmdbTv } from "../providers/tmdb";
 import { fillEmptyMetadata } from "../repo/media";
-import { allShows, dueShows, markSynced, removePlaceholderSeasons, syncShowEpisodes, type DueShow, type SyncEpisode } from "../repo/episodeSync";
+import { allShows, dueShows, markSynced, removeLeftoverEpisodes, removePlaceholderSeasons, syncShowEpisodes, type DueShow, type SyncEpisode } from "../repo/episodeSync";
 
 /**
  * The automatic new-episode check. Runs on the server every 15 minutes, a small batch at a
@@ -106,6 +106,28 @@ export async function runEpisodeSync(opts: { limit?: number; all?: boolean } = {
   return s;
 }
 
+/** Check one show now (the "Check for new episodes" button on its page). */
+export async function syncOneShow(mediaId: number): Promise<{ added: number; newSeasons: number; note: string | null }> {
+  const show = allShows().find((x) => x.id === mediaId);
+  if (!show) return { added: 0, newSeasons: 0, note: "Only TV shows and anime are checked." };
+  try {
+    const found = await episodesFor(show);
+    if (!found) {
+      markSynced(show.id, "No TVmaze or TMDB match for this show.");
+      return { added: 0, newSeasons: 0, note: "TVmaze and TMDB don't have this show (or its IMDb id), so dates can't be checked." };
+    }
+    const r = syncShowEpisodes(show.id, found.bySeason, found);
+    removeLeftoverEpisodes(undefined, [show.id]);
+    removePlaceholderSeasons(undefined, [show.id]);
+    applyAutoStatus(undefined, { mediaIds: [show.id] });
+    const note = (getDb().prepare(`SELECT episodes_sync_note n FROM media WHERE id = ?`).get(show.id) as { n: string | null }).n;
+    return { added: r.added, newSeasons: r.newSeasons, note };
+  } catch (e) {
+    markSynced(show.id, `Couldn't check: ${(e as Error).message}`);
+    return { added: 0, newSeasons: 0, note: `Couldn't check: ${(e as Error).message}` };
+  }
+}
+
 /** Start the background schedule (called once at server start). */
 export function startEpisodeScheduler() {
   if (g.__episodeTimer || process.env.EPISODE_SYNC === "off") return;
@@ -127,6 +149,7 @@ export function startEpisodeScheduler() {
     autoMergeDuplicates(); // the same film or show never stays twice
     try {
       removePlaceholderSeasons(); // planned seasons IMDb lists as "Episode #2.1"… aren't real yet
+      removeLeftoverEpisodes(); // undated leftovers after a long-finished season's finale
       undoBetweenSeasonDrops(); // once: finished shows dropped only because of a newer season come back
       dropStaleOnce(); // once: shows untouched for 6 months are set to Dropped
       applyAutoStatus(); // status follows progress: completed, watching, on hold, dropped

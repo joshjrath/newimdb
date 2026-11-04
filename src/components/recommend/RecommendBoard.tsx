@@ -5,10 +5,10 @@ import { api, posterSrc } from "@/lib/client/api";
 import { useAction } from "../useAction";
 import { Poster } from "../Poster";
 import { WatchIcons } from "./WatchIcons";
-import type { Recommendation, RecommendState } from "@/lib/recommend/job";
+import type { PersonPicks, Recommendation, RecommendState } from "@/lib/recommend/job";
 import type { MediaType } from "@/lib/domain/types";
 
-type Data = { byType: Record<MediaType, Recommendation[]>; computedAt: string | null; state: RecommendState; tmdb: boolean };
+type Data = { byType: Record<MediaType, Recommendation[]>; byPerson: PersonPicks[]; computedAt: string | null; state: RecommendState; tmdb: boolean };
 const SECTIONS: { type: MediaType; title: string; cat: string }[] = [
   { type: "anime", title: "Anime", cat: "anime" },
   { type: "tv", title: "TV Shows", cat: "tv" },
@@ -62,10 +62,34 @@ export function RecommendBoard({ initial, rated }: { initial: Data; rated: numbe
       ok: action === "add" ? `Added ${rec.title} to Plan to watch.` : `Got it, no more ${rec.title}.`,
     });
     if (r) {
-      setGone(new Set([...gone, rec.key]));
+      // Gone from every row it was in (for you, and with anyone).
+      const base = rec.baseKey ?? rec.key;
+      const all = [...Object.values(d.byType).flat(), ...d.byPerson.flatMap((p) => p.items)].filter((x) => (x.baseKey ?? x.key) === base).map((x) => x.key);
+      setGone(new Set([...gone, ...all]));
       if (action === "add") router.refresh();
     }
   };
+
+  const card = (r: Recommendation) => (
+                <article key={r.key} className="rec-card">
+                  <div className="rec-poster">
+                    <Poster url={r.posterUrl} title={r.title} />
+                    <span className="rec-match">{r.match}%</span>
+                    <div className="rec-actions">
+                      <button className="btn small primary" disabled={busy} onClick={() => act(r, "add")} aria-label={`Add ${r.title} to Plan to watch`}>+ Plan</button>
+                      <button className="btn small ghost" disabled={busy} onClick={() => act(r, "dismiss")} aria-label={`Not interested in ${r.title}`}>✕</button>
+                    </div>
+                  </div>
+                  <h3>{r.title}</h3>
+                  <p className="rec-meta">{[r.year, r.genres[0]].filter(Boolean).join(" · ")} <ImdbBadge r={r} /></p>
+                  {r.because[0] && (
+                    <p className="rec-because small" title={`Because you loved ${r.because.join(", ")}`}>
+                      Because of <b>{r.because[0]}</b>{r.supporters > 1 ? ` +${r.supporters - 1}` : ""}
+                    </p>
+                  )}
+                  <WatchIcons options={r.watch} />
+                </article>
+  );
 
   const live = (type: MediaType) => d.byType[type].filter((r) => !gone.has(r.key));
   const hero = [...live("anime"), ...live("tv"), ...live("movie")].sort((a, b) => b.match - a.match)[0];
@@ -125,6 +149,20 @@ export function RecommendBoard({ initial, rated }: { initial: Data; rated: numbe
         </section>
       )}
 
+      {d.byPerson.map(({ person, items }) => {
+        const list = items.filter((r) => !gone.has(r.key));
+        if (!list.length) return null;
+        return (
+          <section key={person.id} className="rec-section rec-with" aria-labelledby={`rec-p${person.id}`}>
+            <h2 id={`rec-p${person.id}`}>
+              <span className="person-avatar" aria-hidden="true">{person.name.slice(0, 1).toUpperCase()}</span>
+              Watch with {person.name} <span className="hint">from the {person.shared} titles you&apos;ve seen together, and how you rated them</span>
+            </h2>
+            <div className="rec-row">{list.map((r) => card(r))}</div>
+          </section>
+        );
+      })}
+
       {SECTIONS.map((s) => {
         const list = live(s.type).filter((r) => r.key !== hero?.key);
         if (!list.length) return s.type !== "anime" && !d.tmdb && !empty ? (
@@ -137,26 +175,7 @@ export function RecommendBoard({ initial, rated }: { initial: Data; rated: numbe
           <section key={s.type} className={`rec-section cat-${s.cat}`} aria-labelledby={`rec-${s.type}`}>
             <h2 id={`rec-${s.type}`}>{s.title} <span className="hint">for you</span></h2>
             <div className="rec-row">
-              {list.map((r) => (
-                <article key={r.key} className="rec-card">
-                  <div className="rec-poster">
-                    <Poster url={r.posterUrl} title={r.title} />
-                    <span className="rec-match">{r.match}%</span>
-                    <div className="rec-actions">
-                      <button className="btn small primary" disabled={busy} onClick={() => act(r, "add")} aria-label={`Add ${r.title} to Plan to watch`}>+ Plan</button>
-                      <button className="btn small ghost" disabled={busy} onClick={() => act(r, "dismiss")} aria-label={`Not interested in ${r.title}`}>✕</button>
-                    </div>
-                  </div>
-                  <h3>{r.title}</h3>
-                  <p className="rec-meta">{[r.year, r.genres[0]].filter(Boolean).join(" · ")} <ImdbBadge r={r} /></p>
-                  {r.because[0] && (
-                    <p className="rec-because small" title={`Because you loved ${r.because.join(", ")}`}>
-                      Because of <b>{r.because[0]}</b>{r.supporters > 1 ? ` +${r.supporters - 1}` : ""}
-                    </p>
-                  )}
-                  <WatchIcons options={r.watch} />
-                </article>
-              ))}
+              {list.map((r) => card(r))}
             </div>
           </section>
         );

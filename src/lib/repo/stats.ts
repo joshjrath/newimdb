@@ -141,7 +141,7 @@ export function timeLeft(db = getDb()): TimeLeft[] {
                 SUM(a.state = 'watched') AS watched,
                 SUM(COALESCE(a.state, 'unwatched') = 'unwatched' AND NOT (m.type = 'anime' AND COALESCE(a.filler, 0) = 1) AND NOT COALESCE(
                   e.air_date = 'TBA'
-                  OR (length(e.air_date) = 4 AND CAST(e.air_date AS INTEGER) >= CAST(strftime('%Y', 'now') AS INTEGER))
+                  OR (length(e.air_date) = 4 AND (CAST(e.air_date AS INTEGER) > CAST(strftime('%Y', 'now') AS INTEGER) OR (CAST(e.air_date AS INTEGER) = CAST(strftime('%Y', 'now') AS INTEGER) AND (e.title IS NULL OR trim(e.title) = '' OR lower(e.title) GLOB 'episode*[0-9]*'))))
                   OR (length(e.air_date) >= 10 AND substr(e.air_date, 1, 10) > date('now')), 0)) AS episodesLeft,
                 ${rt("tv")} AS per
          FROM media m LEFT JOIN review r ON r.media_id = m.id JOIN segment s ON s.media_id = m.id JOIN episode e ON e.segment_id = s.id LEFT JOIN episode_assessment a ON a.episode_id = e.id

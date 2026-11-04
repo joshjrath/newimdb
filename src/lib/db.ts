@@ -305,6 +305,10 @@ const MIGRATIONS: string[] = [
   );
   CREATE INDEX IF NOT EXISTS list_item_media ON list_item(media_id);
   `,
+  // 11 — recommendations for watching with someone
+  `
+  ALTER TABLE recommendation ADD COLUMN person_id INTEGER;
+  `,
 ];
 
 /** Whether the database was created just now (no earlier data), per connection. */

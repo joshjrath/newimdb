@@ -67,4 +67,31 @@ describe("recommendations", () => {
     dismissRecommendation(byType.movie[0].key);
     expect(listRecommendations().byType.movie).toEqual([]);
   });
+
+  it("makes a row for watching with someone, from only the titles you've seen together", async () => {
+    const { createPerson } = await import("@/lib/repo/people");
+    const kayla = createPerson("Kayla");
+    const heat = createMedia({ type: "movie", metadata: { title: "Heat", year: 1995, tmdbId: 949, genres: ["Crime"] }, review: { rating: 5 }, people: [kayla.id] });
+    const coll = createMedia({ type: "movie", metadata: { title: "Collateral", year: 2004, tmdbId: 1538, genres: ["Crime"] }, review: { rating: 4.5 }, people: [kayla.id] });
+    for (let i = 0; i < 3; i++) createMedia({ type: "movie", metadata: { title: `Shared ${i}`, year: 2000 + i, genres: ["Crime"] }, review: { rating: 3 }, people: [kayla.id] });
+    createMedia({ type: "movie", metadata: { title: "Mine only", year: 2010, tmdbId: 77 }, review: { rating: 5 } });
+    const rec = (id: number, title: string) => ({ id, title, release_date: "2010-01-01", genre_ids: [80], vote_average: 7.6, vote_count: 900, poster_path: "/p.jpg", original_language: "en" });
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+      if (url.includes("/genre/")) return json({ genres: [{ id: 80, name: "Crime" }] });
+      if (url.includes("/949/recommendations") || url.includes("/1538/recommendations")) return json({ results: [rec(10, "Thief")] });
+      if (url.includes("/77/recommendations")) return json({ results: [rec(30, "Solo pick"), rec(10, "Thief")] });
+      return json({ results: [] });
+    }));
+    await buildRecommendations();
+    const { byPerson } = listRecommendations();
+    expect(byPerson).toHaveLength(1);
+    expect(byPerson[0].person).toMatchObject({ name: "Kayla", shared: 5 });
+    expect(byPerson[0].items.map((r) => r.title)).toEqual(["Thief"]); // "Solo pick" comes from your own favourite, not one you share
+    expect(byPerson[0].items[0].because.sort()).toEqual(["Collateral", "Heat"]);
+    // Not interested in it from Kayla's row: gone from yours too.
+    dismissRecommendation(byPerson[0].items[0].key);
+    expect(listRecommendations().byType.movie.map((r) => r.title)).not.toContain("Thief");
+    expect(heat.id && coll.id).toBeTruthy();
+  });
 });
+

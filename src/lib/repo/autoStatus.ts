@@ -53,7 +53,7 @@ export function statusClockStart(db = getDb()): string {
   return now;
 }
 
-const knownAired = (e: EpisodeView) => Boolean(e.airDate) && hasAired(e.airDate, undefined);
+const knownAired = (e: EpisodeView) => Boolean(e.airDate) && hasAired(e.airDate, undefined, e.title);
 
 /**
  * Is there anything out that you haven't watched? Only regular seasons and cours count

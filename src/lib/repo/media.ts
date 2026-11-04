@@ -212,7 +212,8 @@ export type { SortKey };
 /** Not out yet (and not watched or rated): the SQL twin of isUnaired(). Expects `e` (episode) and `a` (assessment). */
 const UNAIRED_SQL = `(COALESCE(a.state, 'unwatched') = 'unwatched' AND a.rating IS NULL AND (
     e.air_date = 'TBA'
-    OR (length(e.air_date) = 4 AND CAST(e.air_date AS INTEGER) >= CAST(strftime('%Y', 'now') AS INTEGER))
+    OR (length(e.air_date) = 4 AND (CAST(e.air_date AS INTEGER) > CAST(strftime('%Y', 'now') AS INTEGER)
+        OR (CAST(e.air_date AS INTEGER) = CAST(strftime('%Y', 'now') AS INTEGER) AND (e.title IS NULL OR trim(e.title) = '' OR lower(e.title) GLOB 'episode*[0-9]*'))))
     OR (length(e.air_date) >= 10 AND substr(e.air_date, 1, 10) > date('now'))))`;
 
 /** A show's percent watched (null when there's nothing to watch), for sorting by progress. */

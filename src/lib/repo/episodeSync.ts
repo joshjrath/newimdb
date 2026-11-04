@@ -202,6 +202,41 @@ export function isPlaceholderEpisode(e: { title: string | null; airDate: string 
  * those, with nothing watched or rated, isn't shown. The real one arrives with the
  * new-episode check once it's announced with episodes.
  */
+/**
+ * Leftover placeholders at the end of a season that finished long ago (Gravity Falls had
+ * undated "episodes" after its finale): nothing watched, no real title, no date, and the
+ * season's last real episode aired over a year ago. They're removed so the show reads as over.
+ */
+export function removeLeftoverEpisodes(db: DB = getDb(), mediaIds?: number[]): number {
+  const only = mediaIds?.length ? `AND s.media_id IN (${mediaIds.map(() => "?").join(",")})` : "";
+  const segs = db
+    .prepare(`SELECT s.id, s.media_id FROM segment s JOIN media m ON m.id = s.media_id WHERE m.type IN ('tv', 'anime') AND s.kind IN ('season', 'cour') ${only}`)
+    .all(...(mediaIds ?? [])) as { id: number; media_id: number }[];
+  const yearAgo = new Date(Date.now() - 365 * 86_400_000).toISOString().slice(0, 10);
+  let removed = 0;
+  db.transaction(() => {
+    for (const seg of segs) {
+      const eps = db
+        .prepare(`SELECT e.id, e.number, e.title, e.air_date AS airDate, a.state, a.rating FROM episode e LEFT JOIN episode_assessment a ON a.episode_id = e.id WHERE e.segment_id = ? ORDER BY e.number`)
+        .all(seg.id) as { id: number; number: number; title: string | null; airDate: string | null; state: string | null; rating: number | null }[];
+      const realDates = eps.map((e) => e.airDate).filter((d): d is string => Boolean(d && /^\d{4}-\d{2}-\d{2}/.test(d)));
+      const lastReal = realDates.sort().pop();
+      if (!lastReal || lastReal.slice(0, 10) > yearAgo) continue; // still recent, or nothing to go on
+      const tail: number[] = [];
+      for (let i = eps.length - 1; i >= 0; i--) {
+        const e = eps[i];
+        const untouched = (e.state ?? "unwatched") === "unwatched" && e.rating == null;
+        if (!untouched || !isPlaceholderEpisode(e) || (e.airDate && e.airDate !== "TBA" && !/^\d{4}$/.test(e.airDate))) break;
+        tail.push(e.id);
+      }
+      if (!tail.length || tail.length === eps.length) continue;
+      removed += db.prepare(`DELETE FROM episode WHERE id IN (${tail.map(() => "?").join(",")})`).run(...tail).changes;
+      db.prepare(`UPDATE media SET version = version + 1, updated_at = ? WHERE id = ?`).run(nowIso(), seg.media_id);
+    }
+  })();
+  return removed;
+}
+
 export function removePlaceholderSeasons(db: DB = getDb(), mediaIds?: number[]): number {
   const only = mediaIds?.length ? `AND s.media_id IN (${mediaIds.map(() => "?").join(",")})` : "";
   const segs = db

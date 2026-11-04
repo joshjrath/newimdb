@@ -68,6 +68,21 @@ export function EpisodesSection({ mediaId, type, title, version: v0, initial, in
     <section className="panel" aria-labelledby="eps-h">
       <div className="episodes-head">
         <h2 id="eps-h">Episodes</h2>
+        {type !== "movie" && (
+          <button
+            type="button"
+            className="btn small ghost"
+            disabled={busy}
+            onClick={async () => {
+              const r = await run(() => api<{ one: { added: number; newSeasons: number; note: string | null } }>("/api/episodes/sync", { body: { mediaId } }), {
+                ok: (x) => (x.one.added || x.one.newSeasons ? `Found ${x.one.added} new episode${x.one.added === 1 ? "" : "s"}${x.one.newSeasons ? ` and ${x.one.newSeasons} new season${x.one.newSeasons === 1 ? "" : "s"}` : ""}. Dates are up to date.` : x.one.note ?? "Up to date: air dates checked."),
+              });
+              if (r) setTimeout(() => window.location.reload(), 1200); // show the updated dates
+            }}
+          >
+            Check for new episodes
+          </button>
+        )}
         <button type="button" className="btn small" aria-expanded={editing} onClick={() => setEditing((e) => !e)}>
           {editing ? "Done editing seasons" : "Edit seasons"}
         </button>

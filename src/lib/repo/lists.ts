@@ -13,7 +13,7 @@ export { LIST_SORTS, type ListItemView, type ListSort, type ListSummary };
 
 const UNAIRED = `(COALESCE(a.state, 'unwatched') = 'unwatched' AND a.rating IS NULL AND (
     e.air_date = 'TBA'
-    OR (length(e.air_date) = 4 AND CAST(e.air_date AS INTEGER) >= CAST(strftime('%Y', 'now') AS INTEGER))
+    OR (length(e.air_date) = 4 AND (CAST(e.air_date AS INTEGER) > CAST(strftime('%Y', 'now') AS INTEGER) OR (CAST(e.air_date AS INTEGER) = CAST(strftime('%Y', 'now') AS INTEGER) AND (e.title IS NULL OR trim(e.title) = '' OR lower(e.title) GLOB 'episode*[0-9]*'))))
     OR (length(e.air_date) >= 10 AND substr(e.air_date, 1, 10) > date('now'))))`;
 
 const ORDER: Record<ListSort, (a: ListItemView, b: ListItemView) => number> = {

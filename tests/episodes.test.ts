@@ -176,3 +176,47 @@ describe("seasons that don't exist yet (Your Friendly Neighborhood Spider-Man)",
     expect(getMediaDetail(m.id)!.segments.map((s) => s.label)).toEqual(["Season 1"]);
   });
 });
+
+describe("is it out, is it airing, is it new?", () => {
+  it("Monster S4 (titled, this year) is out; a numbered placeholder this year isn't", async () => {
+    const { isUnaired } = await import("@/lib/domain/progress");
+    const year = String(new Date().getUTCFullYear());
+    expect(isUnaired(ep({ airDate: year, title: "The Lizzie Borden Story" }))).toBe(false);
+    expect(isUnaired(ep({ airDate: year, title: "Episode #4.1" }))).toBe(true);
+    expect(isUnaired(ep({ airDate: year, title: null }))).toBe(true);
+    const m = createMedia({ type: "tv", metadata: { title: "Monster" }, segments: [{ kind: "season", label: "Season 4", seasonNumber: 4, courNumber: null, episodeCount: 2, episodes: [1, 2].map((n) => ({ number: n, title: `Part ${n}`, airDate: year, overview: null, providerRef: null })) }] });
+    expect(listMedia({ type: "tv" }).items.find((x) => x.id === m.id)!.progress).toMatchObject({ unaired: 0, denominator: 2 });
+  });
+
+  it("Gravity Falls isn't airing because of undated leftovers, and they're cleaned up", async () => {
+    const { airingNow } = await import("@/lib/domain/progress");
+    const { removeLeftoverEpisodes } = await import("@/lib/repo/episodeSync");
+    const m = createMedia({
+      type: "tv",
+      metadata: { title: "Gravity Falls" },
+      segments: [{ kind: "season", label: "Season 2", seasonNumber: 2, courNumber: null, episodeCount: 3, episodes: [
+        { number: 1, title: "Scaryoke", airDate: "2014-08-01", overview: null, providerRef: null },
+        { number: 2, title: "Weirdmageddon 3", airDate: "2016-02-15", overview: null, providerRef: null },
+        { number: 3, title: null, airDate: "TBA", overview: null, providerRef: null },
+      ] }],
+    });
+    expect(airingNow(getMediaDetail(m.id)!.segments)).toBeNull();
+    expect(removeLeftoverEpisodes()).toBe(1);
+    expect(getMediaDetail(m.id)!.segments[0].episodes.length).toBe(2);
+  });
+
+  it("an unwatched season that came out years ago isn't 'new' (Legend of Korra)", async () => {
+    const { returningSeason } = await import("@/lib/domain/progress");
+    const m = createMedia({
+      type: "tv",
+      metadata: { title: "The Legend of Korra" },
+      segments: [
+        { kind: "season", label: "Season 1", seasonNumber: 1, courNumber: null, episodeCount: 1, episodes: [{ number: 1, title: "Welcome to Republic City", airDate: "2012-04-14", overview: null, providerRef: null }] },
+        { kind: "season", label: "Season 2", seasonNumber: 2, courNumber: null, episodeCount: 1, episodes: [{ number: 1, title: "Rebel Spirit", airDate: "2013-09-13", overview: null, providerRef: null }] },
+      ],
+    });
+    const segs = getMediaDetail(m.id)!.segments;
+    setAssessment(m.id, segs[0].episodes[0].id, { state: "watched" });
+    expect(returningSeason(getMediaDetail(m.id)!.segments)).toBeNull();
+  });
+});

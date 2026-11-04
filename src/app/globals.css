@@ -822,3 +822,4 @@ button.stat-btn:hover { background: var(--raised); }
 .rail-hits .poster { border-radius: 5px; }
 .rail-hits .poster-fallback { font-size: 0; }
 .rail-hits .rail-hits-all { display: block; text-align: center; color: var(--cat, #c7b6f6); }
+.rec-with > h2::before { display: none; } .rec-with > h2 .person-avatar { width: 30px; height: 30px; font-size: 13px; }

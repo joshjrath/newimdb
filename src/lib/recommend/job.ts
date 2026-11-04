@@ -30,6 +30,10 @@ export interface Recommendation {
   imdb: { id: string; rating: number | null; votes: number | null } | null;
   /** How many of your favourites point here. */
   supporters: number;
+  /** The pick itself (shared by "for you" and "with someone" rows). */
+  baseKey?: string;
+  /** Picked for watching with this person, from the titles you've seen together. */
+  person?: { id: number; name: string; shared: number } | null;
   tmdb: { kind: "movie" | "tv"; id: number } | null;
   anilistId: number | null;
   malId: number | null;
@@ -69,11 +73,25 @@ async function retry<T>(fn: () => Promise<T>): Promise<T> {
 
 /* ---------------- reads ---------------- */
 
-export function listRecommendations(db = getDb()): { byType: Record<MediaType, Recommendation[]>; computedAt: string | null } {
-  const rows = db.prepare(`SELECT type, data, computed_at FROM recommendation ORDER BY score DESC`).all() as { type: MediaType; data: string; computed_at: string }[];
+export interface PersonPicks {
+  person: { id: number; name: string; shared: number };
+  items: Recommendation[];
+}
+
+export function listRecommendations(db = getDb()): { byType: Record<MediaType, Recommendation[]>; byPerson: PersonPicks[]; computedAt: string | null } {
+  const rows = db.prepare(`SELECT type, data, person_id, computed_at FROM recommendation ORDER BY score DESC`).all() as { type: MediaType; data: string; person_id: number | null; computed_at: string }[];
   const byType: Record<MediaType, Recommendation[]> = { movie: [], tv: [], anime: [] };
-  for (const r of rows) byType[r.type].push(JSON.parse(r.data));
-  return { byType, computedAt: rows[0]?.computed_at ?? null };
+  const people = new Map<number, PersonPicks>();
+  for (const r of rows) {
+    const rec = JSON.parse(r.data) as Recommendation;
+    if (r.person_id == null) byType[r.type].push(rec);
+    else if (rec.person) {
+      const p = people.get(r.person_id) ?? { person: rec.person, items: [] };
+      p.items.push(rec);
+      people.set(r.person_id, p);
+    }
+  }
+  return { byType, byPerson: [...people.values()].sort((a, b) => b.person.shared - a.person.shared), computedAt: rows[0]?.computed_at ?? null };
 }
 
 export function getRecommendation(key: string, db = getDb()): Recommendation | null {
@@ -84,12 +102,15 @@ export function getRecommendation(key: string, db = getDb()): Recommendation | n
 /** "Not interested": gone now, and never suggested again. */
 export function dismissRecommendation(key: string, db = getDb()) {
   const rec = getRecommendation(key, db);
-  db.prepare(`INSERT OR REPLACE INTO recommendation_dismissed (key, title, dismissed_at) VALUES (?, ?, ?)`).run(key, rec?.title ?? null, nowIso());
-  db.prepare(`DELETE FROM recommendation WHERE key = ?`).run(key);
+  const base = rec?.baseKey ?? key;
+  db.prepare(`INSERT OR REPLACE INTO recommendation_dismissed (key, title, dismissed_at) VALUES (?, ?, ?)`).run(base, rec?.title ?? null, nowIso());
+  removeRecommendation(key, db);
 }
 
+/** Removes a pick everywhere it appears (for you, and with anyone). */
 export function removeRecommendation(key: string, db = getDb()) {
-  db.prepare(`DELETE FROM recommendation WHERE key = ?`).run(key);
+  const base = getRecommendation(key, db)?.baseKey ?? key;
+  db.prepare(`DELETE FROM recommendation WHERE key = ? OR key = ? OR key LIKE ?`).run(key, base, `p%:${base}`);
 }
 
 /* ---------------- building ---------------- */
@@ -185,11 +206,17 @@ export async function buildRecommendations(db = getDb()): Promise<{ total: numbe
   s.done = 0;
   s.step = "Reading your favourites";
   let next = 0;
-  const work = async () => {
-    for (let i = next++; i < seeds.length; i = next++) {
-      const seed = seeds[i];
-      const m = libById.get(seed.id)!;
-      try {
+  // Each library title's "if you liked this" lists, fetched once and reused for people rows.
+  type Row = Omit<Candidate, "from">;
+  const seedRows = new Map<number, Promise<Row[][]>>();
+  const rowsForSeed = (seed: Seed): Promise<Row[][]> => {
+    if (!seedRows.has(seed.id)) seedRows.set(seed.id, fetchRows(seed));
+    return seedRows.get(seed.id)!;
+  };
+  const fetchRows = async (seed: Seed): Promise<Row[][]> => {
+    const out: Row[][] = [];
+    const m = libById.get(seed.id)!;
+    try {
         if (keyed && (m.tmdb_id || m.imdb_id)) {
           let kind: "movie" | "tv" = m.type === "movie" ? "movie" : "tv";
           let id = m.tmdb_id;
@@ -212,7 +239,7 @@ export async function buildRecommendations(db = getDb()): Promise<{ total: numbe
               tmdbInfo.set(key, r);
               return { key, type, title: r.title, year: r.year, genres: r.genreIds.map((g) => genreNames.get(g)).filter((x): x is string => Boolean(x)), audience: { score: r.voteAverage, votes: r.voteCount } };
             });
-            addSeedResults(pool, seed, rows.filter((r) => !excluded({ key: r.key, title: r.title, originalTitle: tmdbInfo.get(r.key)?.originalTitle, year: r.year, tmdb: `${tmdbInfo.get(r.key)!.kind}:${tmdbInfo.get(r.key)!.id}` })));
+            out.push(rows.filter((r) => !excluded({ key: r.key, title: r.title, originalTitle: tmdbInfo.get(r.key)?.originalTitle, year: r.year, tmdb: `${tmdbInfo.get(r.key)!.kind}:${tmdbInfo.get(r.key)!.id}` })));
           }
         }
         if (m.type === "anime") {
@@ -225,11 +252,16 @@ export async function buildRecommendations(db = getDb()): Promise<{ total: numbe
             aniInfo.set(key, r);
             return { key, type: "anime" as MediaType, title: r.title, year: r.year, genres: r.genres, audience: r.averageScore != null ? { score: r.averageScore / 10, votes: Math.max(r.votes * 20, r.popularity / 50) } : null };
           });
-          addSeedResults(pool, seed, rows.filter((r) => !excluded({ key: r.key, title: r.title, originalTitle: aniInfo.get(r.key)?.originalTitle, year: r.year, anilistId: aniInfo.get(r.key)?.id, malId: aniInfo.get(r.key)?.idMal })));
+          out.push(rows.filter((r) => !excluded({ key: r.key, title: r.title, originalTitle: aniInfo.get(r.key)?.originalTitle, year: r.year, anilistId: aniInfo.get(r.key)?.id, malId: aniInfo.get(r.key)?.idMal })));
         }
-      } catch (e) {
-        console.warn(`[recommend] couldn't use ${m.title}:`, (e as Error).message);
-      }
+    } catch (e) {
+      console.warn(`[recommend] couldn't use ${m.title}:`, (e as Error).message);
+    }
+    return out;
+  };
+  const work = async () => {
+    for (let i = next++; i < seeds.length; i = next++) {
+      for (const rows of await rowsForSeed(seeds[i])) addSeedResults(pool, seeds[i], rows);
       s.done++;
     }
   };
@@ -278,30 +310,83 @@ export async function buildRecommendations(db = getDb()): Promise<{ total: numbe
     const fill = backed.length >= 10 ? [] : mine.filter((x) => x.n < 2 && predictTaste(model, featuresFor.get(x.c.key) ?? []) > 0.25);
     return [...backed, ...fill].slice(0, PER_TYPE);
   });
+  // Picks for watching with someone: learned only from the titles you've seen together,
+  // and your ratings of them (at least 5 rated ones needed).
+  s.step = "Picking for the people you watch with";
+  type Pick = { c: Candidate; score: number; best: number; seeds: Map<number, Seed>; person: { id: number; name: string; shared: number } | null };
+  const picks: Pick[] = chosen.map((x) => ({ c: x.c, score: x.score, best, seeds: seedById, person: null }));
+  const together = db.prepare(`SELECT p.id, p.name, mp.media_id FROM person p JOIN media_person mp ON mp.person_id = p.id`).all() as { id: number; name: string; media_id: number }[];
+  const byPerson = new Map<number, { name: string; ids: Set<number> }>();
+  for (const r of together) {
+    const p = byPerson.get(r.id) ?? { name: r.name, ids: new Set<number>() };
+    p.ids.add(r.media_id);
+    byPerson.set(r.id, p);
+  }
+  for (const [pid, p] of byPerson) {
+    const shared = library.filter((t) => p.ids.has(t.id));
+    const rated = lib.filter((m) => p.ids.has(m.id) && m.rating != null);
+    if (rated.length < 5) continue;
+    const tasteP = tasteProfile(shared);
+    const modelP = learnTaste(rated.map((m) => ({ rating: m.rating!, features: featuresOf({ type: m.type, year: m.year, genres: parseList(m.genres), keywords: parseList(m.keywords ?? "[]") }) })));
+    const seedsP = pickSeeds(shared, tasteP, 15);
+    const poolP = new Map<string, Candidate>();
+    for (const seed of seedsP) for (const rows of await rowsForSeed(seed)) addSeedResults(poolP, seed, rows);
+    const scoredP = [...poolP.values()]
+      .map((c) => {
+        if (!featuresFor.has(c.key)) featuresFor.set(c.key, feat(c, aniInfo.get(c.key)?.tags ?? []));
+        return { c, score: finalScore({ ...c, features: featuresFor.get(c.key) }, tasteP, modelP), n: supporters(c) };
+      })
+      .filter((x) => x.score > 0)
+      .sort((a, b) => b.score - a.score);
+    const backed = scoredP.filter((x) => x.n >= 2);
+    const fill = backed.length >= 8 ? [] : scoredP.filter((x) => x.n < 2 && predictTaste(modelP, featuresFor.get(x.c.key) ?? []) > 0.25);
+    const top = [...backed, ...fill].slice(0, 18);
+    const bestP = Math.max(0, ...top.map((x) => x.score));
+    const seedMap = new Map<number, Seed>(seedsP.map((x) => [x.id, x]));
+    for (const x of top) picks.push({ c: x.c, score: x.score, best: bestP, seeds: seedMap, person: { id: pid, name: p.name, shared: shared.length } });
+  }
+
   s.step = "Finding where to watch";
-  s.total = chosen.length;
+  s.total = picks.length;
   s.done = 0;
-  const out: { rec: Recommendation; score: number }[] = [];
+  const out: { rec: Recommendation; score: number; person: number | null }[] = [];
   next = 0;
+  // Where to watch, once per title even if it appears in several rows.
+  const watchCache = new Map<string, Promise<WatchOption[]>>();
+  const watchFor = (key: string): Promise<WatchOption[]> => {
+    if (!watchCache.has(key))
+      watchCache.set(
+        key,
+        (async () => {
+          const t = tmdbInfo.get(key);
+          const a = aniInfo.get(key);
+          const watch: WatchOption[] = [];
+          try {
+            if (t && keyed) watch.push(...(await retry(() => tmdbWatchProviders(t.kind, t.id, REGION()))));
+            for (const l of a ? a.streaming : []) {
+              if (watch.some((w) => w.name.toLowerCase() === l.site.toLowerCase())) continue;
+              watch.push({ name: l.site, logoUrl: l.icon, url: l.url, kind: "stream", color: l.color });
+            }
+          } catch {}
+          return watch;
+        })(),
+      );
+    return watchCache.get(key)!;
+  };
   const watchWork = async () => {
-    for (let i = next++; i < chosen.length; i = next++) {
-      const { c, score } = chosen[i];
+    for (let i = next++; i < picks.length; i = next++) {
+      const { c, score, best: top, seeds: seedMap, person } = picks[i];
       const t = tmdbInfo.get(c.key);
       const a = aniInfo.get(c.key);
-      const watch: WatchOption[] = [];
-      try {
-        if (t && keyed) watch.push(...(await retry(() => tmdbWatchProviders(t.kind, t.id, REGION()))));
-        const links = a ? a.streaming : [];
-        for (const l of links) {
-          if (watch.some((w) => w.name.toLowerCase() === l.site.toLowerCase())) continue;
-          watch.push({ name: l.site, logoUrl: l.icon, url: l.url, kind: "stream", color: l.color });
-        }
-      } catch {}
+      const watch = await watchFor(c.key);
       s.done++;
       out.push({
         score,
+        person: person?.id ?? null,
         rec: {
-          key: c.key,
+          key: person ? `p${person.id}:${c.key}` : c.key,
+          baseKey: c.key,
+          person,
           type: c.type,
           title: a?.title ?? t!.title,
           originalTitle: a?.originalTitle ?? t?.originalTitle ?? null,
@@ -310,8 +395,8 @@ export async function buildRecommendations(db = getDb()): Promise<{ total: numbe
           backdropUrl: t?.backdropUrl ?? a?.backdropUrl ?? null,
           overview: t?.overview ?? a?.overview ?? null,
           genres: [...new Set([...(a?.genres ?? []), ...c.genres])].slice(0, 4),
-          match: matchPercent(score, best),
-          because: becauseOf(c, seedById, 3),
+          match: matchPercent(score, top),
+          because: becauseOf(c, seedMap, 3),
           supporters: supporters(c),
           imdb: imdbOf.has(c.key) ? { id: imdbOf.get(c.key)!, rating: null, votes: null } : null,
           audience: t ? { score: t.voteAverage, votes: t.voteCount, source: "TMDB" } : a?.averageScore != null ? { score: a.averageScore / 10, votes: a.popularity, source: "AniList" } : null,
@@ -339,8 +424,8 @@ export async function buildRecommendations(db = getDb()): Promise<{ total: numbe
   const now = nowIso();
   db.transaction(() => {
     db.prepare(`DELETE FROM recommendation`).run();
-    const ins = db.prepare(`INSERT OR REPLACE INTO recommendation (key, type, data, score, computed_at) VALUES (?, ?, ?, ?, ?)`);
-    for (const { rec, score } of out) ins.run(rec.key, rec.type, JSON.stringify(rec), score, now);
+    const ins = db.prepare(`INSERT OR REPLACE INTO recommendation (key, type, data, score, person_id, computed_at) VALUES (?, ?, ?, ?, ?, ?)`);
+    for (const { rec, score, person } of out) ins.run(rec.key, rec.type, JSON.stringify(rec), score, person, now);
   })();
   return { total: out.length };
 }

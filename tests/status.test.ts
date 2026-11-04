@@ -141,7 +141,7 @@ describe("between seasons isn't abandoned", () => {
       segments: [
         { kind: "season", label: "Season 1", seasonNumber: 1, courNumber: null, episodeCount: 2, episodes: [e(1, "2020-01-01"), e(2, "2020-01-08")] },
         { kind: "special", label: "Specials", seasonNumber: 0, courNumber: null, episodeCount: 1, episodes: [e(1, "2020-06-01")] },
-        { kind: "season", label: "Season 2", seasonNumber: 2, courNumber: null, episodeCount: 1, episodes: [e(1, "2025-01-01")] }, // out long ago
+        { kind: "season", label: "Season 2", seasonNumber: 2, courNumber: null, episodeCount: 1, episodes: [e(1, ago(40).slice(0, 10))] }, // came out recently
       ],
     });
     const s1 = getMediaDetail(m.id)!.segments.find((s) => s.label === "Season 1")!.episodes.map((x) => x.id);
@@ -164,9 +164,9 @@ describe("100% is always Completed", () => {
     const m = show("Picked", 2);
     bulkAssess(m.id, ids(m.id).slice(0, 1), "watched", undefined);
     bulkUpdate([m.id], "set_status", { status: "on_hold" }); // your pick
+    getDb().prepare(`UPDATE review SET status_manual_at = ? WHERE media_id = ?`).run(new Date(Date.now() + 60_000).toISOString(), m.id); // clearly after your last watch
     applyAutoStatus();
     expect(getMedia(m.id)!.review.status).toBe("on_hold");
-    getDb().prepare(`UPDATE review SET status_manual_at = ? WHERE media_id = ?`).run(new Date(Date.now() + 60_000).toISOString(), m.id);
     bulkAssess(m.id, ids(m.id).slice(1), "watched", undefined); // finishes it
     expect(getMedia(m.id)!.review.status).toBe("completed");
   });
