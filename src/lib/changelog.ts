@@ -12,6 +12,15 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-11-04-posters-automatic",
+    date: "2026-11-04",
+    title: "Posters fill in by themselves",
+    items: [
+      "Any show, anime or movie missing a poster now gets one in the background, with no button to press.",
+      "The new-episode check also picks up a show's poster.",
+    ],
+  },
+  {
     id: "2026-11-04-genres-and-new-episodes",
     date: "2026-11-04",
     title: "Genre filters, new episodes and faster rating",

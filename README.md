@@ -154,7 +154,7 @@ How it works:
 - Recently Watched follows the date you rated each title on IMDb. Everything imported is private.
 
 ### Posters and duplicates
-- **Posters.** Titles imported from IMDb have no artwork, so posters are filled in afterwards in the background. TMDB finds them for movies, shows and anime; without a TMDB key, TVmaze finds them for shows. Only empty fields are filled. It starts automatically after an IMDb import, and Import & backup has a "Fetch missing posters" button with progress.
+- **Posters.** Titles imported from IMDb have no artwork, so posters are filled in afterwards in the background. TMDB finds them for movies, shows and anime; without a TMDB key, TVmaze finds them for shows. Only empty fields are filled. It runs by itself in the background (shortly after each start, then every 15 minutes, for anything still missing; titles nobody has a poster for are retried daily), and Import & backup has a "Fetch missing posters" button with progress.
 - **One review per title.** Imports match what's already in the library by IMDb id, then by title and year, so a film from both Letterboxd and IMDb is kept once. Letterboxd's rating and review win over IMDb's.
 - **Existing duplicates.** Import & backup lists any title that's in the library twice and merges them in one click. Merging keeps the Letterboxd copy (then yours, then IMDb's), fills gaps from the others, and keeps every tag and everyone you watched with. A backup is saved first.
 

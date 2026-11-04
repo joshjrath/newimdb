@@ -1,4 +1,5 @@
 import { startKeywordJob } from "../genres/keywords";
+import { startPosterJob } from "../posters/job";
 import { getDb } from "../db";
 import { tvmazeEpisodesBySeason, tvmazeLookupImdb } from "../providers/tvmaze";
 import { tmdbConfigured, tmdbFindByImdb, tmdbTv } from "../providers/tmdb";
@@ -36,9 +37,11 @@ const TVMAZE_GAP_MS = 600;
 async function episodesFor(show: DueShow): Promise<{ bySeason: Map<number, SyncEpisode[]>; provider: string; showRef: string } | null> {
   let tvmazeId = show.tvmazeId;
   if (!tvmazeId && show.imdbId) {
-    tvmazeId = (await tvmazeLookupImdb(show.imdbId))?.tvmazeId ?? null;
+    const hit = await tvmazeLookupImdb(show.imdbId);
+    tvmazeId = hit?.tvmazeId ?? null;
     await sleep(TVMAZE_GAP_MS);
-    if (tvmazeId) fillEmptyMetadata(show.id, { tvmazeId });
+    // Fill the poster while we're here (only if it's empty).
+    if (hit) fillEmptyMetadata(show.id, { tvmazeId: hit.tvmazeId, posterUrl: hit.posterUrl, overview: hit.overview });
   }
   if (tvmazeId) {
     const bySeason = await tvmazeEpisodesBySeason(tvmazeId);
@@ -48,8 +51,9 @@ async function episodesFor(show: DueShow): Promise<{ bySeason: Map<number, SyncE
   if (!tmdbConfigured()) return null;
   let tmdbId = show.tmdbId;
   if (!tmdbId && show.imdbId) {
-    tmdbId = (await tmdbFindByImdb(show.imdbId, "tv"))?.tmdbId ?? null;
-    if (tmdbId) fillEmptyMetadata(show.id, { tmdbId });
+    const hit = await tmdbFindByImdb(show.imdbId, "tv");
+    tmdbId = hit?.tmdbId ?? null;
+    if (hit) fillEmptyMetadata(show.id, { tmdbId: hit.tmdbId, posterUrl: hit.posterUrl, backdropUrl: hit.backdropUrl, overview: hit.overview });
   }
   if (!tmdbId) return null;
   const d = await tmdbTv(String(tmdbId));
@@ -98,9 +102,10 @@ export function startEpisodeScheduler() {
   if (g.__episodeTimer || process.env.EPISODE_SYNC === "off") return;
   getDb();
   const tick = () => {
+    startPosterJob({ quiet: true }); // any title still missing a poster gets one, without pressing a button
     void runEpisodeSync({ limit: 40 }).catch((e) => console.error("[episodes] sync failed:", e));
     startKeywordJob({ quiet: true }); // newly added titles pick up keyword genres (e.g. Superhero) too
   };
-  setTimeout(tick, 60_000);
+  setTimeout(tick, 30_000);
   g.__episodeTimer = setInterval(tick, 15 * 60_000);
 }

@@ -7,7 +7,8 @@ const json = (body: unknown, status = 200) => new Response(JSON.stringify(body),
 
 beforeEach(() => {
   freshDb();
-  (globalThis as { __posterJob?: unknown }).__posterJob = undefined;
+  (globalThis as { __posterJob?: unknown; __posterMisses?: unknown }).__posterJob = undefined;
+  (globalThis as { __posterMisses?: unknown }).__posterMisses = undefined;
 });
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -52,5 +53,21 @@ describe("poster fetch", () => {
     const j = await finish();
     expect(j).toMatchObject({ found: 1, notFound: 1, needsKey: 1, failed: 0 });
     expect(getMedia(show.id)).toMatchObject({ posterUrl: "https://static.tvmaze.com/x.jpg", tvmazeId: 77 });
+  });
+
+  it("runs by itself in the background, and doesn't keep asking for titles nobody has", async () => {
+    createMedia({ type: "movie", metadata: { title: "Film", imdbId: "tt2000001" } });
+    const show = createMedia({ type: "tv", metadata: { title: "Show", imdbId: "tt2000002" } });
+    createMedia({ type: "tv", metadata: { title: "Unknown", imdbId: "tt2000003" } });
+    const fetch = vi.fn(async (url: string) => {
+      if (url.includes("tt2000002")) return json({ id: 9, name: "Show", image: { medium: "https://static.tvmaze.com/m.jpg" }, summary: null });
+      return json({}, 404);
+    });
+    vi.stubGlobal("fetch", fetch);
+    expect(startPosterJob({ quiet: true })!.total).toBe(2); // the movie needs a TMDB key, so it's left out
+    await finish();
+    expect(getMedia(show.id)!.posterUrl).toBe("https://static.tvmaze.com/m.jpg");
+    // Next automatic run: the one that found nothing isn't asked again today.
+    expect(startPosterJob({ quiet: true })).toBeNull();
   });
 });
