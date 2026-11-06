@@ -235,11 +235,14 @@ const PERCENT_SQL = `(SELECT 100.0 * SUM(a.state = 'watched') / NULLIF(COUNT(e.i
 
 /** Each sort, both ways. The first is the natural direction (what the menu shows first). */
 const lastWatched = `COALESCE(r.last_watched_at, r.watched_on, r.created_at)`;
+/** How many episodes a title has (a movie counts as 1). */
+const EPISODES_SQL = `(CASE WHEN m.type = 'movie' THEN 1 ELSE (SELECT COUNT(*) FROM segment s JOIN episode e ON e.segment_id = s.id WHERE s.media_id = m.id) END)`;
 /** IMDb's rating: the refreshed one, else the one saved at import. Not yours. */
 const IMDB_SQL = `COALESCE(m.imdb_rating, CASE WHEN m.third_party_rating_source = 'IMDb' THEN m.third_party_rating END)`;
 const ORDER_BY: Record<SortKey, Record<SortDir, string>> = {
   recent: { desc: `${lastWatched} DESC, m.id DESC`, asc: `${lastWatched} IS NULL, ${lastWatched} ASC, m.id ASC` },
   rating: { desc: `r.rating IS NULL, r.rating DESC, ${lastWatched} DESC`, asc: `r.rating IS NULL, r.rating ASC, ${lastWatched} DESC` },
+  episodes: { desc: `${EPISODES_SQL} DESC, m.title COLLATE NOCASE`, asc: `${EPISODES_SQL} ASC, m.title COLLATE NOCASE` },
   imdb: { desc: `${IMDB_SQL} IS NULL, ${IMDB_SQL} DESC, m.imdb_votes DESC`, asc: `${IMDB_SQL} IS NULL, ${IMDB_SQL} ASC, m.imdb_votes DESC` },
   title: { asc: `m.title COLLATE NOCASE ASC`, desc: `m.title COLLATE NOCASE DESC` },
   year: { desc: `m.year IS NULL, m.year DESC, m.title COLLATE NOCASE`, asc: `m.year IS NULL, m.year ASC, m.title COLLATE NOCASE` },

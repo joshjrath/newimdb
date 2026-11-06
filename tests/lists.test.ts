@@ -62,6 +62,20 @@ describe("minimum IMDb rating", () => {
   });
 });
 
+describe("sorting by episode count", () => {
+  it("puts the longest first, everywhere", async () => {
+    const { listMedia: lm } = await import("@/lib/repo/media");
+    const seg = (n: number) => [{ kind: "season" as const, label: "Season 1", seasonNumber: 1, courNumber: null, episodeCount: n }];
+    const a = createMedia({ type: "tv", metadata: { title: "Short" }, segments: seg(3) });
+    const b = createMedia({ type: "anime", metadata: { title: "Long" }, segments: seg(366) });
+    const c = createMedia({ type: "movie", metadata: { title: "Film" } });
+    expect(lm({ sort: "episodes" }).items.map((m) => m.title)).toEqual(["Long", "Short", "Film"]);
+    expect(lm({ sort: "episodes", dir: "asc" }).items.map((m) => m.title)).toEqual(["Film", "Short", "Long"]);
+    const id = createList({ name: "Mixed", mediaIds: [a.id, c.id, b.id], sort: "episodes" });
+    expect(getList(id)!.items.map((i) => [i.title, i.episodeCount])).toEqual([["Long", 366], ["Short", 3], ["Film", 1]]);
+  });
+});
+
 describe("sorting both ways", () => {
   it("reverses any sort", async () => {
     const { listMedia: lm } = await import("@/lib/repo/media");

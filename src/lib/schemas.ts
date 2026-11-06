@@ -196,7 +196,7 @@ export type SegmentInput = z.infer<typeof segmentInputSchema>;
 export type ProviderEpisode = z.infer<typeof providerEpisodeSchema>;
 export type CreateMediaInput = z.infer<typeof createMediaSchema>;
 
-export const LIST_SORT_KEYS = ["manual", "release", "watched", "rating", "imdb", "title", "added"] as const;
+export const LIST_SORT_KEYS = ["manual", "release", "watched", "rating", "imdb", "title", "added", "episodes"] as const;
 const mediaIdList = z.array(z.number().int().positive()).min(1).max(2000);
 export const listCreateSchema = z.object({ name: z.string().trim().min(1).max(80), description: z.string().max(2000).optional(), sort: z.enum(LIST_SORT_KEYS).optional(), mediaIds: z.array(z.number().int().positive()).max(2000).optional() }).strict();
 export const listPatchSchema = z.object({ name: z.string().trim().min(1).max(80).optional(), description: z.string().max(2000).optional(), sort: z.enum(LIST_SORT_KEYS).optional() }).strict();

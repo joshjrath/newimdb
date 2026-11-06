@@ -25,6 +25,7 @@ const ORDER: Record<ListSort, (a: ListItemView, b: ListItemView) => number> = {
   watched: (a, b) => (a.watchedOn ?? "9999").localeCompare(b.watchedOn ?? "9999") || a.position - b.position,
   rating: (a, b) => (b.rating ?? -1) - (a.rating ?? -1) || a.position - b.position,
   imdb: (a, b) => (b.imdbRating ?? -1) - (a.imdbRating ?? -1) || a.position - b.position,
+  episodes: (a, b) => b.episodeCount - a.episodeCount || a.position - b.position,
   title: (a, b) => a.title.localeCompare(b.title),
   added: (a, b) => b.position - a.position,
 };
@@ -34,6 +35,7 @@ function items(db: DB, listId: number): ListItemView[] {
     .prepare(
       `SELECT li.media_id AS mediaId, li.position, m.type, m.title, m.year, m.poster_url AS posterUrl, r.rating, r.status,
               COALESCE(m.imdb_rating, CASE WHEN m.third_party_rating_source = 'IMDb' THEN m.third_party_rating END) AS imdbRating,
+              CASE WHEN m.type = 'movie' THEN 1 ELSE (SELECT COUNT(*) FROM segment s JOIN episode e ON e.segment_id = s.id WHERE s.media_id = m.id) END AS episodeCount,
               COALESCE(m.release_date, (SELECT MIN(substr(e.air_date, 1, 10)) FROM segment s JOIN episode e ON e.segment_id = s.id WHERE s.media_id = m.id AND length(e.air_date) >= 10)) AS releaseDate,
               COALESCE(r.watched_on, r.last_watched_at) AS watchedOn, r.watched_on AS watchedDate,
               (SELECT SUM(a.state = 'watched') FROM segment s JOIN episode e ON e.segment_id = s.id LEFT JOIN episode_assessment a ON a.episode_id = e.id WHERE s.media_id = m.id) AS watched,

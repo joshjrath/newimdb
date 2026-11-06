@@ -8,6 +8,7 @@ export const LIST_SORTS = [
   { key: "rating", label: "My rating: highest", reverse: "My rating: lowest", icon: "★" },
   { key: "imdb", label: "IMDb rating: highest", reverse: "IMDb rating: lowest", icon: "IMDb" },
   { key: "title", label: "Title A → Z", reverse: "Title Z → A", icon: "Aa" },
+  { key: "episodes", label: "Most episodes", reverse: "Fewest episodes", icon: "#" },
   { key: "added", label: "Recently added", reverse: "First added", icon: "＋" },
 ] as const;
 export type ListSort = (typeof LIST_SORTS)[number]["key"];
@@ -23,6 +24,8 @@ export interface ListItemView {
   posterUrl: string | null;
   /** IMDb's public rating, out of 10. */
   imdbRating: number | null;
+  /** Episodes listed (a movie counts as 1). */
+  episodeCount: number;
   rating: number | null;
   status: string | null;
   /** 0–1: a movie is 0 or 1, a show is the share of its aired episodes watched. */

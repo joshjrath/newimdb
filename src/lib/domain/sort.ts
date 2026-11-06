@@ -7,6 +7,7 @@ export const SORT_OPTIONS = [
   { key: "year", label: "Newest releases", reverse: "Oldest releases", natural: "desc" },
   { key: "added", label: "Recently added", reverse: "First added", natural: "desc" },
   { key: "progress", label: "Most progress", reverse: "Least progress", natural: "desc" },
+  { key: "episodes", label: "Most episodes", reverse: "Fewest episodes", natural: "desc" },
 ] as const;
 export type SortKey = (typeof SORT_OPTIONS)[number]["key"];
 export type SortDir = "asc" | "desc";

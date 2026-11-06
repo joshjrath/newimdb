@@ -194,7 +194,7 @@ export async function tmdbFindByImdb(imdbId: string, prefer: "movie" | "tv"): Pr
 }
 
 /** A title's TMDB genres and keywords (one request). Keywords power filters like Superhero. */
-export async function tmdbGenresAndKeywords(kind: "movie" | "tv", id: number): Promise<{ genres: string[]; keywords: string[]; imdbId: string | null; language: string | null; releaseDate: string | null }> {
+export async function tmdbGenresAndKeywords(kind: "movie" | "tv", id: number): Promise<{ genres: string[]; keywords: string[]; imdbId: string | null; language: string | null; releaseDate: string | null; episodes: number | null }> {
   const r = await get<{
     genres?: { name: string }[];
     keywords?: { keywords?: { name: string }[]; results?: { name: string }[] };
@@ -206,6 +206,7 @@ export async function tmdbGenresAndKeywords(kind: "movie" | "tv", id: number): P
     original_language?: string;
     release_date?: string;
     first_air_date?: string;
+    number_of_episodes?: number;
   }>(`/${kind}/${id}`, { append_to_response: "keywords,external_ids" });
   // Studios and franchise count as keywords too, so filters like Marvel, DC or Pixar can match them.
   const extra = [...(r.production_companies ?? []), ...(r.networks ?? []), ...(r.belongs_to_collection ? [r.belongs_to_collection] : [])].map((x) => x.name.toLowerCase());
@@ -215,6 +216,7 @@ export async function tmdbGenresAndKeywords(kind: "movie" | "tv", id: number): P
     imdbId: r.imdb_id || r.external_ids?.imdb_id || null,
     language: r.original_language ?? null,
     releaseDate: [r.release_date, r.first_air_date].find((d) => d && /^\d{4}-\d{2}-\d{2}$/.test(d)) ?? null,
+    episodes: kind === "movie" ? 1 : (r.number_of_episodes ?? null),
   };
 }
 

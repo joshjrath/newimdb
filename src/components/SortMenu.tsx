@@ -3,7 +3,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { SORT_OPTIONS, naturalDir, sortLabel, type SortDir, type SortKey } from "@/lib/domain/sort";
 
-const ICON: Record<SortKey, string> = { recent: "🕒", rating: "★", imdb: "IMDb", title: "Aa", year: "📅", added: "＋", progress: "▰" };
+const ICON: Record<SortKey, string> = { recent: "🕒", rating: "★", imdb: "IMDb", title: "Aa", year: "📅", added: "＋", progress: "▰", episodes: "#" };
 
 /** Sort picker plus a direction arrow: Recently watched ↔ Oldest watched, and so on. */
 export function SortMenu({ sort, dir, exclude = [] }: { sort: SortKey; dir?: SortDir; exclude?: SortKey[] }) {

@@ -30,6 +30,8 @@ export interface Recommendation {
   imdb: { id: string; rating: number | null; votes: number | null } | null;
   /** How many of your favourites point here. */
   supporters: number;
+  /** Episodes (a movie is 1), when known. */
+  episodes?: number | null;
   /** The pick itself (shared by "for you" and "with someone" rows). */
   baseKey?: string;
   /** Picked for watching with this person, from the titles you've seen together. */
@@ -281,6 +283,7 @@ export async function buildRecommendations(db = getDb()): Promise<{ total: numbe
   );
   // Second pass: fetch each shortlisted title's keywords, studios and IMDb id, and re-score.
   const imdbOf = new Map<string, string>();
+  const episodesOf = new Map<string, number>();
   s.total = prelim.length;
   s.done = 0;
   next = 0;
@@ -294,6 +297,7 @@ export async function buildRecommendations(db = getDb()): Promise<{ total: numbe
             const d = await retry(() => tmdbGenresAndKeywords(t.kind, t.id));
             featuresFor.set(c.key, feat({ ...c, genres: d.genres.length ? d.genres : c.genres }, [...d.keywords, ...(aniInfo.get(c.key)?.tags ?? [])]));
             if (d.imdbId) imdbOf.set(c.key, d.imdbId);
+            if (d.episodes) episodesOf.set(c.key, d.episodes);
           } catch {}
         }
         s.done++;
@@ -398,6 +402,7 @@ export async function buildRecommendations(db = getDb()): Promise<{ total: numbe
           match: matchPercent(score, top),
           because: becauseOf(c, seedMap, 3),
           supporters: supporters(c),
+          episodes: c.type === "movie" ? 1 : (episodesOf.get(c.key) ?? a?.episodes ?? null),
           imdb: imdbOf.has(c.key) ? { id: imdbOf.get(c.key)!, rating: null, votes: null } : null,
           audience: t ? { score: t.voteAverage, votes: t.voteCount, source: "TMDB" } : a?.averageScore != null ? { score: a.averageScore / 10, votes: a.popularity, source: "AniList" } : null,
           tmdb: t ? { kind: t.kind, id: t.id } : null,

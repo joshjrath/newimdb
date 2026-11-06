@@ -9,11 +9,12 @@ import type { PersonPicks, Recommendation, RecommendState } from "@/lib/recommen
 import type { WatchOption } from "@/lib/providers/tmdb";
 import { SortPicker, type SortChoice } from "../SortPicker";
 
-type RecSort = "match" | "imdb" | "year";
+type RecSort = "match" | "imdb" | "year" | "episodes";
 const REC_SORTS: SortChoice<RecSort>[] = [
   { key: "match", label: "Best match for you", reverse: "Weakest match first", icon: "✦" },
   { key: "imdb", label: "IMDb rating: highest", reverse: "IMDb rating: lowest", icon: "IMDb" },
   { key: "year", label: "Newest first", reverse: "Oldest first", icon: "📅" },
+  { key: "episodes", label: "Most episodes", reverse: "Fewest episodes", icon: "#" },
 ];
 interface Filters {
   sort: RecSort;
@@ -100,7 +101,7 @@ export function RecommendBoard({ initial, rated }: { initial: Data; rated: numbe
                     </div>
                   </div>
                   <h3>{r.title}</h3>
-                  <p className="rec-meta">{[r.year, r.genres[0]].filter(Boolean).join(" · ")} <ImdbBadge r={r} /></p>
+                  <p className="rec-meta">{[r.year, r.genres[0], r.type !== "movie" && r.episodes ? `${r.episodes} eps` : null].filter(Boolean).join(" · ")} <ImdbBadge r={r} /></p>
                   {r.because[0] && (
                     <p className="rec-because small" title={`Because you loved ${r.because.join(", ")}`}>
                       Because of <b>{r.because[0]}</b>{r.supporters > 1 ? ` +${r.supporters - 1}` : ""}
@@ -144,6 +145,7 @@ export function RecommendBoard({ initial, rated }: { initial: Data; rated: numbe
       match: (a, b) => b.match - a.match,
       imdb: (a, b) => (b.imdb?.rating ?? b.audience?.score ?? -1) - (a.imdb?.rating ?? a.audience?.score ?? -1),
       year: (a, b) => (b.year ?? 0) - (a.year ?? 0),
+      episodes: (a, b) => (b.episodes ?? -1) - (a.episodes ?? -1),
     };
     const sorted = [...list].sort(by[f.sort]);
     return f.reversed ? sorted.reverse() : sorted;
