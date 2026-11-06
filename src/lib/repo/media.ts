@@ -234,9 +234,12 @@ const PERCENT_SQL = `(SELECT 100.0 * SUM(a.state = 'watched') / NULLIF(COUNT(e.i
 
 /** Each sort, both ways. The first is the natural direction (what the menu shows first). */
 const lastWatched = `COALESCE(r.last_watched_at, r.watched_on, r.created_at)`;
+/** IMDb's rating: the refreshed one, else the one saved at import. Not yours. */
+const IMDB_SQL = `COALESCE(m.imdb_rating, CASE WHEN m.third_party_rating_source = 'IMDb' THEN m.third_party_rating END)`;
 const ORDER_BY: Record<SortKey, Record<SortDir, string>> = {
   recent: { desc: `${lastWatched} DESC, m.id DESC`, asc: `${lastWatched} IS NULL, ${lastWatched} ASC, m.id ASC` },
   rating: { desc: `r.rating IS NULL, r.rating DESC, ${lastWatched} DESC`, asc: `r.rating IS NULL, r.rating ASC, ${lastWatched} DESC` },
+  imdb: { desc: `${IMDB_SQL} IS NULL, ${IMDB_SQL} DESC, m.imdb_votes DESC`, asc: `${IMDB_SQL} IS NULL, ${IMDB_SQL} ASC, m.imdb_votes DESC` },
   title: { asc: `m.title COLLATE NOCASE ASC`, desc: `m.title COLLATE NOCASE DESC` },
   year: { desc: `m.year IS NULL, m.year DESC, m.title COLLATE NOCASE`, asc: `m.year IS NULL, m.year ASC, m.title COLLATE NOCASE` },
   added: { desc: `m.created_at DESC, m.id DESC`, asc: `m.created_at ASC, m.id ASC` },

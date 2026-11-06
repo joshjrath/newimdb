@@ -12,6 +12,16 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-11-06-imdb-sort-colours",
+    date: "2026-11-06",
+    title: "Sort by IMDb rating, colourful progress",
+    items: [
+      "Sort by IMDb rating (highest or lowest), in the library and in lists. Your own is now called \"My rating\" so the two don't get mixed up.",
+      "Progress bars change colour as you go: coral 0–24%, orange 25–49%, yellow 50–74%, blue 75–99%, and green only at 100%.",
+      "Tapping filters no longer jumps you to the top of the page.",
+    ],
+  },
+  {
     id: "2026-11-06-alone",
     date: "2026-11-06",
     title: "\"Alone\" in Watched with",

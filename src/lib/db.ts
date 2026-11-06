@@ -322,6 +322,12 @@ const MIGRATIONS: string[] = [
   ALTER TABLE media ADD COLUMN imdb_votes INTEGER;
   ALTER TABLE media ADD COLUMN imdb_rating_at TEXT;
   `,
+  // 14 — lists can sort by IMDb rating. A new column (not a table rebuild: rebuilding
+  // would cascade-delete every list's items), read in place of the old checked one.
+  `
+  ALTER TABLE list ADD COLUMN sort_key TEXT;
+  UPDATE list SET sort_key = sort;
+  `,
 ];
 
 /** Whether the database was created just now (no earlier data), per connection. */

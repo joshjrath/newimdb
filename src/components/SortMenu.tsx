@@ -3,7 +3,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { SORT_OPTIONS, naturalDir, sortLabel, type SortDir, type SortKey } from "@/lib/domain/sort";
 
-const ICON: Record<SortKey, string> = { recent: "🕒", rating: "★", title: "Aa", year: "📅", added: "＋", progress: "▰" };
+const ICON: Record<SortKey, string> = { recent: "🕒", rating: "★", imdb: "IMDb", title: "Aa", year: "📅", added: "＋", progress: "▰" };
 
 /** Sort picker plus a direction arrow: Recently watched ↔ Oldest watched, and so on. */
 export function SortMenu({ sort, dir, exclude = [] }: { sort: SortKey; dir?: SortDir; exclude?: SortKey[] }) {
@@ -34,7 +34,7 @@ export function SortMenu({ sort, dir, exclude = [] }: { sort: SortKey; dir?: Sor
     if (d === naturalDir(key)) next.delete("dir");
     else next.set("dir", d);
     setOpen(false);
-    router.push(`${pathname}?${next.toString()}`);
+    router.push(`${pathname}?${next.toString()}`, { scroll: false });
   };
 
   return (

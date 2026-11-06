@@ -24,6 +24,7 @@ const ORDER: Record<ListSort, (a: ListItemView, b: ListItemView) => number> = {
   release: (a, b) => (a.releaseDate ?? (a.year ? `${a.year}-12-31` : "9999")).localeCompare(b.releaseDate ?? (b.year ? `${b.year}-12-31` : "9999")) || a.position - b.position,
   watched: (a, b) => (a.watchedOn ?? "9999").localeCompare(b.watchedOn ?? "9999") || a.position - b.position,
   rating: (a, b) => (b.rating ?? -1) - (a.rating ?? -1) || a.position - b.position,
+  imdb: (a, b) => (b.imdbRating ?? -1) - (a.imdbRating ?? -1) || a.position - b.position,
   title: (a, b) => a.title.localeCompare(b.title),
   added: (a, b) => b.position - a.position,
 };
@@ -32,6 +33,7 @@ function items(db: DB, listId: number): ListItemView[] {
   const rows = db
     .prepare(
       `SELECT li.media_id AS mediaId, li.position, m.type, m.title, m.year, m.poster_url AS posterUrl, r.rating, r.status,
+              COALESCE(m.imdb_rating, CASE WHEN m.third_party_rating_source = 'IMDb' THEN m.third_party_rating END) AS imdbRating,
               COALESCE(m.release_date, (SELECT MIN(substr(e.air_date, 1, 10)) FROM segment s JOIN episode e ON e.segment_id = s.id WHERE s.media_id = m.id AND length(e.air_date) >= 10)) AS releaseDate,
               COALESCE(r.watched_on, r.last_watched_at) AS watchedOn, r.watched_on AS watchedDate,
               (SELECT SUM(a.state = 'watched') FROM segment s JOIN episode e ON e.segment_id = s.id LEFT JOIN episode_assessment a ON a.episode_id = e.id WHERE s.media_id = m.id) AS watched,
@@ -59,12 +61,12 @@ const summaryOf = (l: { id: number; name: string; description: string; sort: Lis
 });
 
 export function listLists(db = getDb()): ListSummary[] {
-  const ls = db.prepare(`SELECT id, name, description, sort, updated_at FROM list ORDER BY updated_at DESC`).all() as { id: number; name: string; description: string; sort: ListSort; updated_at: string }[];
+  const ls = db.prepare(`SELECT id, name, description, COALESCE(sort_key, sort) AS sort, updated_at FROM list ORDER BY updated_at DESC`).all() as { id: number; name: string; description: string; sort: ListSort; updated_at: string }[];
   return ls.map((l) => summaryOf(l, items(db, l.id)));
 }
 
 export function getList(id: number, db = getDb()): (ListSummary & { items: ListItemView[] }) | null {
-  const l = db.prepare(`SELECT id, name, description, sort, updated_at FROM list WHERE id = ?`).get(id) as { id: number; name: string; description: string; sort: ListSort; updated_at: string } | undefined;
+  const l = db.prepare(`SELECT id, name, description, COALESCE(sort_key, sort) AS sort, updated_at FROM list WHERE id = ?`).get(id) as { id: number; name: string; description: string; sort: ListSort; updated_at: string } | undefined;
   if (!l) return null;
   const its = items(db, id).sort(ORDER[l.sort]);
   return { ...summaryOf(l, its), items: its };
@@ -79,7 +81,7 @@ export function createList(input: { name: string; description?: string; sort?: L
   const name = input.name.replace(/\s+/g, " ").trim().slice(0, 80);
   if (!name) throw new RepoError("invalid", "Give the list a name.");
   const now = nowIso();
-  const { id } = db.prepare(`INSERT INTO list (name, description, sort, created_at, updated_at) VALUES (?, ?, ?, ?, ?) RETURNING id`).get(name, input.description?.trim() ?? "", input.sort ?? "manual", now, now) as { id: number };
+  const { id } = db.prepare(`INSERT INTO list (name, description, sort, sort_key, created_at, updated_at) VALUES (?, ?, 'manual', ?, ?, ?) RETURNING id`).get(name, input.description?.trim() ?? "", input.sort ?? "manual", now, now) as { id: number };
   if (input.mediaIds?.length) addToList(id, input.mediaIds, db);
   audit(db, "create", "list", id, { name });
   return id;
@@ -93,7 +95,7 @@ export function updateList(id: number, patch: { name?: string; description?: str
     db.prepare(`UPDATE list SET name = ? WHERE id = ?`).run(n, id);
   }
   if (patch.description !== undefined) db.prepare(`UPDATE list SET description = ? WHERE id = ?`).run(patch.description.trim().slice(0, 2000), id);
-  if (patch.sort) db.prepare(`UPDATE list SET sort = ? WHERE id = ?`).run(patch.sort, id);
+  if (patch.sort) db.prepare(`UPDATE list SET sort_key = ? WHERE id = ?`).run(patch.sort, id);
   touch(db, id);
 }
 
@@ -129,7 +131,7 @@ export function reorderList(id: number, mediaIds: number[], db = getDb()) {
   const set = db.prepare(`UPDATE list_item SET position = ? WHERE list_id = ? AND media_id = ?`);
   db.transaction(() => {
     mediaIds.forEach((m, i) => set.run(i + 1, id, m));
-    db.prepare(`UPDATE list SET sort = 'manual' WHERE id = ?`).run(id);
+    db.prepare(`UPDATE list SET sort_key = 'manual' WHERE id = ?`).run(id);
     touch(db, id);
   })();
 }

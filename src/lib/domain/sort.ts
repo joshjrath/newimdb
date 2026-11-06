@@ -1,7 +1,8 @@
 /** Library sort orders. Pure, so client components can list them too. */
 export const SORT_OPTIONS = [
   { key: "recent", label: "Recently watched", reverse: "Oldest watched", natural: "desc" },
-  { key: "rating", label: "Highest rated", reverse: "Lowest rated", natural: "desc" },
+  { key: "rating", label: "My rating: highest", reverse: "My rating: lowest", natural: "desc" },
+  { key: "imdb", label: "IMDb rating: highest", reverse: "IMDb rating: lowest", natural: "desc" },
   { key: "title", label: "Title A → Z", reverse: "Title Z → A", natural: "asc" },
   { key: "year", label: "Newest releases", reverse: "Oldest releases", natural: "desc" },
   { key: "added", label: "Recently added", reverse: "First added", natural: "desc" },

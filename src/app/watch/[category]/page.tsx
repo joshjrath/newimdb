@@ -116,16 +116,16 @@ export default async function LibraryPage({ params, searchParams }: { params: Pr
         </form>
 
         <div className="chips" aria-label="Filter by status">
-          <Link className="chip" href={href({ status: undefined })} aria-current={!picked.length ? "true" : undefined}>All</Link>
+          <Link className="chip" scroll={false} href={href({ status: undefined })} aria-current={!picked.length ? "true" : undefined}>All</Link>
           {(type === "movie" ? MOVIE_STATUSES : WATCH_STATUSES).map((s) => (
-            <Link key={s} className="chip" href={href({ status: toggleStatus(s) })} aria-current={picked.includes(s) ? "true" : undefined}>
+            <Link key={s} className="chip" scroll={false} href={href({ status: toggleStatus(s) })} aria-current={picked.includes(s) ? "true" : undefined}>
               {s === "watching" ? "Currently watching" : STATUS_LABEL[s]}
             </Link>
           ))}
-          <Link className="chip" href={href({ featured: featured ? undefined : "1" })} aria-current={featured ? "true" : undefined}>Featured</Link>
+          <Link className="chip" scroll={false} href={href({ featured: featured ? undefined : "1" })} aria-current={featured ? "true" : undefined}>Featured</Link>
           {type === "movie" &&
             (["theater", "streaming"] as const).map((w) => (
-              <Link key={w} className="chip" href={href({ where: watchedIn === w ? undefined : w })} aria-current={watchedIn === w ? "true" : undefined}>
+              <Link key={w} className="chip" scroll={false} href={href({ where: watchedIn === w ? undefined : w })} aria-current={watchedIn === w ? "true" : undefined}>
                 {w === "theater" ? "🎬 In theaters" : "📺 Streaming"}
               </Link>
             ))}
@@ -134,7 +134,7 @@ export default async function LibraryPage({ params, searchParams }: { params: Pr
           <div className="chips with-chips" aria-label="Filter by genre">
             <span className="label" style={{ alignSelf: "center", marginRight: 2 }}>Genre</span>
             {genres.map((g) => (
-              <Link key={g.id} className="chip" href={href({ genre: genre === g.id ? undefined : String(g.id) })} aria-current={genre === g.id ? "true" : undefined}>
+              <Link key={g.id} className="chip" scroll={false} href={href({ genre: genre === g.id ? undefined : String(g.id) })} aria-current={genre === g.id ? "true" : undefined}>
                 {g.name} <span className="hint">{g.count}</span>
               </Link>
             ))}
@@ -144,7 +144,7 @@ export default async function LibraryPage({ params, searchParams }: { params: Pr
           <div className="chips with-chips" aria-label="Filter by who you watched with">
             <span className="label" style={{ alignSelf: "center", marginRight: 2 }}>Watched with</span>
             {aloneCount > 0 && (
-              <Link className="chip" href={href({ with: alone ? undefined : "alone" })} aria-current={alone ? "true" : undefined} title="Titles with nobody in Watched with">
+              <Link className="chip" scroll={false} href={href({ with: alone ? undefined : "alone" })} aria-current={alone ? "true" : undefined} title="Titles with nobody in Watched with">
                 Alone <span className="hint">{aloneCount}</span>
               </Link>
             )}
@@ -152,6 +152,7 @@ export default async function LibraryPage({ params, searchParams }: { params: Pr
               <Link
                 key={p.id}
                 className="chip"
+                scroll={false}
                 // Tap several: only titles you watched with all of them.
                 // Picking a person leaves "Alone".
                 href={href({ with: (alone ? [p.id] : withPeople.includes(p.id) ? withPeople.filter((x) => x !== p.id) : [...withPeople, p.id]).join(",") || undefined })}
@@ -165,7 +166,7 @@ export default async function LibraryPage({ params, searchParams }: { params: Pr
         {tags.length > 0 && (
           <div className="chips" aria-label="Filter by tag">
             {tags.map((t) => (
-              <Link key={t.name} className="chip" href={href({ tag: sameTag(t.name) ? undefined : t.name })} aria-current={sameTag(t.name) ? "true" : undefined}>
+              <Link key={t.name} className="chip" scroll={false} href={href({ tag: sameTag(t.name) ? undefined : t.name })} aria-current={sameTag(t.name) ? "true" : undefined}>
                 {t.name}
               </Link>
             ))}
