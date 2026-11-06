@@ -4,6 +4,7 @@ import { Poster } from "./Poster";
 import { ProgressBar } from "./ProgressBar";
 import { mediaHref } from "@/lib/domain/links";
 import { episodeCode } from "@/lib/domain/progress";
+import { TYPE_TO_CATEGORY } from "@/lib/domain/types";
 
 /** Currently Watching: links straight to the active season / next episode. */
 export function NowStrip({ items }: { items: WatchingItem[] }) {
@@ -17,7 +18,7 @@ export function NowStrip({ items }: { items: WatchingItem[] }) {
           const next = m.pointer.nextEpisode;
           const anchor = next ? `#ep-${next.id}` : seg ? `#seg-${seg.id}` : "";
           return (
-            <Link key={m.id} href={`${mediaHref(m)}${seg ? `?segment=${seg.id}` : ""}${anchor}`} className="now-item">
+            <Link key={m.id} href={`${mediaHref(m)}${seg ? `?segment=${seg.id}` : ""}${anchor}`} className={`now-item cat-${TYPE_TO_CATEGORY[m.type]}`}>
               <Poster url={m.posterUrl} title={m.title} />
               <div>
                 <strong>{m.title}</strong>

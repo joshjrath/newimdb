@@ -889,3 +889,17 @@ button.stat-btn:hover { background: var(--raised); }
 .min-imdb-chip input { width: 42px; border: 0; background: transparent; color: inherit; font: inherit; padding: 0; outline: none; -moz-appearance: textfield; }
 .min-imdb-chip input::-webkit-outer-spin-button, .min-imdb-chip input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 .min-imdb-chip.on { box-shadow: inset 0 0 0 2px #f5c518; }
+
+/* All Media */
+.cat-all { --cat: #ebe7f3; }
+.cat-all .dot { background: conic-gradient(#f2a79c, #f3e96c, #c7b6f6, #f2a79c) !important; }
+.kind-chips { margin: -6px 0 14px; }
+.kind-chips .chip[aria-pressed="false"] { opacity: .55; }
+.kind-chips .chip.kind-movie[aria-pressed="true"] { background: #f2a79c; color: var(--black); }
+.kind-chips .chip.kind-tv[aria-pressed="true"] { background: #f3e96c; color: var(--black); }
+.kind-chips .chip.kind-anime[aria-pressed="true"] { background: #c7b6f6; color: var(--black); }
+.kind-chips .chip[aria-pressed="true"] .hint { color: rgba(16, 16, 18, .6); }
+.kind-tag { padding: 1px 7px; border-radius: 99px; font: 800 10.5px/1.5 var(--display); color: var(--black); }
+.kind-tag.t-movie { background: #f2a79c; }
+.kind-tag.t-tv { background: #f3e96c; }
+.kind-tag.t-anime { background: #c7b6f6; }

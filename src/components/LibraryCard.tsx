@@ -9,7 +9,7 @@ import { ProgressBar } from "./ProgressBar";
 import { formatDate } from "@/lib/format";
 import { segmentCode, type Returning } from "@/lib/domain/progress";
 
-export function LibraryCard({ m, returning }: { m: ListItem; returning?: Returning }) {
+export function LibraryCard({ m, returning, showType }: { m: ListItem; returning?: Returning; /** All Media: say what kind it is. */ showType?: boolean }) {
   const r = m.review;
   return (
     <article className="card">
@@ -28,6 +28,7 @@ export function LibraryCard({ m, returning }: { m: ListItem; returning?: Returni
           <Link href={mediaHref(m)}>{m.title}</Link>
         </h3>
         <div className="card-meta">
+          {showType && <span className={`kind-tag t-${m.type}`}>{m.type === "movie" ? "Movie" : m.type === "tv" ? "TV" : "Anime"}</span>}
           {m.year && <span>{m.year}</span>}
           <Stars value={r.rating} />
           <StatusPill status={r.status} />

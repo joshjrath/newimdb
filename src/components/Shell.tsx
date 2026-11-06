@@ -6,7 +6,7 @@ import { UpdateBell } from "./UpdateBell";
 import { RailSearch } from "./RailSearch";
 import { updatesSummary } from "@/lib/repo/releases";
 
-export type ShellActive = Category | "studio" | "new" | "import" | "settings" | "stats" | "recommended" | "lists";
+export type ShellActive = Category | "all" | "studio" | "new" | "import" | "settings" | "stats" | "recommended" | "lists";
 
 const CATEGORIES = Object.keys(CATEGORY_TO_TYPE) as Category[];
 const STUDIO: { key: ShellActive; href: string; label: string }[] = [
@@ -41,6 +41,11 @@ export function Shell({ children, active, category }: { children: React.ReactNod
                 <span className="n">{counts[CATEGORY_TO_TYPE[c]]}</span>
               </Link>
             ))}
+            <Link className="cat-all" href="/watch/all" aria-current={active === "all" ? "page" : undefined}>
+              <span className="dot" />
+              All Media
+              <span className="n">{counts.total}</span>
+            </Link>
           </nav>
           <nav className="studio" aria-label="More">
             <Link href="/lists" aria-current={active === "lists" ? "page" : undefined}>Lists</Link>

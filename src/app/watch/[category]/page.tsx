@@ -20,7 +20,7 @@ import { listGenres } from "@/lib/repo/genres";
 import { getDb } from "@/lib/db";
 import { parseListQuery } from "@/lib/listQuery";
 import { plural } from "@/lib/domain/text";
-import { CATEGORY_LABEL, CATEGORY_TO_TYPE, STATUS_LABEL, WATCH_STATUSES, type Category, type WatchStatus } from "@/lib/domain/types";
+import { CATEGORY_LABEL, CATEGORY_TO_TYPE, STATUS_LABEL, WATCH_STATUSES, type Category, type MediaType, type WatchStatus } from "@/lib/domain/types";
 
 type SP = Record<string, string | undefined>;
 const CATEGORIES = Object.keys(CATEGORY_TO_TYPE) as Category[];
@@ -28,18 +28,31 @@ const MOVIE_STATUSES: WatchStatus[] = ["completed", "plan"];
 /** 60 divides evenly into 1, 2, 3, 4, 5 and 6 columns, so every full page ends on a full row. */
 const LIBRARY_PAGE_SIZE = 60;
 
+const ALL_KINDS: MediaType[] = ["movie", "tv", "anime"];
+const KIND_LABEL: Record<MediaType, string> = { movie: "Movies", tv: "TV Shows", anime: "Anime" };
+
 export async function generateMetadata({ params }: { params: Promise<{ category: string }> }) {
-  return { title: CATEGORY_LABEL[(await params).category as Category] ?? "Library" };
+  const c = (await params).category;
+  return { title: c === "all" ? "All Media" : (CATEGORY_LABEL[c as Category] ?? "Library") };
 }
 
 export default async function LibraryPage({ params, searchParams }: { params: Promise<{ category: string }>; searchParams: Promise<SP> }) {
   const { category } = await params;
   await requireOwnerPage(`/watch/${category}`);
-  if (!CATEGORIES.includes(category as Category)) notFound();
-  const cat = category as Category;
-  const type = CATEGORY_TO_TYPE[cat];
+  // "All Media": every kind in one place, narrowed with the Movies / TV / Anime toggles.
+  const isAll = category === "all";
+  if (!isAll && !CATEGORIES.includes(category as Category)) notFound();
+  const cat = (isAll ? "all" : category) as Category | "all";
   const sp = await searchParams;
-  const query = { ...parseListQuery(sp, { pageSize: LIBRARY_PAGE_SIZE }), type };
+  const kinds: MediaType[] = isAll ? (() => {
+    const k = (sp.kinds ?? "").split(",").filter((x): x is MediaType => (ALL_KINDS as string[]).includes(x));
+    return k.length ? k : ALL_KINDS;
+  })() : [CATEGORY_TO_TYPE[cat as Category]];
+  const type: MediaType | undefined = isAll ? (kinds.length === 1 ? kinds[0] : undefined) : CATEGORY_TO_TYPE[cat as Category];
+  const onlyMovies = kinds.length === 1 && kinds[0] === "movie";
+  const hasMovies = kinds.includes("movie");
+  const showKinds = kinds.filter((k) => k !== "movie") as ("tv" | "anime")[];
+  const query = { ...parseListQuery(sp, { pageSize: LIBRARY_PAGE_SIZE }), type, types: type ? undefined : kinds };
   const { status, statuses, tag, q, featured, sort, page = 1, withPeople = [], alone, genre, watchedIn, minImdb } = query;
   // Status chips: tap several to see any of them.
   const picked: string[] = statuses ?? (status && status !== "none" ? [status] : []);
@@ -50,15 +63,21 @@ export default async function LibraryPage({ params, searchParams }: { params: Pr
   const people = listPeople(getDb(), type).filter((p) => p.count > 0);
   // "Alone": watched with nobody marked (Plan to watch doesn't count).
   const aloneCount = (getDb()
-    .prepare(`SELECT COUNT(*) n FROM media m LEFT JOIN review r ON r.media_id = m.id WHERE m.type = ? AND COALESCE(r.status, '') != 'plan' AND NOT EXISTS (SELECT 1 FROM media_person mp WHERE mp.media_id = m.id)`)
-    .get(type) as { n: number }).n;
+    .prepare(`SELECT COUNT(*) n FROM media m LEFT JOIN review r ON r.media_id = m.id WHERE m.type IN (${kinds.map(() => "?").join(",")}) AND COALESCE(r.status, '') != 'plan' AND NOT EXISTS (SELECT 1 FROM media_person mp WHERE mp.media_id = m.id)`)
+    .get(...kinds) as { n: number }).n;
   const genres = listGenres(getDb(), type).filter((g) => g.count > 0 || g.id === genre);
   const filtered = Boolean(picked.length || minImdb || tag || q || featured || withPeople.length || alone || genre || watchedIn);
-  const watching = type === "movie" || filtered || page > 1 ? [] : listWatching(type);
+  const watching = onlyMovies || filtered || page > 1 ? [] : listWatching(type).filter((m) => kinds.includes(m.type));
   // Shows you'd finished that have a new season: a strip up top, and a badge on their cards.
-  const sections = type === "movie" ? { airing: [], upcoming: [], returning: [] } : listShowSections(type);
+  const sections = showKinds.reduce(
+    (acc, k) => {
+      const s = listShowSections(k);
+      return { airing: [...acc.airing, ...s.airing], upcoming: [...acc.upcoming, ...s.upcoming], returning: [...acc.returning, ...s.returning] };
+    },
+    { airing: [], upcoming: [], returning: [] } as ReturnType<typeof listShowSections>,
+  );
   const returningById = new Map(sections.returning.map((m) => [m.id, m.returning]));
-  const label = CATEGORY_LABEL[cat];
+  const label = isAll ? "All Media" : CATEGORY_LABEL[cat as Category];
 
   const href = (patch: SP) => {
     const next: SP = { ...sp, page: undefined, ...patch };
@@ -72,7 +91,7 @@ export default async function LibraryPage({ params, searchParams }: { params: Pr
       <header className="page-head">
         <div>
           <h1>{label}</h1>
-          <p className="sub">{plural(counts[type], "entry", "entries")} · private</p>
+          <p className="sub">{plural(kinds.reduce((a, k) => a + counts[k], 0), "entry", "entries")} · private</p>
         </div>
         <nav className="seg" aria-label="Category">
           {CATEGORIES.map((c) => (
@@ -81,8 +100,25 @@ export default async function LibraryPage({ params, searchParams }: { params: Pr
               <span className="n">{counts[CATEGORY_TO_TYPE[c]]}</span>
             </Link>
           ))}
+          <Link className="cat-all" href="/watch/all" aria-current={isAll ? "page" : undefined}>
+            All Media
+            <span className="n">{counts.total}</span>
+          </Link>
         </nav>
       </header>
+      {isAll && (
+        <div className="chips kind-chips" role="group" aria-label="Show">
+          {ALL_KINDS.map((k) => {
+            const on = kinds.includes(k);
+            const next = on ? kinds.filter((x) => x !== k) : [...kinds, k];
+            return (
+              <Link key={k} className={`chip kind-${k}`} scroll={false} href={href({ kinds: next.length && next.length < 3 ? next.join(",") : undefined })} aria-pressed={on} aria-current={on ? "true" : undefined}>
+                <span className={`type-dot t-${k}`} /> {KIND_LABEL[k]} <span className="hint">{counts[k]}</span>
+              </Link>
+            );
+          })}
+        </div>
+      )}
 
       {!filtered && page === 1 && (
         <>
@@ -113,13 +149,13 @@ export default async function LibraryPage({ params, searchParams }: { params: Pr
           {query.dir && <input type="hidden" name="dir" value={query.dir} />}
           <button className="btn" type="submit">Search</button>
           <Suspense fallback={null}>
-            <SortMenu sort={sort ?? "recent"} dir={query.dir} exclude={type === "movie" ? ["progress"] : []} />
+            <SortMenu sort={sort ?? "recent"} dir={query.dir} exclude={onlyMovies ? ["progress"] : []} />
           </Suspense>
         </form>
 
         <div className="chips" aria-label="Filter by status">
           <Link className="chip" scroll={false} href={href({ status: undefined })} aria-current={!picked.length ? "true" : undefined}>All</Link>
-          {(type === "movie" ? MOVIE_STATUSES : WATCH_STATUSES).map((s) => (
+          {(onlyMovies ? MOVIE_STATUSES : WATCH_STATUSES).map((s) => (
             <Link key={s} className="chip" scroll={false} href={href({ status: toggleStatus(s) })} aria-current={picked.includes(s) ? "true" : undefined}>
               {s === "watching" ? "Currently watching" : STATUS_LABEL[s]}
             </Link>
@@ -128,7 +164,7 @@ export default async function LibraryPage({ params, searchParams }: { params: Pr
           <Suspense fallback={null}>
             <MinImdb value={minImdb ?? null} />
           </Suspense>
-          {type === "movie" &&
+          {hasMovies &&
             (["theater", "streaming"] as const).map((w) => (
               <Link key={w} className="chip" scroll={false} href={href({ where: watchedIn === w ? undefined : w })} aria-current={watchedIn === w ? "true" : undefined}>
                 {w === "theater" ? "🎬 In theaters" : "📺 Streaming"}
@@ -186,16 +222,16 @@ export default async function LibraryPage({ params, searchParams }: { params: Pr
 
       {items.length ? (
         <SelectableGrid
-          movies={type === "movie"}
+          movies={hasMovies}
           pageIds={items.map((m) => m.id)}
           people={listPeople().map(({ id, name }) => ({ id, name }))}
           genres={listGenres().map(({ id, name }) => ({ id, name }))}
           lists={listLists().map(({ id, name }) => ({ id, name }))}
-          statuses={(type === "movie" ? MOVIE_STATUSES : WATCH_STATUSES).map((s) => ({ key: s, label: STATUS_LABEL[s] }))}
+          statuses={(onlyMovies ? MOVIE_STATUSES : WATCH_STATUSES).map((s) => ({ key: s, label: STATUS_LABEL[s] }))}
         >
           {items.map((m) => (
             <div key={m.id} data-select-id={m.id} className="select-cell">
-              <LibraryCard m={m} returning={returningById.get(m.id)} />
+              <LibraryCard m={m} returning={returningById.get(m.id)} showType={isAll} />
             </div>
           ))}
         </SelectableGrid>
@@ -203,7 +239,7 @@ export default async function LibraryPage({ params, searchParams }: { params: Pr
         <div className="empty-state">
           <h2>{filtered ? "Nothing matches these filters" : `No ${label.toLowerCase()} yet`}</h2>
           <p>{filtered ? "Try another filter, or clear them." : "Add your first one in Studio, or import from Letterboxd."}</p>
-          <Link className="btn primary" href={`/studio/new?type=${type}`}>Add {type === "movie" ? "a movie" : type === "tv" ? "a show" : "an anime"}</Link>
+          <Link className="btn primary" href={`/studio/new${type ? `?type=${type}` : ""}`}>Add {type === "movie" ? "a movie" : type === "tv" ? "a show" : type === "anime" ? "an anime" : "a title"}</Link>
         </div>
       )}
 

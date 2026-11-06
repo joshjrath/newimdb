@@ -248,6 +248,8 @@ const ORDER_BY: Record<SortKey, Record<SortDir, string>> = {
 
 export interface ListQuery {
   type?: MediaType;
+  /** Several kinds at once (All Media). */
+  types?: MediaType[];
   status?: WatchStatus | "none";
   /** Any of these statuses (several picked at once). */
   statuses?: WatchStatus[];
@@ -281,6 +283,9 @@ export function listMedia(query: ListQuery, db = getDb()): { items: ListItem[]; 
   if (query.type) {
     where.push(`m.type = ?`);
     params.push(query.type);
+  } else if (query.types?.length && query.types.length < 3) {
+    where.push(`m.type IN (${placeholders(query.types.length)})`);
+    params.push(...query.types);
   }
   if (query.status === "none") where.push(`r.status IS NULL`);
   else if (query.statuses?.length) {

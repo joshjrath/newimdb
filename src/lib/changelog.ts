@@ -21,6 +21,7 @@ export const CHANGELOG: ChangelogEntry[] = [
       "Tapping filters no longer jumps you to the top of the page.",
       "Recommended has tools: sort by best match, IMDb rating or year (reversible), filter by streaming service, genre, Anime / TV / Movies, and a minimum IMDb rating like 7.5.",
       "Library pages have a minimum IMDb rating filter too, which combines with every other filter.",
+      "All Media: every movie, show and anime in one place, with the same rows and filters, and Movies / TV / Anime toggles.",
     ],
   },
   {
