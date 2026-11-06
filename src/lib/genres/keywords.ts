@@ -75,6 +75,7 @@ export function startKeywordJob(opts: { quiet?: boolean } = {}): KeywordJob | nu
 
   const save = db.prepare(`UPDATE media SET keywords = ?, keywords_fetched_at = ?, tmdb_id = COALESCE(tmdb_id, ?) WHERE id = ?`);
   const saveDate = db.prepare(`UPDATE media SET release_date = ? WHERE id = ? AND release_date IS NULL`);
+  const saveImdb = db.prepare(`UPDATE media SET imdb_id = ? WHERE id = ? AND (imdb_id IS NULL OR imdb_id = '')`);
   const fillGenres = db.prepare(`UPDATE media SET genres = ? WHERE id = ? AND genres = '[]'`);
   const touched: number[] = [];
   let next = 0;
@@ -100,6 +101,7 @@ export function startKeywordJob(opts: { quiet?: boolean } = {}): KeywordJob | nu
                 keywords = r.keywords;
                 if (r.genres.length && t.genres === "[]") fillGenres.run(JSON.stringify(r.genres), t.id);
                 if (r.releaseDate) saveDate.run(r.releaseDate, t.id);
+                if (r.imdbId) saveImdb.run(r.imdbId, t.id);
                 job.found++;
               }
               save.run(JSON.stringify(keywords), nowIso(), tmdbId, t.id);

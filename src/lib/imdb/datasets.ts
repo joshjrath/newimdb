@@ -69,10 +69,10 @@ async function downloadTo(url: string, file: string, onBytes?: (done: number, to
   fs.renameSync(tmp, file); // only a complete file ever gets the real name
 }
 
-async function ensureFile(name: DatasetName, label: string, opts: LookupOptions): Promise<string> {
+async function ensureFile(name: DatasetName, label: string, opts: LookupOptions, maxAgeDays = MAX_AGE_DAYS): Promise<string> {
   const dir = opts.dir ?? dataSubdir("cache/imdb");
   const file = path.join(dir, name);
-  const fresh = fs.existsSync(file) && Date.now() - fs.statSync(file).mtimeMs < MAX_AGE_DAYS * 86400_000;
+  const fresh = fs.existsSync(file) && Date.now() - fs.statSync(file).mtimeMs < maxAgeDays * 86400_000;
   if (!fresh) {
     opts.onProgress?.({ stage: `Downloading ${label}`, fraction: null });
     await (opts.download ?? downloadTo)(`${BASE}/${name}`, file, (done, total) =>
@@ -156,7 +156,7 @@ export async function lookupEpisodes(ratedEpisodeIds: Set<string>, seriesIds: Se
 export async function imdbRatings(ids: Set<string>, opts: LookupOptions = {}): Promise<Map<string, { rating: number; votes: number }>> {
   const out = new Map<string, { rating: number; votes: number }>();
   if (!ids.size) return out;
-  const file = await ensureFile("title.ratings.tsv.gz", "IMDb's ratings", opts);
+  const file = await ensureFile("title.ratings.tsv.gz", "IMDb's ratings", opts, 3); // ratings move; keep it fresh
   await eachRow(file, (c) => {
     if (ids.has(c[0])) out.set(c[0], { rating: Number(c[1]), votes: Number(c[2]) });
   });

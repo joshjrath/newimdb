@@ -316,6 +316,12 @@ const MIGRATIONS: string[] = [
   ALTER TABLE list ADD COLUMN share_ratings INTEGER NOT NULL DEFAULT 0;
   CREATE UNIQUE INDEX IF NOT EXISTS list_share_token ON list(share_token);
   `,
+  // 13 — IMDb's public rating for every title, refreshed from IMDb's ratings file
+  `
+  ALTER TABLE media ADD COLUMN imdb_rating REAL;
+  ALTER TABLE media ADD COLUMN imdb_votes INTEGER;
+  ALTER TABLE media ADD COLUMN imdb_rating_at TEXT;
+  `,
 ];
 
 /** Whether the database was created just now (no earlier data), per connection. */

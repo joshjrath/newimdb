@@ -165,6 +165,8 @@ export interface MediaView {
   tags: string[];
   /** Who you watched it with: nobody, one person or several. */
   people: PersonRef[];
+  /** IMDb's public rating (out of 10) and vote count, when the title is on IMDb. Not your rating. */
+  imdb: { rating: number; votes: number | null } | null;
   /** Your genre filters from Settings that this title is in (auto-tagged or picked by you). */
   genreFilters: GenreRef[];
 }

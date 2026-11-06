@@ -161,3 +161,17 @@ describe("IMDb preview job", () => {
     expect(getJob("nope")).toBeNull();
   });
 });
+
+describe("IMDb rating on every title", () => {
+  it("fills IMDb's public rating from the ratings file, separately from your own", async () => {
+    const { refreshImdbRatings } = await import("@/lib/imdb/ratingsJob");
+    const { createMedia, getMedia } = await import("@/lib/repo/media");
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "imdb-rt-"));
+    fs.writeFileSync(path.join(dir, "title.ratings.tsv.gz"), gzipSync("tconst\taverageRating\tnumVotes\ntt0386676\t9.0\t800000\n"));
+    const office = createMedia({ type: "tv", metadata: { title: "The Office", imdbId: "tt0386676" }, review: { rating: 2.5 } });
+    const none = createMedia({ type: "movie", metadata: { title: "No IMDb" } });
+    expect(await refreshImdbRatings(undefined, { force: true, lookup: { dir, download: noDownload } })).toBe(1);
+    expect(getMedia(office.id)).toMatchObject({ imdb: { rating: 9, votes: 800000 }, review: { rating: 2.5 } });
+    expect(getMedia(none.id)!.imdb).toBeNull();
+  });
+});

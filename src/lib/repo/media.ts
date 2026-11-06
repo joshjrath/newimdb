@@ -107,6 +107,12 @@ function mapMedia(m: MediaRow, r: Row | undefined, tags: string[], people: Perso
     tags,
     people,
     genreFilters,
+    imdb:
+      m.imdb_rating != null
+        ? { rating: m.imdb_rating as number, votes: (m.imdb_votes as number | null) ?? null }
+        : m.third_party_rating != null && m.third_party_rating_source === "IMDb"
+          ? { rating: m.third_party_rating as number, votes: null }
+          : null,
   };
 }
 

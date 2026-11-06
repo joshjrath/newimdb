@@ -24,7 +24,7 @@ describe("updates never lose data", () => {
     setDbForTests(db);
     createMedia({ type: "movie", metadata: { title: "Kept" } }, {}, db);
     // Undo the newest migration, as if this database came from the previous version.
-    db.exec(`ALTER TABLE recommendation DROP COLUMN person_id; DROP INDEX list_share_token; ALTER TABLE list DROP COLUMN share_token; ALTER TABLE list DROP COLUMN share_ratings; ALTER TABLE media DROP COLUMN release_date; UPDATE schema_version SET version = 9;`);
+    db.exec(`ALTER TABLE recommendation DROP COLUMN person_id; ALTER TABLE media DROP COLUMN imdb_rating; ALTER TABLE media DROP COLUMN imdb_votes; ALTER TABLE media DROP COLUMN imdb_rating_at; DROP INDEX list_share_token; ALTER TABLE list DROP COLUMN share_token; ALTER TABLE list DROP COLUMN share_ratings; ALTER TABLE media DROP COLUMN release_date; UPDATE schema_version SET version = 9;`);
     db.close();
 
     db = openDatabase(file); // "the update"
@@ -42,7 +42,7 @@ describe("updates never lose data", () => {
     let db = openDatabase(file);
     createMedia({ type: "movie", metadata: { title: "Kept" } }, {}, db);
     // As it was on Railway: migration 8 ran before list tables were part of it.
-    db.exec(`DROP TABLE list_item; DROP TABLE list; ALTER TABLE recommendation DROP COLUMN person_id; ALTER TABLE media DROP COLUMN release_date; UPDATE schema_version SET version = 9;`);
+    db.exec(`DROP TABLE list_item; DROP TABLE list; ALTER TABLE recommendation DROP COLUMN person_id; ALTER TABLE media DROP COLUMN imdb_rating; ALTER TABLE media DROP COLUMN imdb_votes; ALTER TABLE media DROP COLUMN imdb_rating_at; ALTER TABLE media DROP COLUMN release_date; UPDATE schema_version SET version = 9;`);
     db.close();
     db = openDatabase(file);
     setDbForTests(db);
@@ -55,7 +55,7 @@ describe("updates never lose data", () => {
     const file = path.join(dir, "watch.db");
     let db = openDatabase(file);
     createMedia({ type: "movie", metadata: { title: "Kept" } }, {}, db);
-    db.exec(`DROP TABLE arc; ALTER TABLE media DROP COLUMN episode_view; ALTER TABLE recommendation DROP COLUMN person_id; DROP INDEX list_share_token; ALTER TABLE list DROP COLUMN share_token; ALTER TABLE list DROP COLUMN share_ratings; ALTER TABLE media DROP COLUMN release_date; UPDATE schema_version SET version = 8;`);
+    db.exec(`DROP TABLE arc; ALTER TABLE media DROP COLUMN episode_view; ALTER TABLE recommendation DROP COLUMN person_id; ALTER TABLE media DROP COLUMN imdb_rating; ALTER TABLE media DROP COLUMN imdb_votes; ALTER TABLE media DROP COLUMN imdb_rating_at; DROP INDEX list_share_token; ALTER TABLE list DROP COLUMN share_token; ALTER TABLE list DROP COLUMN share_ratings; ALTER TABLE media DROP COLUMN release_date; UPDATE schema_version SET version = 8;`);
     db.close();
     fs.rmSync(path.join(dir, "backups"), { recursive: true, force: true });
     fs.writeFileSync(path.join(dir, "backups"), "not a folder"); // the copy will fail

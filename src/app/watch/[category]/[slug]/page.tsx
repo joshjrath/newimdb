@@ -80,6 +80,11 @@ export default async function DetailPage({ params, searchParams }: { params: Par
                 {r.rating != null ? <Stars value={r.rating} size={28} /> : <span className="hint">Not rated yet</span>}
                 {r.ratingLabel && <span className="label-text">{r.ratingLabel}</span>}
               </div>
+              {m.imdb && (
+                <a className="imdb-badge big" href={m.imdbId ? `https://www.imdb.com/title/${m.imdbId}/` : undefined} target="_blank" rel="noopener noreferrer" title={m.imdb.votes ? `${m.imdb.votes.toLocaleString("en-GB")} votes on IMDb` : "IMDb rating"}>
+                  <b>IMDb</b> {m.imdb.rating.toFixed(1)}
+                </a>
+              )}
             </div>
             <div className="review-card">
               {r.spoiler && r.body.trim() ? <SpoilerReveal>{body}</SpoilerReveal> : body}

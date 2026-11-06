@@ -865,3 +865,4 @@ button.stat-btn:hover { background: var(--raised); }
 .share-rating { color: #f5c518; font-weight: 700; }
 .share-foot { margin-top: 48px; text-align: center; font-size: 12px; color: rgba(255, 255, 255, .4); }
 @media (max-width: 820px) { .share-hero { grid-template-columns: 1fr; padding: 24px; } .share-head { order: 0; } .share-collage { height: 220px; } .share-collage img { width: 110px; left: calc(var(--k) * 40px); } .share-grid { grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); } }
+.card-imdb { margin: -2px 0 6px; }

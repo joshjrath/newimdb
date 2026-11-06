@@ -32,6 +32,13 @@ export function LibraryCard({ m, returning }: { m: ListItem; returning?: Returni
           <Stars value={r.rating} />
           <StatusPill status={r.status} />
         </div>
+        {m.imdb && (
+          <div className="card-imdb">
+            <span className="imdb-badge" title={m.imdb.votes ? `${m.imdb.votes.toLocaleString("en-GB")} votes on IMDb` : "IMDb rating"}>
+              <b>IMDb</b> {m.imdb.rating.toFixed(1)}
+            </span>
+          </div>
+        )}
         {r.body &&
           (r.spoiler ? (
             <p className="card-excerpt spoiler">Contains spoilers. Open to read.</p>
