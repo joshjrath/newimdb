@@ -12,6 +12,17 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-11-06-stats-deeper",
+    date: "2026-11-06",
+    title: "A much deeper Statistics page",
+    items: [
+      "Your year of watching as a day-by-day calendar, with your current and longest streaks.",
+      "Longest runs of back-to-back 5/5 episodes, your best seasons and biggest binge days.",
+      "You vs IMDb: whether you rate higher or lower, and the titles you disagree with IMDb about most.",
+      "Where your time goes (movies, TV, anime), your watching days of the week, and the decades you watch.",
+    ],
+  },
+  {
     id: "2026-11-06-imdb-sort-colours",
     date: "2026-11-06",
     title: "Sort by IMDb rating, colourful progress",

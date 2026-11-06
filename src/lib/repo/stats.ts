@@ -180,3 +180,158 @@ export function formatMinutes(min: number): string {
   if (h >= 48) return `${Math.round(min / 60).toLocaleString("en-GB")} h`;
   return m ? `${h} h ${m} m` : `${h} h`;
 }
+
+/* ---------------- deeper insights ---------------- */
+
+export interface PerfectRun {
+  mediaId: number;
+  title: string;
+  type: MediaType;
+  length: number;
+  from: string;
+  to: string;
+}
+
+export interface Insights {
+  /** YYYY-MM-DD → things watched that day (last 53 weeks). */
+  days: { date: string; episodes: number; movies: number }[];
+  streak: { longest: number; longestEnd: string | null; current: number };
+  perfectRuns: PerfectRun[];
+  bestSeasons: { mediaId: number; title: string; season: string; average: number; rated: number }[];
+  bingeDays: { date: string; title: string; mediaId: number; episodes: number }[];
+  vsImdb: { compared: number; averageGap: number | null; higher: number; lower: number };
+  hotTakes: { loved: HotTake[]; disliked: HotTake[] };
+  weekdays: number[];
+  decades: { decade: number; count: number }[];
+  showStatus: { status: string; count: number }[];
+}
+
+export interface HotTake {
+  id: number;
+  type: MediaType;
+  title: string;
+  mine: number; // out of 5
+  imdb: number; // out of 10
+  gap: number; // in IMDb points (mine × 2 − IMDb)
+}
+
+const code = (seasonNumber: number | null, label: string, n: number) => (seasonNumber != null ? `S${seasonNumber}E${n}` : `${label} E${n}`);
+const IMDB = `COALESCE(m.imdb_rating, CASE WHEN m.third_party_rating_source = 'IMDb' THEN m.third_party_rating END)`;
+
+export function getInsights(db = getDb(), today = new Date()): Insights {
+  // Every day you watched something: episodes by when you watched them, movies by watch date.
+  const since = new Date(today.getTime() - 371 * 86_400_000).toISOString().slice(0, 10);
+  const byDay = new Map<string, { episodes: number; movies: number }>();
+  for (const r of db.prepare(`SELECT substr(watched_at, 1, 10) d, COUNT(*) n FROM episode_assessment WHERE state = 'watched' AND watched_at IS NOT NULL GROUP BY d`).all() as { d: string; n: number }[])
+    byDay.set(r.d, { episodes: r.n, movies: 0 });
+  for (const r of db.prepare(`SELECT substr(r.watched_on, 1, 10) d, COUNT(*) n FROM media m JOIN review r ON r.media_id = m.id WHERE m.type = 'movie' AND r.watched_on IS NOT NULL GROUP BY d`).all() as { d: string; n: number }[])
+    byDay.set(r.d, { episodes: byDay.get(r.d)?.episodes ?? 0, movies: r.n });
+  const days = [...byDay].filter(([d]) => d >= since).map(([date, v]) => ({ date, ...v })).sort((a, b) => a.date.localeCompare(b.date));
+
+  // Streaks of consecutive days with something watched.
+  const all = [...byDay.keys()].filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d)).sort();
+  let longest = 0, longestEnd: string | null = null, run = 0, prev: string | null = null;
+  const next = (d: string) => new Date(Date.parse(d + "T12:00:00Z") + 86_400_000).toISOString().slice(0, 10);
+  for (const d of all) {
+    run = prev && next(prev) === d ? run + 1 : 1;
+    if (run > longest) [longest, longestEnd] = [run, d];
+    prev = d;
+  }
+  const todayStr = today.toISOString().slice(0, 10);
+  const yesterday = new Date(today.getTime() - 86_400_000).toISOString().slice(0, 10);
+  let current = 0;
+  if (byDay.has(todayStr) || byDay.has(yesterday)) {
+    let d = byDay.has(todayStr) ? todayStr : yesterday;
+    while (byDay.has(d)) {
+      current++;
+      d = new Date(Date.parse(d + "T12:00:00Z") - 86_400_000).toISOString().slice(0, 10);
+    }
+  }
+
+  // Longest runs of back-to-back 5/5 episodes, in watch order (an unrated or lower one ends a run).
+  const eps = db
+    .prepare(
+      `SELECT m.id, m.title, m.type, s.season_number, s.label, s.position, e.number, a.rating
+       FROM media m JOIN segment s ON s.media_id = m.id JOIN episode e ON e.segment_id = s.id LEFT JOIN episode_assessment a ON a.episode_id = e.id
+       WHERE m.type != 'movie' AND s.kind IN ('season', 'cour')
+       ORDER BY m.id, s.position, s.id, e.number`,
+    )
+    .all() as { id: number; title: string; type: MediaType; season_number: number | null; label: string; position: number; number: number; rating: number | null }[];
+  const runs: PerfectRun[] = [];
+  let cur: PerfectRun | null = null;
+  let curId = -1;
+  const close = () => {
+    if (cur && cur.length >= 2) runs.push(cur);
+    cur = null;
+  };
+  for (const e of eps) {
+    if (e.id !== curId) {
+      close();
+      curId = e.id;
+    }
+    if (e.rating === 5) {
+      const c = code(e.season_number, e.label, e.number);
+      if (cur) Object.assign(cur, { length: cur.length + 1, to: c });
+      else cur = { mediaId: e.id, title: e.title, type: e.type, length: 1, from: c, to: c };
+    } else close();
+  }
+  close();
+  runs.sort((a, b) => b.length - a.length);
+
+  const bestSeasons = (db
+    .prepare(
+      `SELECT m.id AS mediaId, m.title, s.season_number, s.label, ROUND(AVG(a.rating), 2) AS average, COUNT(a.rating) AS rated
+       FROM media m JOIN segment s ON s.media_id = m.id JOIN episode e ON e.segment_id = s.id JOIN episode_assessment a ON a.episode_id = e.id
+       WHERE m.type != 'movie' AND a.rating IS NOT NULL GROUP BY s.id HAVING rated >= 4 ORDER BY average DESC, rated DESC LIMIT 8`,
+    )
+    .all() as { mediaId: number; title: string; season_number: number | null; label: string; average: number; rated: number }[]).map((r) => ({
+    mediaId: r.mediaId,
+    title: r.title,
+    season: r.season_number != null ? `Season ${r.season_number}` : r.label,
+    average: r.average,
+    rated: r.rated,
+  }));
+
+  const bingeDays = db
+    .prepare(
+      `SELECT substr(a.watched_at, 1, 10) AS date, m.title, m.id AS mediaId, COUNT(*) AS episodes
+       FROM episode_assessment a JOIN episode e ON e.id = a.episode_id JOIN segment s ON s.id = e.segment_id JOIN media m ON m.id = s.media_id
+       WHERE a.state = 'watched' AND a.watched_at IS NOT NULL GROUP BY date, m.id ORDER BY episodes DESC LIMIT 6`,
+    )
+    .all() as Insights["bingeDays"];
+
+  // You vs IMDb (IMDb is out of 10; yours out of 5, so yours × 2).
+  const pairs = db
+    .prepare(`SELECT m.id, m.type, m.title, r.rating AS mine, ${IMDB} AS imdb FROM media m JOIN review r ON r.media_id = m.id WHERE r.rating IS NOT NULL AND ${IMDB} IS NOT NULL`)
+    .all() as { id: number; type: MediaType; title: string; mine: number; imdb: number }[];
+  const takes = pairs.map((p) => ({ ...p, gap: Math.round((p.mine * 2 - p.imdb) * 10) / 10 }));
+  const vsImdb = {
+    compared: takes.length,
+    averageGap: takes.length ? Math.round((takes.reduce((a, t) => a + t.gap, 0) / takes.length) * 100) / 100 : null,
+    higher: takes.filter((t) => t.gap > 0.5).length,
+    lower: takes.filter((t) => t.gap < -0.5).length,
+  };
+  const hotTakes = {
+    loved: [...takes].filter((t) => t.gap >= 1.5).sort((a, b) => b.gap - a.gap).slice(0, 6),
+    disliked: [...takes].filter((t) => t.gap <= -1.5).sort((a, b) => a.gap - b.gap).slice(0, 6),
+  };
+
+  const weekdays = [0, 0, 0, 0, 0, 0, 0];
+  for (const [d, v] of byDay) {
+    const w = new Date(d + "T12:00:00Z").getUTCDay();
+    if (!Number.isNaN(w)) weekdays[(w + 6) % 7] += v.episodes + v.movies; // Monday first
+  }
+
+  const decades = db
+    .prepare(
+      `SELECT (m.year / 10) * 10 AS decade, COUNT(*) AS count FROM media m LEFT JOIN review r ON r.media_id = m.id
+       WHERE m.year IS NOT NULL AND COALESCE(r.status, '') != 'plan' GROUP BY decade ORDER BY decade`,
+    )
+    .all() as Insights["decades"];
+
+  const showStatus = db
+    .prepare(`SELECT COALESCE(r.status, 'none') AS status, COUNT(*) AS count FROM media m LEFT JOIN review r ON r.media_id = m.id WHERE m.type != 'movie' GROUP BY status ORDER BY count DESC`)
+    .all() as Insights["showStatus"];
+
+  return { days, streak: { longest, longestEnd, current }, perfectRuns: runs.slice(0, 10), bestSeasons, bingeDays, vsImdb, hotTakes, weekdays, decades, showStatus };
+}

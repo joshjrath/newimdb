@@ -2,7 +2,8 @@ import Link from "next/link";
 import { requireOwnerPage } from "@/lib/guard";
 import { Shell } from "@/components/Shell";
 import { Poster } from "@/components/Poster";
-import { formatMinutes, getStats, type TheaterVisit } from "@/lib/repo/stats";
+import { formatMinutes, getInsights, getStats, type TheaterVisit } from "@/lib/repo/stats";
+import { ActivityCalendar, Habits, PerfectRuns, TimeSplit, VersusImdb } from "@/components/stats/Insights";
 import { plural } from "@/lib/domain/text";
 import { formatDate } from "@/lib/format";
 import { TYPE_LABEL } from "@/lib/domain/types";
@@ -36,6 +37,7 @@ function theaterSummary(all: TheaterVisit[]) {
 export default async function StatsPage() {
   await requireOwnerPage("/stats");
   const s = getStats();
+  const insights = getInsights();
   const totalMinutes = s.minutesWatched.movie + s.minutesWatched.tv + s.minutesWatched.anime;
   const maxMonth = Math.max(1, ...s.months.map((m) => m.minutes));
   const maxRating = Math.max(1, ...s.ratingHistogram.map((r) => r.count));
@@ -89,6 +91,11 @@ export default async function StatsPage() {
           <span className="hint">on {plural(s.timeLeft.length, "show you've started", "shows you've started")}</span>
         </div>
       </section>
+
+      <TimeSplit s={s} />
+      <ActivityCalendar i={insights} />
+      <PerfectRuns i={insights} />
+      <VersusImdb i={insights} />
 
       <section className="panel" aria-labelledby="month-h">
         <header>
@@ -193,6 +200,8 @@ export default async function StatsPage() {
           </ul>
         )}
       </section>
+
+      <Habits i={insights} />
 
       <div className="stats-grid">
         <section className="panel" aria-labelledby="people-stats-h">
