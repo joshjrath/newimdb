@@ -36,6 +36,16 @@ describe("release order to the day", () => {
   });
 });
 
+describe("several statuses at once", () => {
+  it("shows any of the statuses you pick", async () => {
+    const { listMedia: lm } = await import("@/lib/repo/media");
+    const { parseListQuery } = await import("@/lib/listQuery");
+    for (const [t, st] of [["W", "watching"], ["D", "dropped"], ["C", "completed"]] as const) createMedia({ type: "tv", metadata: { title: t }, review: { status: st } });
+    expect(lm({ ...parseListQuery({ status: "watching,dropped" }), sort: "title" }).items.map((m) => m.title)).toEqual(["D", "W"]);
+    expect(lm({ ...parseListQuery({ status: "completed" }), sort: "title" }).items.map((m) => m.title)).toEqual(["C"]);
+  });
+});
+
 describe("sorting both ways", () => {
   it("reverses any sort", async () => {
     const { listMedia: lm } = await import("@/lib/repo/media");

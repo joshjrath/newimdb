@@ -246,6 +246,8 @@ const ORDER_BY: Record<SortKey, Record<SortDir, string>> = {
 export interface ListQuery {
   type?: MediaType;
   status?: WatchStatus | "none";
+  /** Any of these statuses (several picked at once). */
+  statuses?: WatchStatus[];
   tag?: string;
   /** Only titles watched with ALL of these people. */
   withPeople?: number[];
@@ -276,7 +278,10 @@ export function listMedia(query: ListQuery, db = getDb()): { items: ListItem[]; 
     params.push(query.type);
   }
   if (query.status === "none") where.push(`r.status IS NULL`);
-  else if (query.status) {
+  else if (query.statuses?.length) {
+    where.push(`r.status IN (${placeholders(query.statuses.length)})`);
+    params.push(...query.statuses);
+  } else if (query.status) {
     where.push(`r.status = ?`);
     params.push(query.status);
   }

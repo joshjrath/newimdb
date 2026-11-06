@@ -16,6 +16,11 @@ export function parseListQuery(params: Params, defaults: { sort?: SortKey; pageS
   return {
     type: pick<MediaType>(MEDIA_TYPES, get("type")),
     status: status === "none" ? "none" : pick<WatchStatus>(WATCH_STATUSES, status),
+    // ?status=watching,dropped → either of them
+    statuses: (() => {
+      const many = [...new Set((status ?? "").split(",").filter((x): x is WatchStatus => (WATCH_STATUSES as readonly string[]).includes(x)))];
+      return many.length > 1 ? many : undefined;
+    })(),
     tag: get("tag"),
     // ?with=3,7 → watched with both
     // ?with=alone → titles you watched with nobody else

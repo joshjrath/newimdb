@@ -18,6 +18,7 @@ export const CHANGELOG: ChangelogEntry[] = [
     items: [
       "Anything you've watched with nobody marked counts as Alone: filter by it in the library and Studio, and see it in Statistics next to the people you watch with.",
       "Every title shows its IMDb rating under yours, on library cards and its page, refreshed from IMDb every few days.",
+      "Status chips can be combined: tap Currently watching and Dropped to see both.",
     ],
   },
   {

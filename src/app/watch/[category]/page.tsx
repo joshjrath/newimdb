@@ -39,7 +39,10 @@ export default async function LibraryPage({ params, searchParams }: { params: Pr
   const type = CATEGORY_TO_TYPE[cat];
   const sp = await searchParams;
   const query = { ...parseListQuery(sp, { pageSize: LIBRARY_PAGE_SIZE }), type };
-  const { status, tag, q, featured, sort, page = 1, withPeople = [], alone, genre, watchedIn } = query;
+  const { status, statuses, tag, q, featured, sort, page = 1, withPeople = [], alone, genre, watchedIn } = query;
+  // Status chips: tap several to see any of them.
+  const picked: string[] = statuses ?? (status && status !== "none" ? [status] : []);
+  const toggleStatus = (s: string) => (picked.includes(s) ? picked.filter((x) => x !== s) : [...picked, s]).join(",") || undefined;
   const { items, total, pageSize } = listMedia(query);
   const counts = countMedia();
   const tags = allTags(getDb(), type);
@@ -49,7 +52,7 @@ export default async function LibraryPage({ params, searchParams }: { params: Pr
     .prepare(`SELECT COUNT(*) n FROM media m LEFT JOIN review r ON r.media_id = m.id WHERE m.type = ? AND COALESCE(r.status, '') != 'plan' AND NOT EXISTS (SELECT 1 FROM media_person mp WHERE mp.media_id = m.id)`)
     .get(type) as { n: number }).n;
   const genres = listGenres(getDb(), type).filter((g) => g.count > 0 || g.id === genre);
-  const filtered = Boolean(status || tag || q || featured || withPeople.length || alone || genre || watchedIn);
+  const filtered = Boolean(picked.length || tag || q || featured || withPeople.length || alone || genre || watchedIn);
   const watching = type === "movie" || filtered || page > 1 ? [] : listWatching(type);
   // Shows you'd finished that have a new season: a strip up top, and a badge on their cards.
   const sections = type === "movie" ? { airing: [], upcoming: [], returning: [] } : listShowSections(type);
@@ -92,7 +95,7 @@ export default async function LibraryPage({ params, searchParams }: { params: Pr
 
       <div className="filters stack tight">
         <form className="toolbar" method="get" action={`/watch/${cat}`} role="search">
-          {status && <input type="hidden" name="status" value={status} />}
+          {picked.length > 0 && <input type="hidden" name="status" value={picked.join(",")} />}
           {tag && <input type="hidden" name="tag" value={tag} />}
           {featured && <input type="hidden" name="featured" value="1" />}
           {(withPeople.length > 0 || alone) && <input type="hidden" name="with" value={alone ? "alone" : withPeople.join(",")} />}
@@ -113,9 +116,9 @@ export default async function LibraryPage({ params, searchParams }: { params: Pr
         </form>
 
         <div className="chips" aria-label="Filter by status">
-          <Link className="chip" href={href({ status: undefined })} aria-current={!status ? "true" : undefined}>All</Link>
+          <Link className="chip" href={href({ status: undefined })} aria-current={!picked.length ? "true" : undefined}>All</Link>
           {(type === "movie" ? MOVIE_STATUSES : WATCH_STATUSES).map((s) => (
-            <Link key={s} className="chip" href={href({ status: s === status ? undefined : s })} aria-current={s === status ? "true" : undefined}>
+            <Link key={s} className="chip" href={href({ status: toggleStatus(s) })} aria-current={picked.includes(s) ? "true" : undefined}>
               {s === "watching" ? "Currently watching" : STATUS_LABEL[s]}
             </Link>
           ))}
