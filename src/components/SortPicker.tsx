@@ -28,7 +28,7 @@ export function SortPicker<K extends string>({ options, value, reversed, onChang
   return (
     <div className="sort-menu" ref={box}>
       <button type="button" className="sort-trigger" aria-haspopup="listbox" aria-expanded={open} onClick={() => setOpen(!open)}>
-        <span className="sort-icon" aria-hidden="true">{current.icon}</span>
+        <span className={`sort-icon${current.icon === "IMDb" ? " imdb" : ""}`} aria-hidden="true">{current.icon}</span>
         <span>{label(current, reversed)}</span>
         <span className="sort-caret" aria-hidden="true">▾</span>
       </button>
@@ -49,7 +49,7 @@ export function SortPicker<K extends string>({ options, value, reversed, onChang
                     onChange(o.key, active ? reversed : false);
                   }}
                 >
-                  <span className="sort-icon" aria-hidden="true">{o.icon}</span>
+                  <span className={`sort-icon${o.icon === "IMDb" ? " imdb" : ""}`} aria-hidden="true">{o.icon}</span>
                   <span className="grow">{label(o, active && reversed)}</span>
                   {active && <span aria-hidden="true">✓</span>}
                 </button>

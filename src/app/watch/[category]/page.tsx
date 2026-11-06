@@ -5,6 +5,7 @@ import { Shell } from "@/components/Shell";
 import { LibraryCard } from "@/components/LibraryCard";
 import { SortMenu } from "@/components/SortMenu";
 import { LiveSearch } from "@/components/LiveSearch";
+import { MinImdb } from "@/components/MinImdb";
 import { Suspense } from "react";
 import { SelectableGrid } from "@/components/SelectableGrid";
 import { listLists } from "@/lib/repo/lists";
@@ -39,7 +40,7 @@ export default async function LibraryPage({ params, searchParams }: { params: Pr
   const type = CATEGORY_TO_TYPE[cat];
   const sp = await searchParams;
   const query = { ...parseListQuery(sp, { pageSize: LIBRARY_PAGE_SIZE }), type };
-  const { status, statuses, tag, q, featured, sort, page = 1, withPeople = [], alone, genre, watchedIn } = query;
+  const { status, statuses, tag, q, featured, sort, page = 1, withPeople = [], alone, genre, watchedIn, minImdb } = query;
   // Status chips: tap several to see any of them.
   const picked: string[] = statuses ?? (status && status !== "none" ? [status] : []);
   const toggleStatus = (s: string) => (picked.includes(s) ? picked.filter((x) => x !== s) : [...picked, s]).join(",") || undefined;
@@ -52,7 +53,7 @@ export default async function LibraryPage({ params, searchParams }: { params: Pr
     .prepare(`SELECT COUNT(*) n FROM media m LEFT JOIN review r ON r.media_id = m.id WHERE m.type = ? AND COALESCE(r.status, '') != 'plan' AND NOT EXISTS (SELECT 1 FROM media_person mp WHERE mp.media_id = m.id)`)
     .get(type) as { n: number }).n;
   const genres = listGenres(getDb(), type).filter((g) => g.count > 0 || g.id === genre);
-  const filtered = Boolean(picked.length || tag || q || featured || withPeople.length || alone || genre || watchedIn);
+  const filtered = Boolean(picked.length || minImdb || tag || q || featured || withPeople.length || alone || genre || watchedIn);
   const watching = type === "movie" || filtered || page > 1 ? [] : listWatching(type);
   // Shows you'd finished that have a new season: a strip up top, and a badge on their cards.
   const sections = type === "movie" ? { airing: [], upcoming: [], returning: [] } : listShowSections(type);
@@ -106,6 +107,7 @@ export default async function LibraryPage({ params, searchParams }: { params: Pr
             </Suspense>
           </label>
           {genre && <input type="hidden" name="genre" value={genre} />}
+          {minImdb && <input type="hidden" name="imdb" value={minImdb} />}
           {watchedIn && <input type="hidden" name="where" value={watchedIn} />}
           {sort && <input type="hidden" name="sort" value={sort} />}
           {query.dir && <input type="hidden" name="dir" value={query.dir} />}
@@ -123,6 +125,9 @@ export default async function LibraryPage({ params, searchParams }: { params: Pr
             </Link>
           ))}
           <Link className="chip" scroll={false} href={href({ featured: featured ? undefined : "1" })} aria-current={featured ? "true" : undefined}>Featured</Link>
+          <Suspense fallback={null}>
+            <MinImdb value={minImdb ?? null} />
+          </Suspense>
           {type === "movie" &&
             (["theater", "streaming"] as const).map((w) => (
               <Link key={w} className="chip" scroll={false} href={href({ where: watchedIn === w ? undefined : w })} aria-current={watchedIn === w ? "true" : undefined}>

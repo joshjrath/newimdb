@@ -6,6 +6,25 @@ import { useAction } from "../useAction";
 import { Poster } from "../Poster";
 import { WatchIcons } from "./WatchIcons";
 import type { PersonPicks, Recommendation, RecommendState } from "@/lib/recommend/job";
+import type { WatchOption } from "@/lib/providers/tmdb";
+import { SortPicker, type SortChoice } from "../SortPicker";
+
+type RecSort = "match" | "imdb" | "year";
+const REC_SORTS: SortChoice<RecSort>[] = [
+  { key: "match", label: "Best match for you", reverse: "Weakest match first", icon: "✦" },
+  { key: "imdb", label: "IMDb rating: highest", reverse: "IMDb rating: lowest", icon: "IMDb" },
+  { key: "year", label: "Newest first", reverse: "Oldest first", icon: "📅" },
+];
+interface Filters {
+  sort: RecSort;
+  reversed: boolean;
+  genres: string[];
+  services: string[];
+  minImdb: number;
+  types: MediaType[];
+}
+const DEFAULT_FILTERS: Filters = { sort: "match", reversed: false, genres: [], services: [], minImdb: 0, types: ["anime", "tv", "movie"] };
+const FILTER_KEY = "recommend-filters";
 import type { MediaType } from "@/lib/domain/types";
 
 type Data = { byType: Record<MediaType, Recommendation[]>; byPerson: PersonPicks[]; computedAt: string | null; state: RecommendState; tmdb: boolean };
@@ -91,9 +110,49 @@ export function RecommendBoard({ initial, rated }: { initial: Data; rated: numbe
                 </article>
   );
 
-  const live = (type: MediaType) => d.byType[type].filter((r) => !gone.has(r.key));
-  const hero = [...live("anime"), ...live("tv"), ...live("movie")].sort((a, b) => b.match - a.match)[0];
+  // Workshop your picks: sort, genres, where it streams, a minimum IMDb rating, which kinds.
+  const [f, setF] = useState<Filters>(DEFAULT_FILTERS);
+  useEffect(() => {
+    try {
+      const v = JSON.parse(localStorage.getItem(FILTER_KEY) ?? "null");
+      if (v) setF({ ...DEFAULT_FILTERS, ...v });
+    } catch {}
+  }, []);
+  const update = (patch: Partial<Filters>) =>
+    setF((cur) => {
+      const next = { ...cur, ...patch };
+      try {
+        localStorage.setItem(FILTER_KEY, JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+  const everything = [...Object.values(d.byType).flat(), ...d.byPerson.flatMap((p) => p.items)];
+  const allGenres = [...new Set(everything.flatMap((r) => r.genres))].sort();
+  const allServices = (() => {
+    const seen = new Map<string, WatchOption & { n: number }>();
+    for (const r of everything) for (const w of r.watch) seen.set(w.name, { ...w, n: (seen.get(w.name)?.n ?? 0) + 1 });
+    return [...seen.values()].sort((a, b) => b.n - a.n).slice(0, 14);
+  })();
+  const keep = (r: Recommendation) =>
+    !gone.has(r.key) &&
+    f.types.includes(r.type) &&
+    (!f.genres.length || f.genres.some((g) => r.genres.includes(g))) &&
+    (!f.services.length || r.watch.some((w) => f.services.includes(w.name))) &&
+    (!f.minImdb || (r.imdb?.rating ?? r.audience?.score ?? 0) >= f.minImdb);
+  const order = (list: Recommendation[]) => {
+    const by: Record<RecSort, (a: Recommendation, b: Recommendation) => number> = {
+      match: (a, b) => b.match - a.match,
+      imdb: (a, b) => (b.imdb?.rating ?? b.audience?.score ?? -1) - (a.imdb?.rating ?? a.audience?.score ?? -1),
+      year: (a, b) => (b.year ?? 0) - (a.year ?? 0),
+    };
+    const sorted = [...list].sort(by[f.sort]);
+    return f.reversed ? sorted.reverse() : sorted;
+  };
+  const live = (type: MediaType) => order(d.byType[type].filter(keep));
+  const filtering = f.genres.length > 0 || f.services.length > 0 || f.minImdb > 0 || f.types.length < 3 || f.sort !== "match" || f.reversed;
+  const hero = f.sort === "match" && !f.reversed ? order([...live("anime"), ...live("tv"), ...live("movie")])[0] : undefined;
   const empty = !SECTIONS.some((s) => live(s.type).length);
+  const toggle = <T,>(list: T[], x: T) => (list.includes(x) ? list.filter((y) => y !== x) : [...list, x]);
 
   return (
     <div className="recs">
@@ -101,10 +160,76 @@ export function RecommendBoard({ initial, rated }: { initial: Data; rated: numbe
         <span className="hint">
           Learned from all {rated.toLocaleString("en-GB")} of your ratings: every genre, keyword, studio and decade you rate up or down. Each pick is backed by at least two of your favourites · updated {ago(d.computedAt)}
         </span>
-        <button className="btn small" disabled={busy || d.state.running} onClick={refresh}>
-          {d.state.running ? `Picking… ${d.state.total ? `${d.state.done}/${d.state.total}` : ""}` : "Refresh"}
+        <button className="btn small primary" disabled={busy || d.state.running} onClick={refresh}>
+          {d.state.running ? `Picking… ${d.state.total ? `${d.state.done}/${d.state.total}` : ""}` : "↻ Refresh suggestions"}
         </button>
       </div>
+
+      <div className="rec-tools panel">
+        <div className="rec-tools-row">
+          <SortPicker options={REC_SORTS} value={f.sort} reversed={f.reversed} onChange={(sort, reversed) => update({ sort, reversed })} />
+          <div className="chips" role="group" aria-label="Show">
+            {SECTIONS.map((s) => (
+              <button key={s.type} type="button" className="chip" aria-pressed={f.types.includes(s.type)} onClick={() => update({ types: f.types.includes(s.type) && f.types.length > 1 ? f.types.filter((t) => t !== s.type) : toggle(f.types, s.type) })}>
+                {s.title}
+              </button>
+            ))}
+          </div>
+          <div className="chips min-imdb" role="group" aria-label="Minimum IMDb rating">
+            <span className="imdb-badge"><b>IMDb</b> at least</span>
+            <input
+              className="input small"
+              type="number"
+              inputMode="decimal"
+              min={0}
+              max={10}
+              step={0.1}
+              placeholder="any"
+              value={f.minImdb || ""}
+              onChange={(e) => update({ minImdb: Math.max(0, Math.min(10, Number(e.target.value) || 0)) })}
+              aria-label="Minimum IMDb rating, out of 10"
+            />
+            {[6, 7, 7.5, 8].map((n) => (
+              <button key={n} type="button" className="chip" aria-pressed={f.minImdb === n} onClick={() => update({ minImdb: f.minImdb === n ? 0 : n })}>
+                {n}+
+              </button>
+            ))}
+          </div>
+          {filtering && (
+            <button type="button" className="btn small ghost" onClick={() => update(DEFAULT_FILTERS)}>Reset</button>
+          )}
+        </div>
+        {allServices.length > 0 && (
+          <div className="rec-tools-row">
+            <span className="label">Streaming on</span>
+            <div className="chips svc-chips" role="group" aria-label="Streaming on">
+              {allServices.map((w) => (
+                <button key={w.name} type="button" className="chip svc-chip" aria-pressed={f.services.includes(w.name)} onClick={() => update({ services: toggle(f.services, w.name) })} title={w.name}>
+                  {w.logoUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={posterSrc(w.logoUrl) ?? ""} alt="" style={w.color ? { background: w.color } : undefined} />
+                  ) : null}
+                  {w.name}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+        {allGenres.length > 0 && (
+          <div className="rec-tools-row">
+            <span className="label">Genre</span>
+            <div className="chips" role="group" aria-label="Genre">
+              {allGenres.map((g) => (
+                <button key={g} type="button" className="chip" aria-pressed={f.genres.includes(g)} onClick={() => update({ genres: toggle(f.genres, g) })}>
+                  {g}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+      {filtering && !empty && <p className="hint">Showing picks that match your filters.</p>}
+      {filtering && empty && <p className="notice">Nothing matches these filters. Loosen one, or press Reset.</p>}
 
       {d.state.running && empty && (
         <div className="progress" role="status" aria-live="polite">
@@ -112,7 +237,7 @@ export function RecommendBoard({ initial, rated }: { initial: Data; rated: numbe
           <span className="progress-label">{d.state.step}…</span>
         </div>
       )}
-      {!d.state.running && empty && (
+      {!d.state.running && empty && !filtering && (
         <div className="panel">
           <p>{rated ? "No picks yet. Press Refresh to build them (it takes a minute or two)." : "Rate a few titles first, then your picks appear here."}</p>
           {!d.tmdb && <p className="hint">Movie and TV picks need a TMDB key (Railway → Variables → TMDB_READ_TOKEN). Anime picks work without one.</p>}
@@ -150,7 +275,7 @@ export function RecommendBoard({ initial, rated }: { initial: Data; rated: numbe
       )}
 
       {d.byPerson.map(({ person, items }) => {
-        const list = items.filter((r) => !gone.has(r.key));
+        const list = order(items.filter(keep));
         if (!list.length) return null;
         return (
           <section key={person.id} className="rec-section rec-with" aria-labelledby={`rec-p${person.id}`}>
@@ -164,8 +289,9 @@ export function RecommendBoard({ initial, rated }: { initial: Data; rated: numbe
       })}
 
       {SECTIONS.map((s) => {
+        if (!f.types.includes(s.type)) return null; // switched off in Show
         const list = live(s.type).filter((r) => r.key !== hero?.key);
-        if (!list.length) return s.type !== "anime" && !d.tmdb && !empty ? (
+        if (!list.length) return s.type !== "anime" && !d.tmdb && !d.byType[s.type].length && !filtering ? (
           <section key={s.type} className="rec-section">
             <h2>{s.title}</h2>
             <p className="hint">Add a TMDB key to get {s.title.toLowerCase()} picks.</p>

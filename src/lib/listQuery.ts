@@ -23,6 +23,7 @@ export function parseListQuery(params: Params, defaults: { sort?: SortKey; pageS
     })(),
     tag: get("tag"),
     // ?with=3,7 → watched with both
+    minImdb: Number(get("imdb")) > 0 && Number(get("imdb")) <= 10 ? Math.round(Number(get("imdb")) * 10) / 10 : undefined,
     // ?with=alone → titles you watched with nobody else
     alone: (get("with") ?? "").split(",").includes("alone") || undefined,
     withPeople: (() => {

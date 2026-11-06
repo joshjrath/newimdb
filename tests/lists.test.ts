@@ -46,6 +46,22 @@ describe("several statuses at once", () => {
   });
 });
 
+describe("minimum IMDb rating", () => {
+  it("leaves out anything IMDb rates lower, and combines with other filters", async () => {
+    const { listMedia: lm } = await import("@/lib/repo/media");
+    const { getDb } = await import("@/lib/db");
+    const a = createMedia({ type: "anime", metadata: { title: "High anime" } });
+    const b = createMedia({ type: "anime", metadata: { title: "Low anime" } });
+    const c = createMedia({ type: "tv", metadata: { title: "High show" } });
+    const set = getDb().prepare(`UPDATE media SET imdb_rating = ? WHERE id = ?`);
+    set.run(8.1, a.id);
+    set.run(7.2, b.id);
+    set.run(9, c.id);
+    expect(lm({ minImdb: 7.5, sort: "title" }).items.map((m) => m.title)).toEqual(["High anime", "High show"]);
+    expect(lm({ minImdb: 7.5, type: "anime" }).items.map((m) => m.title)).toEqual(["High anime"]);
+  });
+});
+
 describe("sorting both ways", () => {
   it("reverses any sort", async () => {
     const { listMedia: lm } = await import("@/lib/repo/media");

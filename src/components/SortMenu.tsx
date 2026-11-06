@@ -40,7 +40,7 @@ export function SortMenu({ sort, dir, exclude = [] }: { sort: SortKey; dir?: Sor
   return (
     <div className="sort-menu" ref={box}>
       <button type="button" className="sort-trigger" aria-haspopup="listbox" aria-expanded={open} onClick={() => setOpen(!open)}>
-        <span className="sort-icon" aria-hidden="true">{ICON[sort]}</span>
+        <span className={`sort-icon${ICON[sort] === "IMDb" ? " imdb" : ""}`} aria-hidden="true">{ICON[sort]}</span>
         <span>{sortLabel(sort, current)}</span>
         <span className="sort-caret" aria-hidden="true">▾</span>
       </button>
@@ -62,7 +62,7 @@ export function SortMenu({ sort, dir, exclude = [] }: { sort: SortKey; dir?: Sor
             return (
               <li key={o.key} role="option" aria-selected={active}>
                 <button type="button" onClick={() => go(o.key, d)}>
-                  <span className="sort-icon" aria-hidden="true">{ICON[o.key]}</span>
+                  <span className={`sort-icon${ICON[o.key] === "IMDb" ? " imdb" : ""}`} aria-hidden="true">{ICON[o.key]}</span>
                   <span className="grow">{sortLabel(o.key, d)}</span>
                   {active && <span aria-hidden="true">✓</span>}
                 </button>
