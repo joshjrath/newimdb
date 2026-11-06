@@ -243,6 +243,8 @@ export interface ListQuery {
   tag?: string;
   /** Only titles watched with ALL of these people. */
   withPeople?: number[];
+  /** Titles you watched alone: nobody marked in "Watched with" (Plan to watch left out). */
+  alone?: boolean;
   /** Movies watched in a theater or streaming. */
   watchedIn?: "theater" | "streaming";
   /** Only titles in this genre filter. */
@@ -277,6 +279,7 @@ export function listMedia(query: ListQuery, db = getDb()): { items: ListItem[]; 
     where.push(`EXISTS (SELECT 1 FROM media_tag mt JOIN tag t ON t.id = mt.tag_id WHERE mt.media_id = m.id AND t.name = ? COLLATE NOCASE)`);
     params.push(query.tag);
   }
+  if (query.alone) where.push(`NOT EXISTS (SELECT 1 FROM media_person mp WHERE mp.media_id = m.id) AND COALESCE(r.status, '') != 'plan'`);
   for (const p of query.withPeople ?? []) {
     where.push(`EXISTS (SELECT 1 FROM media_person mp WHERE mp.media_id = m.id AND mp.person_id = ?)`);
     params.push(p);

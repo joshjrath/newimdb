@@ -203,7 +203,7 @@ export default async function StatsPage() {
             <ul className="hbars">
               {s.people.map((p) => (
                 <li key={p.id}>
-                  <Link href={`/studio?with=${p.id}`} className="hbar-label">{p.name}<small>{plural(p.titles, "title", "titles")}</small></Link>
+                  <Link href={`/studio?with=${p.id || "alone"}`} className="hbar-label">{p.name}<small>{plural(p.titles, "title", "titles")}</small></Link>
                   <div className="hbar-track"><span className="hbar-fill" style={{ width: `${Math.max(2, (p.minutes / maxPerson) * 100)}%` }} /></div>
                   <span className="hbar-value">{formatMinutes(p.minutes)}</span>
                 </li>

@@ -26,6 +26,9 @@ describe("watched with", () => {
     expect(getMedia(c.id)!.people).toEqual([]);
     expect(listMedia({ withPeople: [sam.id] }).items.map((m) => m.title).sort()).toEqual(["Show A", "Show B"]);
     expect(listMedia({ withPeople: [alex.id], type: "tv" }).total).toBe(1);
+    // Nobody marked: "Alone" (Plan to watch doesn't count).
+    createMedia({ type: "movie", metadata: { title: "Later" }, review: { status: "plan" } });
+    expect(listMedia({ alone: true }).items.map((m) => m.title)).toEqual(["Film C"]);
     // Both people: only what you watched with both of them.
     expect(listMedia({ withPeople: [sam.id, alex.id] }).items.map((m) => m.title)).toEqual(["Show A"]);
     expect(listPeople().map((p) => [p.name, p.count])).toEqual([["Alex", 1], ["Sam", 2]]);

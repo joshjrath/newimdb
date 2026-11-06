@@ -111,6 +111,18 @@ export function getStats(db = getDb()): Stats {
        FROM person p JOIN media_person mp ON mp.person_id = p.id JOIN media m ON m.id = mp.media_id GROUP BY p.id ORDER BY minutes DESC, titles DESC`,
     )
     .all() as Stats["people"];
+  // "Alone": everything you watched with nobody marked.
+  const alone = db
+    .prepare(
+      `SELECT 0 AS id, 'Alone' AS name, COUNT(*) titles,
+              COALESCE(SUM(CASE WHEN m.type = 'movie' THEN ${rt("movie")} ELSE (SELECT COUNT(*) FROM episode_assessment a JOIN episode e ON e.id = a.episode_id JOIN segment s ON s.id = e.segment_id WHERE s.media_id = m.id AND a.state = 'watched') * ${rt("tv")} END), 0) minutes
+       FROM media m LEFT JOIN review r ON r.media_id = m.id
+       WHERE COALESCE(r.status, '') != 'plan' AND NOT EXISTS (SELECT 1 FROM media_person mp WHERE mp.media_id = m.id)
+         AND (r.rating IS NOT NULL OR r.watched_on IS NOT NULL OR r.status IS NOT NULL OR EXISTS (SELECT 1 FROM segment s JOIN episode e ON e.segment_id = s.id JOIN episode_assessment a ON a.episode_id = e.id WHERE s.media_id = m.id AND a.state = 'watched'))`,
+    )
+    .get() as Stats["people"][number];
+  if (people.length && alone.titles) people.push(alone);
+  people.sort((a, b) => b.minutes - a.minutes);
 
   const genres = db
     .prepare(

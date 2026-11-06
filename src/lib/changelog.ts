@@ -12,6 +12,14 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-11-06-alone",
+    date: "2026-11-06",
+    title: "\"Alone\" in Watched with",
+    items: [
+      "Anything you've watched with nobody marked counts as Alone: filter by it in the library and Studio, and see it in Statistics next to the people you watch with.",
+    ],
+  },
+  {
     id: "2026-11-04-share-lists",
     date: "2026-11-04",
     title: "Share a list by link",

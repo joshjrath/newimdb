@@ -18,6 +18,8 @@ export function parseListQuery(params: Params, defaults: { sort?: SortKey; pageS
     status: status === "none" ? "none" : pick<WatchStatus>(WATCH_STATUSES, status),
     tag: get("tag"),
     // ?with=3,7 → watched with both
+    // ?with=alone → titles you watched with nobody else
+    alone: (get("with") ?? "").split(",").includes("alone") || undefined,
     withPeople: (() => {
       const ids = [...new Set((get("with") ?? "").split(",").map(Number).filter((n) => Number.isInteger(n) && n > 0))].slice(0, 20);
       return ids.length ? ids : undefined;

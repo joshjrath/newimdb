@@ -39,13 +39,17 @@ export default async function LibraryPage({ params, searchParams }: { params: Pr
   const type = CATEGORY_TO_TYPE[cat];
   const sp = await searchParams;
   const query = { ...parseListQuery(sp, { pageSize: LIBRARY_PAGE_SIZE }), type };
-  const { status, tag, q, featured, sort, page = 1, withPeople = [], genre, watchedIn } = query;
+  const { status, tag, q, featured, sort, page = 1, withPeople = [], alone, genre, watchedIn } = query;
   const { items, total, pageSize } = listMedia(query);
   const counts = countMedia();
   const tags = allTags(getDb(), type);
   const people = listPeople(getDb(), type).filter((p) => p.count > 0);
+  // "Alone": watched with nobody marked (Plan to watch doesn't count).
+  const aloneCount = (getDb()
+    .prepare(`SELECT COUNT(*) n FROM media m LEFT JOIN review r ON r.media_id = m.id WHERE m.type = ? AND COALESCE(r.status, '') != 'plan' AND NOT EXISTS (SELECT 1 FROM media_person mp WHERE mp.media_id = m.id)`)
+    .get(type) as { n: number }).n;
   const genres = listGenres(getDb(), type).filter((g) => g.count > 0 || g.id === genre);
-  const filtered = Boolean(status || tag || q || featured || withPeople.length || genre || watchedIn);
+  const filtered = Boolean(status || tag || q || featured || withPeople.length || alone || genre || watchedIn);
   const watching = type === "movie" || filtered || page > 1 ? [] : listWatching(type);
   // Shows you'd finished that have a new season: a strip up top, and a badge on their cards.
   const sections = type === "movie" ? { airing: [], upcoming: [], returning: [] } : listShowSections(type);
@@ -91,7 +95,7 @@ export default async function LibraryPage({ params, searchParams }: { params: Pr
           {status && <input type="hidden" name="status" value={status} />}
           {tag && <input type="hidden" name="tag" value={tag} />}
           {featured && <input type="hidden" name="featured" value="1" />}
-          {withPeople.length > 0 && <input type="hidden" name="with" value={withPeople.join(",")} />}
+          {(withPeople.length > 0 || alone) && <input type="hidden" name="with" value={alone ? "alone" : withPeople.join(",")} />}
           <label className="grow">
             <span className="visually-hidden">Search {label}</span>
             <Suspense fallback={<input className="input" type="search" name="q" defaultValue={q} placeholder={`Search ${label.toLowerCase()} and reviews`} />}>
@@ -133,15 +137,21 @@ export default async function LibraryPage({ params, searchParams }: { params: Pr
             ))}
           </div>
         )}
-        {people.length > 0 && (
+        {(people.length > 0 || aloneCount > 0) && (
           <div className="chips with-chips" aria-label="Filter by who you watched with">
             <span className="label" style={{ alignSelf: "center", marginRight: 2 }}>Watched with</span>
+            {aloneCount > 0 && (
+              <Link className="chip" href={href({ with: alone ? undefined : "alone" })} aria-current={alone ? "true" : undefined} title="Titles with nobody in Watched with">
+                Alone <span className="hint">{aloneCount}</span>
+              </Link>
+            )}
             {people.map((p) => (
               <Link
                 key={p.id}
                 className="chip"
                 // Tap several: only titles you watched with all of them.
-                href={href({ with: (withPeople.includes(p.id) ? withPeople.filter((x) => x !== p.id) : [...withPeople, p.id]).join(",") || undefined })}
+                // Picking a person leaves "Alone".
+                href={href({ with: (alone ? [p.id] : withPeople.includes(p.id) ? withPeople.filter((x) => x !== p.id) : [...withPeople, p.id]).join(",") || undefined })}
                 aria-current={withPeople.includes(p.id) ? "true" : undefined}
               >
                 {p.name} <span className="hint">{p.count}</span>
