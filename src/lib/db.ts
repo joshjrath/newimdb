@@ -328,6 +328,11 @@ const MIGRATIONS: string[] = [
   ALTER TABLE list ADD COLUMN sort_key TEXT;
   UPDATE list SET sort_key = sort;
   `,
+  // 15 — favourite episodes
+  `
+  ALTER TABLE episode_assessment ADD COLUMN favorite INTEGER NOT NULL DEFAULT 0;
+  CREATE INDEX IF NOT EXISTS episode_favorite ON episode_assessment(favorite) WHERE favorite = 1;
+  `,
 ];
 
 /** Whether the database was created just now (no earlier data), per connection. */

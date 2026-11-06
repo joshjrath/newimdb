@@ -154,6 +154,7 @@ function mapEpisode(e: Row): EpisodeView {
     state: (e.state as EpisodeState | null) ?? "unwatched",
     rating: (e.rating as number | null) ?? null,
     filler: Boolean(e.filler),
+    favorite: Boolean(e.favorite),
     watchedAt: (e.watched_at as string | null) ?? null,
   };
 }
@@ -167,7 +168,7 @@ function segmentsFor(db: DB, mediaIds: number[], opts: { overview?: boolean } = 
   const eps = db
     .prepare(
       `SELECT e.id, e.segment_id, e.number, e.title, e.air_date, ${opts.overview === false ? "NULL AS overview" : "e.overview"},
-              a.state, a.rating, a.filler, a.watched_at
+              a.state, a.rating, a.filler, a.favorite, a.watched_at
        FROM episode e JOIN segment s ON s.id = e.segment_id LEFT JOIN episode_assessment a ON a.episode_id = e.id
        WHERE s.media_id IN (${ids}) ORDER BY e.segment_id, e.number`,
     )
@@ -209,7 +210,7 @@ export function getMediaDetail(id: number, db = getDb(), opts: { overview?: bool
 export function getEpisode(episodeId: number, db = getDb()): EpisodeView | null {
   const e = db
     .prepare(
-      `SELECT e.*, a.state, a.rating, a.filler, a.watched_at FROM episode e
+      `SELECT e.*, a.state, a.rating, a.filler, a.favorite, a.watched_at FROM episode e
        LEFT JOIN episode_assessment a ON a.episode_id = e.id WHERE e.id = ?`,
     )
     .get(episodeId) as Row | undefined;
@@ -804,18 +805,18 @@ function assertOwned(db: DB, mediaId: number, episodeIds: number[]) {
 
 /** Write one assessment using the shared rules. Returns true if the episode became watched. */
 function writeAssessment(db: DB, episodeId: number, patch: AssessmentPatch, now: string): boolean {
-  const cur = db.prepare(`SELECT state, rating, filler, watched_at FROM episode_assessment WHERE episode_id = ?`).get(episodeId) as
-    | { state: EpisodeState; rating: number | null; filler: number; watched_at: string | null }
+  const cur = db.prepare(`SELECT state, rating, filler, favorite, watched_at FROM episode_assessment WHERE episode_id = ?`).get(episodeId) as
+    | { state: EpisodeState; rating: number | null; filler: number; favorite: number; watched_at: string | null }
     | undefined;
-  const before = cur ? { state: cur.state, rating: cur.rating, filler: Boolean(cur.filler) } : UNASSESSED;
+  const before = cur ? { state: cur.state, rating: cur.rating, filler: Boolean(cur.filler), favorite: Boolean(cur.favorite) } : UNASSESSED;
   const next = resolveAssessment(before, patch);
   const becameWatched = next.state === "watched" && (before.state !== "watched" || patch.rating != null);
   const watchedAt = next.state !== "watched" ? null : becameWatched ? now : (cur?.watched_at ?? now);
   db.prepare(
-    `INSERT INTO episode_assessment (episode_id, state, rating, filler, watched_at, updated_at) VALUES (?,?,?,?,?,?)
-     ON CONFLICT(episode_id) DO UPDATE SET state=excluded.state, rating=excluded.rating, filler=excluded.filler,
+    `INSERT INTO episode_assessment (episode_id, state, rating, filler, favorite, watched_at, updated_at) VALUES (?,?,?,?,?,?,?)
+     ON CONFLICT(episode_id) DO UPDATE SET state=excluded.state, rating=excluded.rating, filler=excluded.filler, favorite=excluded.favorite,
        watched_at=excluded.watched_at, updated_at=excluded.updated_at`,
-  ).run(episodeId, next.state, next.rating, next.filler ? 1 : 0, watchedAt, now);
+  ).run(episodeId, next.state, next.rating, next.filler ? 1 : 0, next.favorite ? 1 : 0, watchedAt, now);
   return becameWatched;
 }
 
@@ -848,6 +849,8 @@ const BULK_PATCH: Record<Exclude<BulkAssessAction, "rate_unrated">, (rating: num
   skipped: () => ({ state: "skipped" }),
   rate: (rating) => ({ rating, state: rating == null ? "unwatched" : "watched" }),
   filler_on: () => ({ filler: true }),
+  favorite_on: () => ({ favorite: true }),
+  favorite_off: () => ({ favorite: false }),
   filler_off: () => ({ filler: false }),
 };
 
@@ -874,15 +877,15 @@ export function applyTextAssignments(mediaId: number, resolved: { episodeId: num
 }
 
 /** Restore exact assessments (backup), still validated through the shared rules. */
-export function restoreAssessments(db: DB, segmentId: number, episodes: { number: number; state: EpisodeState; rating: number | null; filler: boolean; watchedAt: string | null }[]) {
+export function restoreAssessments(db: DB, segmentId: number, episodes: { number: number; state: EpisodeState; rating: number | null; filler: boolean; favorite?: boolean; watchedAt: string | null }[]) {
   const now = nowIso();
   for (const e of episodes) {
-    if (e.state === "unwatched" && e.rating == null && !e.filler) continue;
+    if (e.state === "unwatched" && e.rating == null && !e.filler && !e.favorite) continue;
     const a = resolveAssessment(UNASSESSED, e);
     db.prepare(
-      `INSERT OR REPLACE INTO episode_assessment (episode_id, state, rating, filler, watched_at, updated_at)
-       SELECT id, ?, ?, ?, ?, ? FROM episode WHERE segment_id = ? AND number = ?`,
-    ).run(a.state, a.rating, a.filler ? 1 : 0, a.state === "watched" ? e.watchedAt : null, now, segmentId, e.number);
+      `INSERT OR REPLACE INTO episode_assessment (episode_id, state, rating, filler, favorite, watched_at, updated_at)
+       SELECT id, ?, ?, ?, ?, ?, ? FROM episode WHERE segment_id = ? AND number = ?`,
+    ).run(a.state, a.rating, a.filler ? 1 : 0, a.favorite ? 1 : 0, a.state === "watched" ? e.watchedAt : null, now, segmentId, e.number);
   }
 }
 

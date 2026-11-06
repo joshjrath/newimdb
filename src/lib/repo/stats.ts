@@ -204,6 +204,7 @@ export interface Insights {
   weekdays: number[];
   decades: { decade: number; count: number }[];
   showStatus: { status: string; count: number }[];
+  favorites: { mediaId: number; title: string; type: MediaType; code: string; episodeTitle: string | null; rating: number | null }[];
 }
 
 export interface HotTake {
@@ -333,5 +334,20 @@ export function getInsights(db = getDb(), today = new Date()): Insights {
     .prepare(`SELECT COALESCE(r.status, 'none') AS status, COUNT(*) AS count FROM media m LEFT JOIN review r ON r.media_id = m.id WHERE m.type != 'movie' GROUP BY status ORDER BY count DESC`)
     .all() as Insights["showStatus"];
 
-  return { days, streak: { longest, longestEnd, current }, perfectRuns: runs.slice(0, 10), bestSeasons, bingeDays, vsImdb, hotTakes, weekdays, decades, showStatus };
+  const favorites = (db
+    .prepare(
+      `SELECT m.id AS mediaId, m.title, m.type, s.season_number, s.label, e.number, e.title AS episodeTitle, a.rating
+       FROM episode_assessment a JOIN episode e ON e.id = a.episode_id JOIN segment s ON s.id = e.segment_id JOIN media m ON m.id = s.media_id
+       WHERE a.favorite = 1 ORDER BY m.title COLLATE NOCASE, s.position, e.number`,
+    )
+    .all() as { mediaId: number; title: string; type: MediaType; season_number: number | null; label: string; number: number; episodeTitle: string | null; rating: number | null }[]).map((f) => ({
+    mediaId: f.mediaId,
+    title: f.title,
+    type: f.type,
+    code: code(f.season_number, f.label, f.number),
+    episodeTitle: f.episodeTitle,
+    rating: f.rating,
+  }));
+
+  return { days, streak: { longest, longestEnd, current }, perfectRuns: runs.slice(0, 10), bestSeasons, bingeDays, vsImdb, hotTakes, weekdays, decades, showStatus, favorites };
 }

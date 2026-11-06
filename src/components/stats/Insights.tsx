@@ -263,3 +263,27 @@ export function Habits({ i }: { i: Insights }) {
     </div>
   );
 }
+
+/** The episodes you starred as favourites. */
+export function FavoriteEpisodes({ i }: { i: Insights }) {
+  return (
+    <section className="panel" aria-labelledby="favs-h">
+      <header>
+        <h2 id="favs-h">★ Your favourite episodes</h2>
+        <span className="hint">{i.favorites.length ? plural(i.favorites.length, "episode", "episodes") : "Press ★ on an episode (or *) to add it here"}</span>
+      </header>
+      {i.favorites.length > 0 && (
+        <ul className="favs">
+          {i.favorites.map((f) => (
+            <li key={`${f.mediaId}-${f.code}`}>
+              <Link href={`/studio/${f.mediaId}`}>
+                <b>{f.title} · {f.code}</b>
+                <small>{f.episodeTitle && !/^episode\s*#?\d/i.test(f.episodeTitle) ? f.episodeTitle : TYPE_LABEL[f.type]}{f.rating != null ? ` · ★ ${f.rating}` : ""}</small>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}

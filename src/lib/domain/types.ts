@@ -95,6 +95,8 @@ export interface EpisodeView {
   state: EpisodeState;
   rating: number | null;
   filler: boolean;
+  /** One of your favourite episodes. */
+  favorite?: boolean;
   watchedAt: string | null;
 }
 

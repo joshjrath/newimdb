@@ -73,7 +73,7 @@ export function exportAll(db = getDb()): Backup {
           courNumber,
           provider,
           providerRef,
-          episodes: episodes.map(({ number, title, airDate, overview, state, rating, filler, watchedAt }) => ({ number, title, airDate, overview, state, rating, filler, watchedAt })),
+          episodes: episodes.map(({ number, title, airDate, overview, state, rating, filler, favorite, watchedAt }) => ({ number, title, airDate, overview, state, rating, filler, favorite: Boolean(favorite), watchedAt })),
         })),
         createdAt: m.createdAt,
       };

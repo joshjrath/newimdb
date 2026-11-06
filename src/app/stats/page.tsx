@@ -3,7 +3,7 @@ import { requireOwnerPage } from "@/lib/guard";
 import { Shell } from "@/components/Shell";
 import { Poster } from "@/components/Poster";
 import { formatMinutes, getInsights, getStats, type TheaterVisit } from "@/lib/repo/stats";
-import { ActivityCalendar, Habits, PerfectRuns, TimeSplit, VersusImdb } from "@/components/stats/Insights";
+import { ActivityCalendar, FavoriteEpisodes, Habits, PerfectRuns, TimeSplit, VersusImdb } from "@/components/stats/Insights";
 import { plural } from "@/lib/domain/text";
 import { formatDate } from "@/lib/format";
 import { TYPE_LABEL } from "@/lib/domain/types";
@@ -95,6 +95,7 @@ export default async function StatsPage() {
       <TimeSplit s={s} />
       <ActivityCalendar i={insights} />
       <PerfectRuns i={insights} />
+      <FavoriteEpisodes i={insights} />
       <VersusImdb i={insights} />
 
       <section className="panel" aria-labelledby="month-h">

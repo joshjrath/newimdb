@@ -126,10 +126,10 @@ import { hashPassword, verifyPasswordHash } from "@/lib/password";
 
 describe("shared rules", () => {
   it("assessment: rating implies watched, leaving watched clears rating, filler independent", () => {
-    expect(resolveAssessment(UNASSESSED, { rating: 4 })).toEqual({ state: "watched", rating: 4, filler: false });
-    expect(resolveAssessment({ state: "watched", rating: 4, filler: true }, { state: "skipped" })).toEqual({ state: "skipped", rating: null, filler: true });
-    expect(resolveAssessment({ state: "watched", rating: 4, filler: false }, { filler: true })).toEqual({ state: "watched", rating: 4, filler: true });
-    expect(resolveAssessment({ state: "watched", rating: 4, filler: false }, { rating: null })).toEqual({ state: "watched", rating: null, filler: false });
+    expect(resolveAssessment(UNASSESSED, { rating: 4 })).toMatchObject({ state: "watched", rating: 4, filler: false });
+    expect(resolveAssessment({ state: "watched", rating: 4, filler: true }, { state: "skipped" })).toMatchObject({ state: "skipped", rating: null, filler: true });
+    expect(resolveAssessment({ state: "watched", rating: 4, filler: false }, { filler: true })).toMatchObject({ state: "watched", rating: 4, filler: true });
+    expect(resolveAssessment({ state: "watched", rating: 4, filler: false }, { rating: null })).toMatchObject({ state: "watched", rating: null, filler: false });
   });
   it("segment labels", () => {
     expect(defaultSegmentLabel("season", { season: 3 })).toBe("Season 3");

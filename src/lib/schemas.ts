@@ -140,10 +140,11 @@ export const assessmentSchema = z.object({
   state: episodeStateSchema.optional(),
   rating: ratingSchema.optional(),
   filler: z.boolean().optional(),
+  favorite: z.boolean().optional(),
   title: optText(300).optional(),
 });
 
-export const BULK_ASSESS_ACTIONS = ["watched", "unwatched", "skipped", "rate", "rate_unrated", "filler_on", "filler_off"] as const;
+export const BULK_ASSESS_ACTIONS = ["watched", "unwatched", "skipped", "rate", "rate_unrated", "filler_on", "filler_off", "favorite_on", "favorite_off"] as const;
 export type BulkAssessAction = (typeof BULK_ASSESS_ACTIONS)[number];
 
 export const bulkAssessSchema = z.object({
@@ -178,6 +179,7 @@ export const backupEpisodeSchema = providerEpisodeSchema.omit({ providerRef: tru
   state: episodeStateSchema,
   rating: ratingSchema,
   filler: z.boolean(),
+  favorite: z.boolean().optional(),
   watchedAt: z.string().nullable(),
 });
 

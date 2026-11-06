@@ -37,3 +37,20 @@ describe("statistics insights", () => {
     bulkAssess(bb.id, ids, "unwatched", undefined);
   });
 });
+
+describe("favourite episodes", () => {
+  it("marks one watched, shows it in Statistics, and survives a backup", async () => {
+    const { exportAll, restoreBackup } = await import("@/lib/repo/backup");
+    const m = createMedia({ type: "tv", metadata: { title: "Severance" }, segments: [{ kind: "season", label: "Season 1", seasonNumber: 1, courNumber: null, episodeCount: 3, episodes: [1, 2, 3].map((n) => ({ number: n, title: n === 3 ? "We We Are" : null, airDate: "2022-01-01", overview: null, providerRef: null })) }] });
+    const eps = getMediaDetail(m.id)!.segments[0].episodes;
+    const e = setAssessment(m.id, eps[2].id, { favorite: true });
+    expect(e).toMatchObject({ favorite: true, state: "watched" });
+    expect(getInsights().favorites).toEqual([{ mediaId: m.id, title: "Severance", type: "tv", code: "S1E3", episodeTitle: "We We Are", rating: null }]);
+    expect(setAssessment(m.id, eps[2].id, { state: "unwatched" }).favorite).toBe(false); // un-watching un-favourites
+    setAssessment(m.id, eps[1].id, { rating: 5, favorite: true });
+    const b = exportAll();
+    freshDb();
+    await restoreBackup(b, "replace");
+    expect(getInsights().favorites.map((f) => f.code)).toEqual(["S1E2"]);
+  });
+});

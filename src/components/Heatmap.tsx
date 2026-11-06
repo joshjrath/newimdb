@@ -30,7 +30,7 @@ function cellLabel(seg: SegmentView, e: EpisodeView) {
     : e.state === "skipped" ? "skipped (N/A)"
     : isUnaired(e) ? `not out yet${e.airDate && e.airDate !== "TBA" ? ` (airs ${e.airDate})` : ""}`
     : "not watched";
-  return [episodeCode(seg, e), e.title, state, e.filler && "filler"].filter(Boolean).join(", ");
+  return [episodeCode(seg, e), e.title, state, e.favorite && "one of your favourites", e.filler && "filler"].filter(Boolean).join(", ");
 }
 
 /** One heatmap cell. Memoised so a save re-renders only the cell that changed. */
@@ -52,7 +52,7 @@ const EpisodeCell = memo(function EpisodeCell({ seg, ep, isNext, busy, selected,
       data-ep={ep.id}
       tabIndex={focusable ? 0 : -1}
       aria-pressed={selected || undefined}
-      className={["cell", band, ep.filler && "filler", isNext && "next", busy && "busy", selected && "sel"].filter(Boolean).join(" ")}
+      className={["cell", band, ep.filler && "filler", ep.favorite && "fav", isNext && "next", busy && "busy", selected && "sel"].filter(Boolean).join(" ")}
       aria-label={label}
       title={label}
       onFocus={() => onFocusCell(ep.id)}
@@ -180,7 +180,7 @@ export function Heatmap({ mediaId, initial, initialSegment, onSegments, ignoreFi
     const ids = targetsFor(epId);
     if (ids.length > 1) {
       const action: BulkAssessAction | null =
-        patch.rating != null ? "rate" : patch.filler === true ? "filler_on" : patch.filler === false ? "filler_off" : patch.state ?? null;
+        patch.rating != null ? "rate" : patch.filler === true ? "filler_on" : patch.filler === false ? "filler_off" : patch.favorite === true ? "favorite_on" : patch.favorite === false ? "favorite_off" : patch.state ?? null;
       if (action) bulkIds(ids, action, patch.rating ?? undefined, `Updated ${ids.length} episodes.`);
       setSelection(new Set());
       return;
@@ -251,6 +251,15 @@ export function Heatmap({ mediaId, initial, initialSegment, onSegments, ignoreFi
         if (ep) apply(id, { filler: !ep.filler }, false);
       },
       u: () => watchedUpTo(id),
+      // ★ favourite: * (or H for heart)
+      "*": () => {
+        const ep = flat[indexOf.get(id) ?? -1]?.ep;
+        if (ep) apply(id, { favorite: !ep.favorite }, false);
+      },
+      h: () => {
+        const ep = flat[indexOf.get(id) ?? -1]?.ep;
+        if (ep) apply(id, { favorite: !ep.favorite }, false);
+      },
       Backspace: () => apply(id, { state: "unwatched" }, false),
       Delete: () => apply(id, { state: "unwatched" }, false),
       Escape: () => setSelection(new Set()),
@@ -395,7 +404,7 @@ export function Heatmap({ mediaId, initial, initialSegment, onSegments, ignoreFi
 
       <p className="hint keys-hint">
         Click an episode, or use the arrow keys, then type a rating: <kbd>4</kbd> = 4, <kbd>4</kbd><kbd>5</kbd> = 4.5. It saves and moves to the next one.{" "}
-        <kbd>W</kbd> watched · <kbd>S</kbd> skip · <kbd>F</kbd> filler · <kbd>U</kbd> watched up to here · <kbd>⌫</kbd> clear. Shift-click to select a run of episodes.
+        <kbd>W</kbd> watched · <kbd>S</kbd> skip · <kbd>F</kbd> filler · <kbd>*</kbd> favourite · <kbd>U</kbd> watched up to here · <kbd>⌫</kbd> clear. Shift-click to select a run of episodes.
       </p>
 
       {selection.size > 1 && (
@@ -405,6 +414,7 @@ export function Heatmap({ mediaId, initial, initialSegment, onSegments, ignoreFi
           <button className="btn small" onClick={() => apply([...selection][0], { state: "watched" }, false)}>Watched</button>
           <button className="btn small" onClick={() => apply([...selection][0], { state: "skipped" }, false)}>Skip</button>
           <button className="btn small" onClick={() => apply([...selection][0], { filler: true }, false)}>Filler</button>
+          <button className="btn small" onClick={() => apply([...selection][0], { favorite: true }, false)}>★ Favourite</button>
           <button className="btn small" onClick={() => apply([...selection][0], { state: "unwatched" }, false)}>Not watched</button>
           <button className="btn small" onClick={() => setSelection(new Set())}>Clear selection</button>
         </div>
@@ -572,6 +582,9 @@ function EpisodeEditor({ seg, ep, rect, onClose, onSave, onWatchedUpTo }: { seg:
         {choice("Not watched", ep.state === "unwatched", { state: "unwatched" })}
         <button className="btn small" onClick={onWatchedUpTo} title="Marks every earlier episode you haven't watched or skipped as watched">Watched up to here</button>
       </div>
+      <button type="button" className={`fav-toggle${ep.favorite ? " on" : ""}`} aria-pressed={Boolean(ep.favorite)} onClick={() => onSave({ favorite: !ep.favorite }, false)}>
+        <span aria-hidden="true">{ep.favorite ? "★" : "☆"}</span> {ep.favorite ? "One of your favourite episodes" : "Mark as a favourite episode"}
+      </button>
       <label className="check">
         <input type="checkbox" checked={ep.filler} onChange={(e) => onSave({ filler: e.target.checked }, false)} />
         Filler episode (keeps the rating)
@@ -594,6 +607,7 @@ function Legend() {
       <span className="sw"><span className="cell skipped" aria-hidden="true">N/A</span>Skipped on purpose</span>
       <span className="sw"><span className="cell unaired" aria-hidden="true">TBA</span>Not out yet (doesn&apos;t count)</span>
       <span className="sw"><span className="cell unwatched filler" aria-hidden="true">?</span>Filler (any state)</span>
+      <span className="sw"><span className="cell b5 fav" aria-hidden="true">5</span>Favourite episode</span>
       <span className="sw"><span className="blank" aria-hidden="true" />Blank: no such episode</span>
     </div>
   );

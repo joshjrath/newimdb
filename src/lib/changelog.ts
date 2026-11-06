@@ -20,6 +20,7 @@ export const CHANGELOG: ChangelogEntry[] = [
       "Longest runs of back-to-back 5/5 episodes, your best seasons and biggest binge days.",
       "You vs IMDb: whether you rate higher or lower, and the titles you disagree with IMDb about most.",
       "Where your time goes (movies, TV, anime), your watching days of the week, and the decades you watch.",
+      "Star an episode as one of your favourites (★ in the rating popup, or press *): it gets a gold star in the grid and shows in Statistics.",
     ],
   },
   {
