@@ -170,6 +170,14 @@ export function startEpisodeScheduler() {
     void runEpisodeSync({ limit: 40 }).catch((e) => console.error("[episodes] sync failed:", e));
     startKeywordJob({ quiet: true }); // newly added titles pick up keyword genres (e.g. Superhero) too
   };
-  setTimeout(tick, 30_000);
-  g.__episodeTimer = setInterval(tick, 15 * 60_000);
+  // One failing step never stops the site or the later checks.
+  const safeTick = () => {
+    try {
+      tick();
+    } catch (e) {
+      console.error("[background] check failed (will retry):", e);
+    }
+  };
+  setTimeout(safeTick, 30_000);
+  g.__episodeTimer = setInterval(safeTick, 15 * 60_000);
 }
