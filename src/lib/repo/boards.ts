@@ -3,6 +3,7 @@ import { RepoError } from "../errors";
 import { TIER_KEYS, type BoardSource, type BoardSummary, type BoardView, type RankItem, type Tier } from "../domain/rankings";
 import { MEDIA_TYPES, TYPE_LABEL, type MediaType } from "../domain/types";
 import { audit } from "./audit";
+import { RANKABLE_SQL, rankableIds } from "./rankings";
 
 /**
  * Rankings of your own: a name, a source (one of your lists, a genre filter, a kind, or
@@ -56,7 +57,7 @@ function sourceIds(db: DB, b: Row): number[] {
     return (db
       .prepare(
         `SELECT m.id FROM media m LEFT JOIN review r ON r.media_id = m.id WHERE m.type = ?
-           AND (r.rating IS NOT NULL OR r.status IN ('completed', 'watching', 'on_hold', 'dropped') OR r.watched_on IS NOT NULL)`,
+           AND ${RANKABLE_SQL}`,
       )
       .all(b.source_ref) as { id: number }[]).map((r) => r.id);
   // "Anything you add": whatever is on its top list waits in the tray too.
@@ -65,7 +66,7 @@ function sourceIds(db: DB, b: Row): number[] {
 
 const items = (db: DB, ids: number[]): Map<number, RankItem> => {
   if (!ids.length) return new Map();
-  const rows = db.prepare(`SELECT ${ITEM} FROM media m LEFT JOIN review r ON r.media_id = m.id WHERE m.id IN (${ids.map(() => "?").join(",")})`).all(...ids) as RankItem[];
+  const rows = db.prepare(`SELECT ${ITEM} FROM media m LEFT JOIN review r ON r.media_id = m.id WHERE m.id IN (${ids.map(() => "?").join(",")}) AND ${RANKABLE_SQL}`).all(...ids) as RankItem[];
   return new Map(rows.map((r) => [r.id, r]));
 };
 
@@ -115,14 +116,21 @@ export function deleteBoard(id: number, db = getDb()) {
   audit(db, "delete", "ranking", id);
 }
 
-const existing = (db: DB, ids: number[]) => new Set(items(db, ids).keys());
+const existing = (db: DB, ids: number[]) => rankableIds(db, ids);
+/** Ids on this board that are hidden for now (a show you're back to watching): they keep their place. */
+const hiddenOn = (db: DB, table: "board_top" | "board_tier", id: number) => {
+  const all = (db.prepare(`SELECT media_id FROM ${table} WHERE board_id = ?`).all(id) as { media_id: number }[]).map((r) => r.media_id);
+  const ok = rankableIds(db, all);
+  return all.filter((m) => !ok.has(m));
+};
 
 export function setBoardTop(id: number, mediaIds: number[], db = getDb()) {
   requireBoard(db, id);
   const ok = existing(db, mediaIds);
   db.transaction(() => {
-    db.prepare(`DELETE FROM board_top WHERE board_id = ?`).run(id);
-    const ins = db.prepare(`INSERT OR IGNORE INTO board_top (board_id, media_id, position) VALUES (?, ?, ?)`);
+    const keep = new Set(hiddenOn(db, "board_top", id));
+    db.prepare(`DELETE FROM board_top WHERE board_id = ?${keep.size ? ` AND media_id NOT IN (${[...keep].map(() => "?").join(",")})` : ""}`).run(id, ...keep);
+    const ins = db.prepare(`INSERT OR REPLACE INTO board_top (board_id, media_id, position) VALUES (?, ?, ?)`);
     [...new Set(mediaIds)].filter((m) => ok.has(m)).forEach((m, i) => ins.run(id, m, i + 1));
     db.prepare(`UPDATE ranking_board SET updated_at = ? WHERE id = ?`).run(nowIso(), id);
   })();
@@ -132,7 +140,8 @@ export function setBoardTiers(id: number, tiers: Partial<Record<Tier, number[]>>
   requireBoard(db, id);
   const ok = existing(db, Object.values(tiers).flat() as number[]);
   db.transaction(() => {
-    db.prepare(`DELETE FROM board_tier WHERE board_id = ?`).run(id);
+    const keep = new Set(hiddenOn(db, "board_tier", id));
+    db.prepare(`DELETE FROM board_tier WHERE board_id = ?${keep.size ? ` AND media_id NOT IN (${[...keep].map(() => "?").join(",")})` : ""}`).run(id, ...keep);
     const ins = db.prepare(`INSERT OR REPLACE INTO board_tier (board_id, media_id, tier, position) VALUES (?, ?, ?, ?)`);
     for (const k of TIER_KEYS) (tiers[k] ?? []).filter((m) => ok.has(m)).forEach((m, i) => ins.run(id, m, k, i + 1));
     db.prepare(`UPDATE ranking_board SET updated_at = ? WHERE id = ?`).run(nowIso(), id);

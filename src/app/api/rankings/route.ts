@@ -6,7 +6,7 @@ import { getRankings, setTierList, setTopList } from "@/lib/repo/rankings";
 const ids = z.array(z.number().int().positive()).max(5000);
 const body = z.union([
   z.object({ kind: mediaTypeSchema, top: ids }).strict(),
-  z.object({ kind: mediaTypeSchema, tiers: z.object({ S: ids, A: ids, B: ids, C: ids, F: ids }).partial() }).strict(),
+  z.object({ kind: mediaTypeSchema, tiers: z.object({ S: ids, A: ids, B: ids, C: ids, D: ids, F: ids }).partial() }).strict(),
 ]);
 
 export const GET = ownerApi(async (req) => ({ rankings: getRankings(mediaTypeSchema.parse(new URL(req.url).searchParams.get("kind") ?? "movie")) }));

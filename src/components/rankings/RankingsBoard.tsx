@@ -190,17 +190,20 @@ function Imdb({ v }: { v: number | null }) {
   return v != null ? <span className="imdb-badge"><b>IMDb</b> {v.toFixed(1)}</span> : null;
 }
 
+/** A search result; shows still being watched can't be ranked until they're finished (or dropped). */
+type Hit = RankItem & { blocked?: boolean };
+
 /** Live search of your library for titles to add (limited to the ranking's kind when it has one). */
 function useLibrarySearch(target: Target) {
   const [q, setQ] = useState("");
-  const [hits, setHits] = useState<RankItem[]>([]);
+  const [hits, setHits] = useState<Hit[]>([]);
   const type = searchType(target);
   useEffect(() => {
     if (q.trim().length < 2) return setHits([]);
     const t = setTimeout(async () => {
       try {
-        const r = await api<{ items: (RankItem & { review: { rating: number | null }; imdb: { rating: number } | null })[] }>(`/api/media?${type ? `type=${type}&` : ""}q=${encodeURIComponent(q.trim())}&pageSize=10`);
-        setHits(r.items.map((m) => ({ id: m.id, type: m.type, title: m.title, year: m.year, posterUrl: m.posterUrl, rating: m.review.rating, imdb: m.imdb?.rating ?? null })));
+        const r = await api<{ items: (RankItem & { review: { rating: number | null; status: string | null }; imdb: { rating: number } | null })[] }>(`/api/media?${type ? `type=${type}&` : ""}q=${encodeURIComponent(q.trim())}&pageSize=10`);
+        setHits(r.items.map((m) => ({ id: m.id, type: m.type, title: m.title, year: m.year, posterUrl: m.posterUrl, rating: m.review.rating, imdb: m.imdb?.rating ?? null, blocked: m.type !== "movie" && m.review.status !== "completed" && m.review.status !== "dropped" })));
       } catch {}
     }, 200);
     return () => clearTimeout(t);
@@ -245,10 +248,10 @@ function TopList({ view, target }: { view: View; target: Target }) {
             <ul className="search-hits">
               {hits.map((h) => (
                 <li key={h.id}>
-                  <button type="button" disabled={onList.has(h.id)} onClick={() => { update([...list, h]); setQ(""); }}>
+                  <button type="button" disabled={onList.has(h.id) || h.blocked} onClick={() => { update([...list, h]); setQ(""); }}>
                     <Poster url={h.posterUrl} title={h.title} />
                     <span>{h.title}<small>{h.year ?? ""}{h.rating != null ? ` · ★ ${h.rating}` : ""}</small></span>
-                    <b>{onList.has(h.id) ? `#${list.findIndex((x) => x.id === h.id) + 1}` : `+ #${list.length + 1}`}</b>
+                    <b>{h.blocked ? "Finish it first" : onList.has(h.id) ? `#${list.findIndex((x) => x.id === h.id) + 1}` : `+ #${list.length + 1}`}</b>
                   </button>
                 </li>
               ))}
@@ -318,6 +321,9 @@ function TopList({ view, target }: { view: View; target: Target }) {
 /* ---------------- tier list ---------------- */
 
 type Board = Record<Tier | "pool", number[]>;
+/** Poster width in the tier list, in px (a sliding scale; titles show from 80px up). */
+const SIZE_MIN = 48;
+const SIZE_MAX = 170;
 
 function TierBoard({ view, target, onView }: { view: View; target: Target; onView: (v: View) => void }) {
   const [extra, setExtra] = useState<RankItem[]>([]);
@@ -327,6 +333,19 @@ function TierBoard({ view, target, onView }: { view: View; target: Target; onVie
     return m;
   }, [view, extra]);
   const search = useLibrarySearch(target);
+  const [size, setSize] = useState(96);
+  useEffect(() => {
+    try {
+      const v = Number(localStorage.getItem("tier-size-px"));
+      if (v >= SIZE_MIN && v <= SIZE_MAX) setSize(v);
+    } catch {}
+  }, []);
+  const pickSize = (v: number) => {
+    setSize(v);
+    try {
+      localStorage.setItem("tier-size-px", String(v));
+    } catch {}
+  };
   const fromView = (v: View): Board => ({ ...(Object.fromEntries(TIER_KEYS.map((k) => [k, v.tiers[k].map((i) => i.id)])) as Record<Tier, number[]>), pool: v.pool.map((i) => i.id) });
   const [board, setBoard] = useState<Board>(() => fromView(view));
   const [picked, setPicked] = useState<number | null>(null);
@@ -404,6 +423,7 @@ function TierBoard({ view, target, onView }: { view: View; target: Target; onVie
       >
         <Poster url={it.posterUrl} title={it.title} />
         {it.rating != null && <span className="tile-rating">{it.rating}</span>}
+        <span className="tile-title">{it.title}</span>
       </button>
     );
   };
@@ -425,9 +445,9 @@ function TierBoard({ view, target, onView }: { view: View; target: Target; onVie
   const placed = TIER_KEYS.reduce((a, k) => a + board[k].length, 0);
 
   return (
-    <div className="stack">
+    <div className={`stack${size >= 80 ? " tiles-titled" : ""}`} style={{ "--tile-w": `${size}px` } as React.CSSProperties}>
       <div className="toolbar">
-        <span className="hint grow">{placed} placed · {board.pool.length} still in the tray. Drag posters into a tier, or tap one then tap a tier.</span>
+        <span className="hint grow">{placed} placed · {board.pool.length} still in the tray. Drag posters into a tier, or tap one then tap a tier. Shows join once you&apos;ve finished (or dropped) them.</span>
         {target.board && (
           <label className="search-add">
             <span className="visually-hidden">Add a title to this ranking</span>
@@ -436,10 +456,10 @@ function TierBoard({ view, target, onView }: { view: View; target: Target; onVie
               <ul className="search-hits">
                 {search.hits.map((h) => (
                   <li key={h.id}>
-                    <button type="button" disabled={onBoard.has(h.id)} onClick={() => addToTray(h)}>
+                    <button type="button" disabled={onBoard.has(h.id) || h.blocked} onClick={() => addToTray(h)}>
                       <Poster url={h.posterUrl} title={h.title} />
                       <span>{h.title}<small>{h.year ?? ""}{h.rating != null ? ` · ★ ${h.rating}` : ""}</small></span>
-                      <b>{onBoard.has(h.id) ? "✓" : "+ tray"}</b>
+                      <b>{h.blocked ? "Finish it first" : onBoard.has(h.id) ? "✓" : "+ tray"}</b>
                     </button>
                   </li>
                 ))}
@@ -447,6 +467,11 @@ function TierBoard({ view, target, onView }: { view: View; target: Target; onVie
             )}
           </label>
         )}
+        <label className="tile-size" title="Poster size">
+          <span aria-hidden="true" className="tile-size-icon s" />
+          <input type="range" min={SIZE_MIN} max={SIZE_MAX} step={2} value={size} onChange={(e) => pickSize(Number(e.target.value))} aria-label="Poster size" />
+          <span aria-hidden="true" className="tile-size-icon l" />
+        </label>
         <button className="btn" disabled={!board.pool.some((id) => items.get(id)?.rating != null)} onClick={autoSort}>Auto-sort by my ratings</button>
         <button className="btn ghost" disabled={!placed} onClick={clearAll}>Clear</button>
       </div>

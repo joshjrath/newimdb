@@ -40,7 +40,7 @@ export const backupSchema = z.object({
   rankings: z
     .object({
       top: z.array(z.object({ kind: mediaTypeSchema, uids: z.array(z.string()).max(5000) })).max(3),
-      tiers: z.array(z.object({ uid: z.string(), tier: z.enum(["S", "A", "B", "C", "F"]), position: z.number().int() })).max(20000),
+      tiers: z.array(z.object({ uid: z.string(), tier: z.enum(["S", "A", "B", "C", "D", "F"]), position: z.number().int() })).max(20000),
     })
     .optional(),
   /** Your genre filters from Settings (older backups don't have them). */

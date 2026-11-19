@@ -4,7 +4,7 @@ import { deleteBoard, getBoard, setBoardTiers, setBoardTop, updateBoard } from "
 
 type Ctx = { params: Promise<{ id: string }> };
 const ids = z.array(z.number().int().positive()).max(5000);
-const put = z.union([z.object({ top: ids }).strict(), z.object({ tiers: z.object({ S: ids, A: ids, B: ids, C: ids, F: ids }).partial() }).strict()]);
+const put = z.union([z.object({ top: ids }).strict(), z.object({ tiers: z.object({ S: ids, A: ids, B: ids, C: ids, D: ids, F: ids }).partial() }).strict()]);
 const patch = z.object({ name: z.string().trim().min(1).max(80).optional(), mode: z.enum(["top", "tiers"]).optional() }).strict();
 
 export const GET = ownerApi<Ctx>(async (_req, { params }) => ({ board: getBoard((await idParams(params)).id) }));

@@ -6,6 +6,7 @@ export const TIERS = [
   { key: "A", label: "A", color: "#ffbf7f", blurb: "Great" },
   { key: "B", label: "B", color: "#ffdf7f", blurb: "Good" },
   { key: "C", label: "C", color: "#ffff7f", blurb: "Fine" },
+  { key: "D", label: "D", color: "#bfff7f", blurb: "Meh" },
   { key: "F", label: "F", color: "#7fbfff", blurb: "Nope" },
 ] as const;
 export type Tier = (typeof TIERS)[number]["key"];
@@ -36,6 +37,7 @@ export function tierForRating(r: number | null): Tier | null {
   if (r >= 4.5) return "A";
   if (r >= 4) return "B";
   if (r >= 3) return "C";
+  if (r >= 2) return "D";
   return "F";
 }
 

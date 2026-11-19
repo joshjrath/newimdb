@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { freshDb } from "./helpers";
+import { getDb } from "@/lib/db";
 import { createMedia } from "@/lib/repo/media";
 import { getRankings, setTierList, setTopList } from "@/lib/repo/rankings";
 import { exportAll, restoreBackup } from "@/lib/repo/backup";
@@ -15,7 +16,7 @@ describe("rankings", () => {
   it("keeps a numbered top list per kind and a tier list, and backs them up", async () => {
     const heat = createMedia({ type: "movie", metadata: { title: "Heat" }, review: { rating: 5 } });
     const thief = createMedia({ type: "movie", metadata: { title: "Thief" }, review: { rating: 4 } });
-    const show = createMedia({ type: "tv", metadata: { title: "Severance" }, review: { rating: 5 } });
+    const show = createMedia({ type: "tv", metadata: { title: "Severance" }, review: { rating: 5, status: "completed" } });
     createMedia({ type: "movie", metadata: { title: "Not seen" }, review: { status: "plan" } });
     setTopList("movie", [thief.id, heat.id, show.id]); // a show can't be in the movie list
     expect(getRankings("movie").top.map((i) => i.title)).toEqual(["Thief", "Heat"]);
@@ -24,7 +25,7 @@ describe("rankings", () => {
     const r = getRankings("movie");
     expect([r.tiers.S.map((i) => i.title), r.tiers.C.map((i) => i.title), r.pool.length]).toEqual([["Heat"], ["Thief"], 0]);
     expect(getRankings("tv").pool.map((i) => i.title)).toEqual(["Severance"]);
-    expect([5, 4.5, 4, 3, 2, null].map(tierForRating)).toEqual(["S", "A", "B", "C", "F", null]);
+    expect([5, 4.5, 4, 3, 2, 1, null].map(tierForRating)).toEqual(["S", "A", "B", "C", "D", "F", null]);
     const b = exportAll();
     freshDb();
     await restoreBackup(b, "replace");
@@ -36,7 +37,7 @@ describe("rankings", () => {
   it("lets you make your own rankings from a list, a kind, or anything", () => {
     const heat = createMedia({ type: "movie", metadata: { title: "Heat" }, review: { rating: 5 } });
     const thief = createMedia({ type: "movie", metadata: { title: "Thief" }, review: { rating: 4 } });
-    const show = createMedia({ type: "tv", metadata: { title: "Severance" }, review: { rating: 5 } });
+    const show = createMedia({ type: "tv", metadata: { title: "Severance" }, review: { rating: 5, status: "completed" } });
     const list = createList({ name: "Mann", mediaIds: [heat.id, thief.id] });
     const fromList = createBoard({ name: "Mann ranked", source: "list", sourceRef: String(list) });
     let v = getBoard(fromList);
@@ -67,5 +68,26 @@ describe("rankings", () => {
     const c = createList({ name: "C" });
     reorderLists([c, a, b]);
     expect(listLists().map((l) => l.name)).toEqual(["C", "A", "B"]);
+  });
+
+  it("only ranks shows you finished or dropped, and keeps a place while you're back watching", () => {
+    const done = createMedia({ type: "tv", metadata: { title: "Done" }, review: { rating: 5, status: "completed" } });
+    const dropped = createMedia({ type: "tv", metadata: { title: "Dropped" }, review: { status: "dropped" } });
+    const partway = createMedia({ type: "tv", metadata: { title: "Partway" }, review: { rating: 4, status: "watching" } });
+    expect(getRankings("tv").pool.map((i) => i.title)).toEqual(["Done", "Dropped"]);
+    setTopList("tv", [partway.id, done.id]);
+    expect(getRankings("tv").top.map((i) => i.title)).toEqual(["Done"]);
+    setTierList("tv", { S: [done.id, partway.id], D: [dropped.id] });
+    expect(getRankings("tv").tiers.S.map((i) => i.title)).toEqual(["Done"]);
+    expect(getRankings("tv").tiers.D.map((i) => i.title)).toEqual(["Dropped"]);
+    // a new season puts Done back to watching: hidden, but its S place survives other edits
+    getDb().prepare(`UPDATE review SET status = 'watching' WHERE media_id = ?`).run(done.id);
+    setTierList("tv", { D: [dropped.id] });
+    expect(getRankings("tv").tiers.S).toEqual([]);
+    getDb().prepare(`UPDATE review SET status = 'completed' WHERE media_id = ?`).run(done.id);
+    expect(getRankings("tv").tiers.S.map((i) => i.title)).toEqual(["Done"]);
+    const b = createBoard({ name: "Any", source: "any" });
+    setBoardTiers(b, { A: [partway.id, done.id] });
+    expect(getBoard(b).tiers.A.map((i) => i.title)).toEqual(["Done"]);
   });
 });

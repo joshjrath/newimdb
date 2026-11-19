@@ -12,6 +12,16 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-11-19-tiers-d",
+    date: "2026-11-19",
+    title: "Tier lists: a D tier and bigger posters",
+    items: [
+      "A D tier (Meh), between C and F. Auto-sort puts 2–2.5★ there.",
+      "A poster-size slider on tier lists. From medium size up, titles show under the posters. Your size is remembered.",
+      "Only shows you've finished or dropped can be ranked. If a new season puts a ranked show back to Watching, it's hidden but keeps its spot until you're done.",
+    ],
+  },
+  {
     id: "2026-11-19-custom-rankings",
     date: "2026-11-19",
     title: "Rankings of your own, and Lists your way",
