@@ -12,6 +12,16 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-11-19-rankings",
+    date: "2026-11-19",
+    title: "Rankings: your top list and your tier list",
+    items: [
+      "Rankings (in the side bar): your #1, #2, #3… for Movies, TV and Anime, with a podium for the top three. Drag to reorder, or start from your ratings.",
+      "A tier list (S, A, B, C, F in the classic colours): drag posters between tiers, or tap one then tap a tier. Auto-sort by your ratings to start.",
+      "Lists, Statistics and Rankings have their own coloured diamonds in the side bar.",
+    ],
+  },
+  {
     id: "2026-11-06-stats-deeper",
     date: "2026-11-06",
     title: "A much deeper Statistics page",

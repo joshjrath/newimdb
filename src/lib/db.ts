@@ -333,6 +333,20 @@ const MIGRATIONS: string[] = [
   ALTER TABLE episode_assessment ADD COLUMN favorite INTEGER NOT NULL DEFAULT 0;
   CREATE INDEX IF NOT EXISTS episode_favorite ON episode_assessment(favorite) WHERE favorite = 1;
   `,
+  // 16 — rankings: your numbered top list per kind, and a tier list (S/A/B/C/F)
+  `
+  CREATE TABLE IF NOT EXISTS ranking_item (
+    kind     TEXT NOT NULL CHECK (kind IN ('movie', 'tv', 'anime')),
+    media_id INTEGER NOT NULL REFERENCES media(id) ON DELETE CASCADE,
+    position INTEGER NOT NULL,
+    PRIMARY KEY (kind, media_id)
+  );
+  CREATE TABLE IF NOT EXISTS tier_item (
+    media_id INTEGER PRIMARY KEY REFERENCES media(id) ON DELETE CASCADE,
+    tier     TEXT NOT NULL,
+    position INTEGER NOT NULL
+  );
+  `,
 ];
 
 /** Whether the database was created just now (no earlier data), per connection. */

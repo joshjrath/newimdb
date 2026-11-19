@@ -6,6 +6,7 @@ import { backupSegmentSchema, metadataSchema, mediaTypeSchema, reviewSchema } fr
 import { audit } from "./audit";
 import { getMediaDetail, insertMedia, metadataOf, restoreAssessments } from "./media";
 import { personIdForName } from "./people";
+import { exportRankings, restoreRankings } from "./rankings";
 import { applyGenres, listGenres, setMediaGenre } from "./genres";
 import { genreRulesSchema } from "../schemas";
 
@@ -35,6 +36,13 @@ export const backupSchema = z.object({
   format: z.literal(BACKUP_FORMAT),
   version: z.literal(1),
   exportedAt: z.string(),
+  /** Your top lists and tier list (older backups don't have them). */
+  rankings: z
+    .object({
+      top: z.array(z.object({ kind: mediaTypeSchema, uids: z.array(z.string()).max(5000) })).max(3),
+      tiers: z.array(z.object({ uid: z.string(), tier: z.enum(["S", "A", "B", "C", "F"]), position: z.number().int() })).max(20000),
+    })
+    .optional(),
   /** Your genre filters from Settings (older backups don't have them). */
   genres: z.array(z.object({ name: z.string().min(1).max(40), rules: genreRulesSchema })).max(500).optional(),
   media: z.array(mediaBackup),
@@ -56,6 +64,7 @@ export function exportAll(db = getDb()): Backup {
     version: 1,
     exportedAt: nowIso(),
     genres: listGenres(db).map(({ name, rules }) => ({ name, rules })),
+    rankings: exportRankings(db),
     media: ids.map((id) => {
       const m = getMediaDetail(id, db)!;
       return {
@@ -148,6 +157,7 @@ export async function restoreBackup(b: Backup, mode: "merge" | "replace", db = g
       }
     }
     if (b.genres?.length) applyGenres(db);
+    if (b.rankings) restoreRankings(b.rankings, db);
     audit(db, "restore_backup", "library", null, { mode, ...counts, snapshot: path.basename(snapshot) });
   })();
   return { ...counts, snapshot: path.basename(snapshot) };

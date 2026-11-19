@@ -6,7 +6,7 @@ import { UpdateBell } from "./UpdateBell";
 import { RailSearch } from "./RailSearch";
 import { updatesSummary } from "@/lib/repo/releases";
 
-export type ShellActive = Category | "all" | "studio" | "new" | "import" | "settings" | "stats" | "recommended" | "lists";
+export type ShellActive = Category | "all" | "studio" | "new" | "import" | "settings" | "stats" | "recommended" | "lists" | "rankings";
 
 const CATEGORIES = Object.keys(CATEGORY_TO_TYPE) as Category[];
 const STUDIO: { key: ShellActive; href: string; label: string }[] = [
@@ -47,9 +47,10 @@ export function Shell({ children, active, category }: { children: React.ReactNod
               <span className="n">{counts.total}</span>
             </Link>
           </nav>
-          <nav className="studio" aria-label="More">
-            <Link href="/lists" aria-current={active === "lists" ? "page" : undefined}>Lists</Link>
-            <Link href="/stats" aria-current={active === "stats" ? "page" : undefined}>Statistics</Link>
+          <nav className="more-nav" aria-label="More">
+            <Link className="more-lists" href="/lists" aria-current={active === "lists" ? "page" : undefined}><span className="shape" aria-hidden="true" />Lists</Link>
+            <Link className="more-stats" href="/stats" aria-current={active === "stats" ? "page" : undefined}><span className="shape" aria-hidden="true" />Statistics</Link>
+            <Link className="more-rankings" href="/rankings" aria-current={active === "rankings" ? "page" : undefined}><span className="shape" aria-hidden="true" />Rankings</Link>
           </nav>
           <h3>Studio</h3>
           <nav className="studio" aria-label="Studio">
