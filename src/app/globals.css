@@ -1089,18 +1089,28 @@ button.stat-btn:hover { background: var(--raised); }
 .library.layout-big .card-excerpt { -webkit-line-clamp: 3; font-size: 12.5px; }
 .library.layout-big .card:has(.card-new-season) .card-title { padding-right: 0; }
 
-/* List: compact rows */
+/* List: compact rows in fixed columns, so every row lines up whatever it has */
 .library.layout-list { grid-template-columns: 1fr; gap: 6px; }
-.library.layout-list .card { grid-template-columns: 46px minmax(0, 1fr); gap: 14px; padding: 8px 12px 8px 8px; align-items: center; border-radius: 14px; }
+.library.layout-list .card { grid-template-columns: 46px minmax(0, 1fr); gap: 14px; padding: 8px 14px 8px 8px; align-items: center; border-radius: 14px; }
 .library.layout-list .card .poster { border-radius: 7px; }
 .library.layout-list .card .poster-fallback { font-size: 0; }
-.library.layout-list .card-body { grid-template-columns: minmax(160px, 1.4fr) minmax(0, 1fr) minmax(120px, .8fr) auto; align-items: center; gap: 4px 16px; padding: 0; }
-.library.layout-list .card-title { font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.library.layout-list .card-excerpt, .library.layout-list .card-body > .card-meta:last-child { display: none; }
-.library.layout-list .card-imdb { margin: 0; }
-.library.layout-list .progress { margin: 0; }
-.library.layout-list .progress-label { font-size: 11px; }
-.library.layout-list .card:has(.card-new-season) .card-title { padding-right: 70px; }
-@media (max-width: 760px) {
-  .library.layout-list .card-body { grid-template-columns: 1fr; }
+.library.layout-list .card-body {
+  display: grid; align-items: center; gap: 0 18px; padding: 0;
+  grid-template-columns: minmax(0, 1.7fr) minmax(0, 1.2fr) 86px minmax(150px, 1fr);
 }
+.library.layout-list .card-title { grid-column: 1; grid-row: 1; font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.library.layout-list .card-title + .card-meta { grid-column: 2; grid-row: 1; flex-wrap: nowrap; justify-content: flex-start; overflow: hidden; }
+.library.layout-list .card-imdb { grid-column: 3; grid-row: 1; margin: 0; }
+.library.layout-list .progress { grid-column: 4; grid-row: 1; margin: 0; display: grid; gap: 4px; justify-items: stretch; }
+.library.layout-list .progress-label { font-size: 11px; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.library.layout-list .card-excerpt, .library.layout-list .card-body > .card-meta:last-child:not(.card-title + .card-meta) { display: none; }
+.library.layout-list .card-new-season { top: 4px; left: 4px; right: auto; padding: 1px 5px; font-size: 9px; }
+.library.layout-list .card:has(.card-new-season) .card-title { padding-right: 0; }
+@media (max-width: 760px) {
+  .library.layout-list .card-body { grid-template-columns: minmax(0, 1fr) 76px; gap: 4px 10px; }
+  .library.layout-list .card-title { grid-column: 1 / -1; }
+  .library.layout-list .card-title + .card-meta { grid-column: 1; grid-row: 2; }
+  .library.layout-list .card-imdb { grid-column: 2; grid-row: 2; }
+  .library.layout-list .progress { grid-column: 1 / -1; grid-row: 3; }
+}
+
