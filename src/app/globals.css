@@ -1058,3 +1058,49 @@ button.stat-btn:hover { background: var(--raised); }
   .tier-label small { display: none; }
   .tier-tile { width: 50px; }
 }
+
+/* Library layouts: the same cards, four ways */
+.layout-pick { margin-left: auto; display: inline-flex; gap: 3px; padding: 3px; border-radius: 999px; background: var(--card); }
+.layout-pick button { display: inline-flex; align-items: center; gap: 6px; border: 0; background: none; color: #9a9aa3; padding: 7px 12px; border-radius: 999px; cursor: pointer; font: 700 12.5px/1 var(--display); }
+.layout-pick button span:first-child { font-size: 14px; }
+.layout-pick button[aria-checked="true"] { background: var(--ink); color: var(--black); }
+@media (max-width: 760px) { .layout-pick .layout-name { display: none; } }
+
+/* Poster wall: posters only, title on hover */
+.library.layout-wall { grid-template-columns: repeat(auto-fill, minmax(min(100%, 132px), 1fr)); gap: 12px; }
+.library.layout-wall .card { display: block; padding: 0; background: none; }
+.library.layout-wall .card .poster { border-radius: 14px; transition: transform .15s, box-shadow .15s; }
+.library.layout-wall .card:hover .poster { transform: translateY(-3px); box-shadow: 0 0 0 2px var(--cat, #fff), 0 14px 30px rgba(0, 0, 0, .5); }
+.library.layout-wall .card-body { position: absolute; inset: auto 0 0 0; padding: 26px 10px 10px; border-radius: 0 0 14px 14px; background: linear-gradient(transparent, rgba(0, 0, 0, .88)); opacity: 0; transition: opacity .15s; gap: 2px; pointer-events: none; }
+.library.layout-wall .card:hover .card-body, .library.layout-wall .card:focus-within .card-body { opacity: 1; }
+.library.layout-wall .card-title { font-size: 13px; }
+.library.layout-wall .card-title a { pointer-events: auto; }
+.library.layout-wall .card-excerpt, .library.layout-wall .card-body > .card-meta:last-child, .library.layout-wall .card-imdb { display: none; }
+.library.layout-wall .progress { margin: 0; }
+.library.layout-wall .progress-label { display: none; }
+.library.layout-wall .card-new-season { top: 6px; right: 6px; font-size: 10px; }
+.library.layout-wall .card:has(.card-new-season) .card-title { padding-right: 0; }
+
+/* Big posters: large poster, details underneath */
+.library.layout-big { grid-template-columns: repeat(auto-fill, minmax(min(100%, 210px), 1fr)); gap: 20px 16px; }
+.library.layout-big .card { grid-template-columns: 1fr; padding: 10px; gap: 10px; }
+.library.layout-big .card .poster { border-radius: 14px; }
+.library.layout-big .card-title { font-size: 16px; }
+.library.layout-big .card-excerpt { -webkit-line-clamp: 3; font-size: 12.5px; }
+.library.layout-big .card:has(.card-new-season) .card-title { padding-right: 0; }
+
+/* List: compact rows */
+.library.layout-list { grid-template-columns: 1fr; gap: 6px; }
+.library.layout-list .card { grid-template-columns: 46px minmax(0, 1fr); gap: 14px; padding: 8px 12px 8px 8px; align-items: center; border-radius: 14px; }
+.library.layout-list .card .poster { border-radius: 7px; }
+.library.layout-list .card .poster-fallback { font-size: 0; }
+.library.layout-list .card-body { grid-template-columns: minmax(160px, 1.4fr) minmax(0, 1fr) minmax(120px, .8fr) auto; align-items: center; gap: 4px 16px; padding: 0; }
+.library.layout-list .card-title { font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.library.layout-list .card-excerpt, .library.layout-list .card-body > .card-meta:last-child { display: none; }
+.library.layout-list .card-imdb { margin: 0; }
+.library.layout-list .progress { margin: 0; }
+.library.layout-list .progress-label { font-size: 11px; }
+.library.layout-list .card:has(.card-new-season) .card-title { padding-right: 70px; }
+@media (max-width: 760px) {
+  .library.layout-list .card-body { grid-template-columns: 1fr; }
+}

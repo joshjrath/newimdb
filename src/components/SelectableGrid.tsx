@@ -8,6 +8,15 @@ import type { BulkMediaAction } from "@/lib/schemas";
 
 type Ref = { id: number; name: string };
 const KEY = "library-selection";
+const LAYOUT_KEY = "library-layout";
+/** Ways to see your library: the same cards, laid out differently. */
+const LAYOUTS = [
+  { key: "cards", label: "Cards", icon: "▦", hint: "Poster, rating and review" },
+  { key: "wall", label: "Poster wall", icon: "▤", hint: "Just posters, many per row" },
+  { key: "big", label: "Big posters", icon: "▣", hint: "Large posters with details below" },
+  { key: "list", label: "List", icon: "☰", hint: "Compact rows" },
+] as const;
+type Layout = (typeof LAYOUTS)[number]["key"];
 
 /**
  * The library grid, plus "Select": tap cards to pick as many as you like (across pages
@@ -27,6 +36,19 @@ export function SelectableGrid({ children, pageIds, people, genres, lists, statu
   const [on, setOn] = useState(false);
   const [sel, setSel] = useState<Set<number>>(new Set());
   const [tag, setTag] = useState("");
+  const [layout, setLayout] = useState<Layout>("cards");
+  useEffect(() => {
+    try {
+      const v = localStorage.getItem(LAYOUT_KEY);
+      if (v && LAYOUTS.some((l) => l.key === v)) setLayout(v as Layout);
+    } catch {}
+  }, []);
+  const pickLayout = (l: Layout) => {
+    setLayout(l);
+    try {
+      localStorage.setItem(LAYOUT_KEY, l);
+    } catch {}
+  };
   const grid = useRef<HTMLDivElement>(null);
   const { busy, run } = useAction();
   const router = useRouter();
@@ -97,8 +119,16 @@ export function SelectableGrid({ children, pageIds, people, genres, lists, statu
             <span className="hint">Tap titles to pick them. Your picks stay while you change pages or filters.</span>
           </>
         )}
+        <div className="layout-pick" role="radiogroup" aria-label="Layout">
+          {LAYOUTS.map((l) => (
+            <button key={l.key} type="button" role="radio" aria-checked={layout === l.key} title={`${l.label}: ${l.hint}`} aria-label={l.label} onClick={() => pickLayout(l.key)}>
+              <span aria-hidden="true">{l.icon}</span>
+              <span className="layout-name">{l.label}</span>
+            </button>
+          ))}
+        </div>
       </div>
-      <div ref={grid} className={`library${on ? " selecting" : ""}`} onClickCapture={onClickCapture}>
+      <div ref={grid} className={`library layout-${layout}${on ? " selecting" : ""}`} onClickCapture={onClickCapture}>
         {children}
       </div>
       {on && sel.size > 0 && (
