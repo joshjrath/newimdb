@@ -4,6 +4,8 @@ import { createMedia } from "@/lib/repo/media";
 import { getRankings, setTierList, setTopList } from "@/lib/repo/rankings";
 import { exportAll, restoreBackup } from "@/lib/repo/backup";
 import { tierForRating } from "@/lib/domain/rankings";
+import { createBoard, deleteBoard, getBoard, listBoards, setBoardTiers, setBoardTop, updateBoard } from "@/lib/repo/boards";
+import { createList, listLists, reorderLists } from "@/lib/repo/lists";
 
 beforeEach(() => {
   freshDb();
@@ -29,5 +31,41 @@ describe("rankings", () => {
     const after = getRankings("movie");
     expect(after.top.map((i) => i.title)).toEqual(["Thief", "Heat"]);
     expect(after.tiers.S.map((i) => i.title)).toEqual(["Heat"]);
+  });
+
+  it("lets you make your own rankings from a list, a kind, or anything", () => {
+    const heat = createMedia({ type: "movie", metadata: { title: "Heat" }, review: { rating: 5 } });
+    const thief = createMedia({ type: "movie", metadata: { title: "Thief" }, review: { rating: 4 } });
+    const show = createMedia({ type: "tv", metadata: { title: "Severance" }, review: { rating: 5 } });
+    const list = createList({ name: "Mann", mediaIds: [heat.id, thief.id] });
+    const fromList = createBoard({ name: "Mann ranked", source: "list", sourceRef: String(list) });
+    let v = getBoard(fromList);
+    expect(v.board.sourceLabel).toBe("From your list Mann");
+    expect(v.pool.map((i) => i.title)).toEqual(["Heat", "Thief"]); // nothing auto-ranked
+    setBoardTiers(fromList, { A: [thief.id] });
+    v = getBoard(fromList);
+    expect([v.tiers.A.map((i) => i.title), v.pool.map((i) => i.title)]).toEqual([["Thief"], ["Heat"]]);
+    // the built-in movie tier list is untouched
+    expect(getRankings("movie").tiers.A).toEqual([]);
+
+    const any = createBoard({ name: "Comfort watches", source: "any", mode: "top" });
+    setBoardTop(any, [show.id, heat.id]);
+    expect(getBoard(any).top.map((i) => i.title)).toEqual(["Severance", "Heat"]);
+    expect(getBoard(any).pool.map((i) => i.title).sort()).toEqual(["Heat", "Severance"]);
+    updateBoard(any, { name: "Cozy", mode: "tiers" });
+    expect(listBoards().find((b) => b.id === any)).toMatchObject({ name: "Cozy", mode: "tiers", count: 2 });
+    const tv = createBoard({ name: "TV", source: "kind", sourceRef: "tv" });
+    expect(getBoard(tv).pool.map((i) => i.title)).toEqual(["Severance"]);
+    expect(() => createBoard({ name: "Bad", source: "kind", sourceRef: "nope" })).toThrow();
+    deleteBoard(any);
+    expect(listBoards().map((b) => b.id).sort()).toEqual([fromList, tv].sort());
+  });
+
+  it("keeps your lists in the order you put them", () => {
+    const a = createList({ name: "A" });
+    const b = createList({ name: "B" });
+    const c = createList({ name: "C" });
+    reorderLists([c, a, b]);
+    expect(listLists().map((l) => l.name)).toEqual(["C", "A", "B"]);
   });
 });

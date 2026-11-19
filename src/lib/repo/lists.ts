@@ -63,7 +63,7 @@ const summaryOf = (l: { id: number; name: string; description: string; sort: Lis
 });
 
 export function listLists(db = getDb()): ListSummary[] {
-  const ls = db.prepare(`SELECT id, name, description, COALESCE(sort_key, sort) AS sort, updated_at FROM list ORDER BY updated_at DESC`).all() as { id: number; name: string; description: string; sort: ListSort; updated_at: string }[];
+  const ls = db.prepare(`SELECT id, name, description, COALESCE(sort_key, sort) AS sort, updated_at FROM list ORDER BY position IS NOT NULL, position, updated_at DESC`).all() as { id: number; name: string; description: string; sort: ListSort; updated_at: string }[];
   return ls.map((l) => summaryOf(l, items(db, l.id)));
 }
 
@@ -139,6 +139,14 @@ export function reorderList(id: number, mediaIds: number[], db = getDb()) {
 }
 
 /** Which of your lists a title is on (for the "Add to list" menu). */
+/** Your own order for your lists (lists you leave out keep their place after these). */
+export function reorderLists(ids: number[], db = getDb()) {
+  db.transaction(() => {
+    const set = db.prepare(`UPDATE list SET position = ? WHERE id = ?`);
+    [...new Set(ids)].forEach((id, i) => set.run(i + 1, id));
+  })();
+}
+
 export function listsFor(mediaId: number, db = getDb()): number[] {
   return (db.prepare(`SELECT list_id FROM list_item WHERE media_id = ?`).all(mediaId) as { list_id: number }[]).map((r) => r.list_id);
 }

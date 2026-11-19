@@ -38,3 +38,22 @@ export function tierForRating(r: number | null): Tier | null {
   if (r >= 3) return "C";
   return "F";
 }
+
+/** Where a ranking of your own gets its titles from. */
+export type BoardSource = "list" | "genre" | "kind" | "any";
+
+export interface BoardSummary {
+  id: number;
+  name: string;
+  source: BoardSource;
+  sourceRef: string | null;
+  /** e.g. "From your list MCU", "Genre: Horror", "Anime", "Anything you add" */
+  sourceLabel: string;
+  mode: "top" | "tiers";
+  count: number;
+}
+
+/** A ranking's contents: like RankingsView, but titles can be any kind. */
+export interface BoardView extends Omit<RankingsView, "kind"> {
+  board: BoardSummary;
+}

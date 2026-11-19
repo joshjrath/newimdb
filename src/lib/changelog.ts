@@ -12,6 +12,17 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-11-19-custom-rankings",
+    date: "2026-11-19",
+    title: "Rankings of your own, and Lists your way",
+    items: [
+      "Make your own rankings: + New ranking on the Rankings page. Rank one of your lists, a genre, just Movies/TV/Anime, or start empty and add any title.",
+      "Nothing gets auto-ranked: titles wait in the tray and you place only the ones you want. Each ranking has both a top list and a tier list.",
+      "Lists have the same layouts as the library (Cards, Poster wall, Big posters, List), and ⇅ Reorder lets you put your lists in your own order.",
+      "List covers always show all four posters, never cut off at the edge.",
+    ],
+  },
+  {
     id: "2026-11-19-rankings",
     date: "2026-11-19",
     title: "Rankings: your top list and your tier list",

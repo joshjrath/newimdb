@@ -347,6 +347,35 @@ const MIGRATIONS: string[] = [
     position INTEGER NOT NULL
   );
   `,
+  // 17 — your own rankings: from a list, a genre, a kind, or anything you add
+  `
+  CREATE TABLE IF NOT EXISTS ranking_board (
+    id         INTEGER PRIMARY KEY,
+    name       TEXT NOT NULL,
+    source     TEXT NOT NULL DEFAULT 'any',
+    source_ref TEXT,
+    mode       TEXT NOT NULL DEFAULT 'tiers',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS board_top (
+    board_id INTEGER NOT NULL REFERENCES ranking_board(id) ON DELETE CASCADE,
+    media_id INTEGER NOT NULL REFERENCES media(id) ON DELETE CASCADE,
+    position INTEGER NOT NULL,
+    PRIMARY KEY (board_id, media_id)
+  );
+  CREATE TABLE IF NOT EXISTS board_tier (
+    board_id INTEGER NOT NULL REFERENCES ranking_board(id) ON DELETE CASCADE,
+    media_id INTEGER NOT NULL REFERENCES media(id) ON DELETE CASCADE,
+    tier     TEXT NOT NULL,
+    position INTEGER NOT NULL,
+    PRIMARY KEY (board_id, media_id)
+  );
+  `,
+  // 18 — your own order for your lists
+  `
+  ALTER TABLE list ADD COLUMN position INTEGER;
+  `,
 ];
 
 /** Whether the database was created just now (no earlier data), per connection. */
