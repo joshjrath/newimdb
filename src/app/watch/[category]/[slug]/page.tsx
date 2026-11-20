@@ -120,7 +120,23 @@ export default async function DetailPage({ params, searchParams }: { params: Par
               <div className="toolbar">
                 <Link className="btn primary" href={`/studio/${m.id}`}>Edit</Link>
                 <ShareDialog
-                  data={{ title: m.title, year: m.year, type: m.type, posterUrl: m.posterUrl, rating: r.rating, ratingLabel: r.ratingLabel, status: r.status, body: r.body, spoiler: r.spoiler }}
+                  data={{
+                    title: m.title,
+                    year: m.year,
+                    type: m.type,
+                    posterUrl: m.posterUrl,
+                    backdropUrl: m.backdropUrl,
+                    rating: r.rating,
+                    ratingLabel: r.ratingLabel,
+                    status: r.status,
+                    body: r.body,
+                    spoiler: r.spoiler,
+                    imdb: m.imdb?.rating ?? null,
+                    genres: m.genres,
+                    watchedOn: r.watchedOn,
+                    watchedIn: r.watchedIn,
+                    people: m.people.map((p) => p.name),
+                  }}
                 />
                 <CopyLink />
                 <span className="private-note push-left">Only you can open this page</span>

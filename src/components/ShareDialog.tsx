@@ -1,27 +1,41 @@
 "use client";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { posterSrc } from "@/lib/client/api";
-import { STAR_PATH } from "./Stars";
-import { STATUS_LABEL, TYPE_LABEL, type MediaType, type WatchStatus } from "@/lib/domain/types";
-import { paragraphs, slugify } from "@/lib/domain/text";
+import { slugify } from "@/lib/domain/text";
+import { BG_KINDS, DEFAULT_OPTIONS, FONTS, LAYOUTS, PALETTES, SIZE_MAX, SIZE_MIN, SIZE_PRESETS, clampSize, luminance, normalizeOptions, readableOn, type ShareOptions } from "@/lib/share/options";
+import { dominantColor, renderSlides, type Art, type ShareData } from "@/lib/share/render";
 
-export interface ShareData {
-  title: string;
-  year: number | null;
-  type: MediaType;
-  posterUrl: string | null;
-  rating: number | null;
-  ratingLabel: string | null;
-  status: WatchStatus | null;
-  body: string;
-  spoiler: boolean;
-}
+export type { ShareData };
 
-const PRESETS = { portrait: { w: 1080, h: 1350, label: "Portrait 1080×1350" }, square: { w: 1080, h: 1080, label: "Square 1080×1080" } };
-/** Specular's two faces: Bricolage Grotesque for the facts, Archivo for the prose. */
-const DISPLAY = `"Bricolage Grotesque Variable", "Bricolage Grotesque", system-ui, sans-serif`;
-const SANS = `"Archivo", system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif`;
-const STATUS_COLOR: Record<WatchStatus, string> = { watching: "#8fb4ff", completed: "#6fdc98", dropped: "#ff7d7d", plan: "#c6b8f0", on_hold: "#e6c56f" };
+const STORE = "share-style-v2";
+const TABS = [
+  { key: "size", label: "Size" },
+  { key: "layout", label: "Layout" },
+  { key: "bg", label: "Background" },
+  { key: "type", label: "Text" },
+  { key: "show", label: "Show" },
+  { key: "export", label: "Export" },
+] as const;
+type Tab = (typeof TABS)[number]["key"];
+
+const SWATCHES = ["#ffffff", "#f2efe8", "#111111", "#f5c518", "#ff7f7f", "#7cc4ff", "#6fd3c7", "#c7b6f6", "#57d48c", "#ff9f43", "#e50914"];
+const SHOW_LABELS: [keyof ShareOptions["show"], string][] = [
+  ["poster", "Poster"],
+  ["kicker", "Small heading"],
+  ["title", "Title"],
+  ["meta", "Year and kind"],
+  ["genres", "Genres"],
+  ["stars", "Stars"],
+  ["score", "Score (4.5/5)"],
+  ["label", "Rating words"],
+  ["status", "Status"],
+  ["imdb", "IMDb rating"],
+  ["watched", "Where & when watched"],
+  ["people", "Watched with"],
+  ["review", "Review"],
+  ["spoiler", "Spoiler tag"],
+  ["pages", "Slide dots"],
+];
 
 function loadImage(src: string): Promise<HTMLImageElement | null> {
   return new Promise((resolve) => {
@@ -32,319 +46,382 @@ function loadImage(src: string): Promise<HTMLImageElement | null> {
   });
 }
 
-/** Average of the more saturated pixels — a usable "dominant" colour for the gradient. */
-function dominantColor(img: HTMLImageElement): [number, number, number] {
-  const c = document.createElement("canvas");
-  c.width = c.height = 24;
-  const ctx = c.getContext("2d")!;
-  ctx.drawImage(img, 0, 0, 24, 24);
-  const d = ctx.getImageData(0, 0, 24, 24).data;
-  let r = 0, g = 0, b = 0, n = 0;
-  for (let i = 0; i < d.length; i += 4) {
-    const max = Math.max(d[i], d[i + 1], d[i + 2]), min = Math.min(d[i], d[i + 1], d[i + 2]);
-    const sat = max === 0 ? 0 : (max - min) / max;
-    const w = 0.2 + sat * 2;
-    r += d[i] * w; g += d[i + 1] * w; b += d[i + 2] * w; n += w;
-  }
-  return n ? [r / n, g / n, b / n] : [40, 52, 80];
-}
+const blobOf = (c: HTMLCanvasElement, o: ShareOptions) => new Promise<Blob | null>((r) => c.toBlob(r, o.format === "jpeg" ? "image/jpeg" : "image/png", o.quality));
 
-/** Darken so white text always has strong contrast. */
-function shade([r, g, b]: [number, number, number], f: number) {
-  return `rgb(${Math.round(r * f)}, ${Math.round(g * f)}, ${Math.round(b * f)})`;
-}
-
-function wrap(ctx: CanvasRenderingContext2D, text: string, width: number): string[] {
-  const out: string[] = [];
-  for (const rawLine of text.split("\n")) {
-    const words = rawLine.split(/\s+/).filter(Boolean);
-    let line = "";
-    for (const w of words) {
-      const test = line ? `${line} ${w}` : w;
-      if (ctx.measureText(test).width <= width || !line) line = test;
-      else {
-        out.push(line);
-        line = w;
-      }
-    }
-    out.push(line);
-  }
-  return out;
-}
-
-type Line = { text: string; gapBefore: boolean };
-
-function layoutBody(ctx: CanvasRenderingContext2D, body: string, width: number, size: number): Line[] {
-  ctx.font = `${size}px ${SANS}`;
-  const lines: Line[] = [];
-  paragraphs(body).forEach((p, pi) => {
-    wrap(ctx, p, width).forEach((l, li) => lines.push({ text: l, gapBefore: pi > 0 && li === 0 }));
-  });
-  return lines;
-}
-
-/** Vertical space one line takes: line height plus the paragraph gap when it starts a paragraph. */
-const advance = (l: Line, size: number) => size * 1.45 + (l.gapBefore ? size * 0.7 : 0);
-const linesHeight = (lines: Line[], size: number) => lines.reduce((h, l) => h + advance(l, size), 0);
-
-function drawStars(ctx: CanvasRenderingContext2D, x: number, y: number, size: number, value: number) {
-  const path = new Path2D(STAR_PATH);
-  for (let i = 0; i < 5; i++) {
-    ctx.save();
-    ctx.translate(x + i * (size + 6), y);
-    ctx.scale(size / 24, size / 24);
-    ctx.fillStyle = "rgba(255,255,255,0.22)";
-    ctx.fill(path);
-    const fill = Math.max(0, Math.min(1, value - i));
-    if (fill > 0) {
-      ctx.save();
-      ctx.beginPath();
-      ctx.rect(0, 0, 24 * fill, 24);
-      ctx.clip();
-      ctx.fillStyle = "#f3e96c";
-      ctx.fill(path);
-      ctx.restore();
-    }
-    ctx.restore();
-  }
-}
-
-interface Art {
-  img: HTMLImageElement | null;
-  base: [number, number, number];
-}
-
-async function loadArt(posterUrl: string | null): Promise<Art> {
-  await document.fonts.ready; // canvas text needs the web fonts loaded first
-  const src = posterSrc(posterUrl);
-  const img = src ? await loadImage(src) : null;
-  return { img, base: img ? dominantColor(img) : [46, 60, 96] };
-}
-
-function render(data: ShareData, preset: keyof typeof PRESETS, brand: string, { img, base }: Art): HTMLCanvasElement[] {
-  const { w, h } = PRESETS[preset];
-  const pad = 72;
-  const posterW = preset === "portrait" ? 300 : 240;
-  const posterH = posterW * 1.5;
-  const textW = w - pad * 2;
-  const footerH = 70;
-
-  const paint = (ctx: CanvasRenderingContext2D) => {
-    const g = ctx.createLinearGradient(0, 0, w * 0.4, h);
-    g.addColorStop(0, shade(base, 0.62));
-    g.addColorStop(0.55, shade(base, 0.32));
-    g.addColorStop(1, shade(base, 0.14));
-    ctx.fillStyle = g;
-    ctx.fillRect(0, 0, w, h);
-  };
-  const footer = (ctx: CanvasRenderingContext2D, page: number, pages: number) => {
-    ctx.fillStyle = "rgba(255,255,255,0.72)";
-    ctx.font = `500 26px ${SANS}`;
-    ctx.textBaseline = "alphabetic";
-    ctx.fillText(brand, pad, h - pad + 18);
-    if (pages > 1) {
-      const t = `${page} / ${pages}`;
-      ctx.fillText(t, w - pad - ctx.measureText(t).width, h - pad + 18);
-    }
-  };
-
-  // Measure the header on slide 1 to know how much room the review gets.
-  const probe = document.createElement("canvas").getContext("2d")!;
-  const headX = pad + posterW + 40;
-  const headW = w - headX - pad;
-  probe.font = `800 54px ${DISPLAY}`;
-  const titleLines = wrap(probe, data.title, headW).slice(0, 4);
-  const bodyTop1 = pad + posterH + 48;
-  const avail1 = h - bodyTop1 - pad - footerH;
-  const availN = h - pad * 2 - footerH - 60;
-  const body = data.body.trim();
-
-  // Fit: shrink from 40px to 26px; if it still doesn't fit, continue on extra slides.
-  let size = 40;
-  let lines = layoutBody(probe, body, textW, size);
-  while (size > 26 && linesHeight(lines, size) > avail1) {
-    size -= 2;
-    lines = layoutBody(probe, body, textW, size);
-  }
-  const pagesLines: Line[][] = [[]];
-  let room = avail1;
-  let used = 0;
-  for (const l of lines) {
-    if (used + advance(l, size) > room && pagesLines[pagesLines.length - 1].length) {
-      pagesLines.push([]);
-      room = availN;
-      used = 0;
-      l.gapBefore = false;
-    }
-    pagesLines[pagesLines.length - 1].push(l);
-    used += advance(l, size);
-  }
-  const pages = pagesLines.length;
-
-  const slides: HTMLCanvasElement[] = [];
-  for (let p = 0; p < pages; p++) {
-    const c = document.createElement("canvas");
-    c.width = w;
-    c.height = h;
-    const ctx = c.getContext("2d")!;
-    paint(ctx);
-    let y: number;
-    if (p === 0) {
-      // poster
-      ctx.save();
-      ctx.shadowColor = "rgba(0,0,0,0.45)";
-      ctx.shadowBlur = 40;
-      ctx.shadowOffsetY = 16;
-      ctx.fillStyle = "rgba(255,255,255,0.08)";
-      ctx.fillRect(pad, pad, posterW, posterH);
-      ctx.restore();
-      if (img) {
-        // cover-fit into 2:3 without distorting
-        const r = Math.max(posterW / img.width, posterH / img.height);
-        const sw = posterW / r, sh = posterH / r;
-        ctx.drawImage(img, (img.width - sw) / 2, 0, sw, sh, pad, pad, posterW, posterH);
-      } else {
-        ctx.fillStyle = "rgba(255,255,255,0.75)";
-        ctx.font = `700 30px ${DISPLAY}`;
-        wrap(ctx, data.title, posterW - 40).slice(0, 5).forEach((l, i) => ctx.fillText(l, pad + 20, pad + 60 + i * 38));
-      }
-      // header
-      let hy = pad + 50;
-      ctx.fillStyle = "#ffffff";
-      ctx.font = `800 54px ${DISPLAY}`;
-      titleLines.forEach((l) => {
-        ctx.fillText(l, headX, hy);
-        hy += 62;
-      });
-      ctx.fillStyle = "rgba(255,255,255,0.75)";
-      ctx.font = `400 28px ${SANS}`;
-      ctx.fillText([data.year, TYPE_LABEL[data.type]].filter(Boolean).join("  ·  "), headX, hy + 4);
-      hy += 40;
-      if (data.rating != null) {
-        drawStars(ctx, headX, hy, 46, data.rating);
-        hy += 86;
-        if (data.ratingLabel) {
-          ctx.fillStyle = "rgba(255,255,255,0.88)";
-          ctx.font = `700 30px ${DISPLAY}`;
-          ctx.fillText(data.ratingLabel, headX, hy - 6);
-          hy += 30;
-        }
-      }
-      if (data.status) {
-        const label = STATUS_LABEL[data.status];
-        ctx.font = `600 24px ${SANS}`;
-        const tw = ctx.measureText(label).width;
-        const py = hy + 8;
-        ctx.strokeStyle = STATUS_COLOR[data.status];
-        ctx.fillStyle = STATUS_COLOR[data.status];
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.roundRect(headX, py, tw + 52, 40, 20);
-        ctx.stroke();
-        ctx.beginPath();
-        ctx.arc(headX + 22, py + 20, 6, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.fillText(label, headX + 36, py + 29);
-      }
-      y = bodyTop1;
-    } else {
-      ctx.fillStyle = "rgba(255,255,255,0.7)";
-      ctx.font = `700 30px ${DISPLAY}`;
-      ctx.fillText(`${data.title}, continued`, pad, pad + 24);
-      y = pad + 90;
-    }
-    ctx.fillStyle = "#ffffff";
-    ctx.font = `${size}px ${SANS}`;
-    for (const l of pagesLines[p]) {
-      y += advance(l, size);
-      ctx.fillText(l.text, pad, y - size * 0.35);
-    }
-    footer(ctx, p + 1, pages);
-    slides.push(c);
-  }
-  return slides;
-}
-
+/** Share: a studio for making an image of your rating and review for any platform. */
 export function ShareDialog({ data }: { data: ShareData }) {
   const ref = useRef<HTMLDialogElement>(null);
-  const holder = useRef<HTMLDivElement>(null);
-  const [preset, setPreset] = useState<keyof typeof PRESETS>("portrait");
-  const [brand, setBrand] = useState("specular.blog");
-  const [slides, setSlides] = useState<HTMLCanvasElement[] | null>(null);
-  const [art, setArt] = useState<Art | null>(null);
+  const stage = useRef<HTMLDivElement>(null);
   const [opened, setOpened] = useState(false);
+  const [tab, setTab] = useState<Tab>("size");
+  const [o, setO] = useState<ShareOptions>(DEFAULT_OPTIONS);
+  const [art, setArt] = useState<Art | null>(null);
+  const [slides, setSlides] = useState<HTMLCanvasElement[]>([]);
+  const [current, setCurrent] = useState(0);
+  const [note, setNote] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const canShareFiles = typeof navigator !== "undefined" && "canShare" in navigator;
 
-  // Load the poster and its colour once per open.
+  // Your style, remembered on this device.
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(STORE);
+      if (raw) setO(normalizeOptions(JSON.parse(raw)));
+    } catch {}
+  }, []);
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORE, JSON.stringify(o));
+    } catch {}
+  }, [o]);
+  const set = (patch: Partial<ShareOptions>) => setO((x) => ({ ...x, ...patch }));
+  const setShow = (k: keyof ShareOptions["show"], v: boolean) => setO((x) => ({ ...x, show: { ...x.show, [k]: v } }));
+
+  // Artwork, once per open.
   useEffect(() => {
     if (!opened) return;
     let cancelled = false;
-    loadArt(data.posterUrl).then((a) => !cancelled && setArt(a));
+    (async () => {
+      await document.fonts.ready;
+      const [poster, backdrop] = await Promise.all([data.posterUrl ? loadImage(posterSrc(data.posterUrl)!) : null, data.backdropUrl ? loadImage(posterSrc(data.backdropUrl)!) : null]);
+      if (!cancelled) setArt((a) => ({ poster, backdrop, upload: a?.upload ?? null, base: poster ? dominantColor(poster) : backdrop ? dominantColor(backdrop) : [46, 60, 96] }));
+    })();
     return () => {
       cancelled = true;
     };
-  }, [opened, data.posterUrl]);
+  }, [opened, data.posterUrl, data.backdropUrl]);
 
-  // Redraw on changes; typing in the footer field waits for a short pause.
+  // Redraw shortly after any change.
   useEffect(() => {
-    if (!art) return;
+    if (!art || !opened) return;
     const t = setTimeout(() => {
-      const next = render(data, preset, brand, art);
-      next.forEach((c, i) => c.setAttribute("aria-label", `Slide ${i + 1} of ${next.length}`));
-      holder.current?.replaceChildren(...next);
-      setSlides(next);
-    }, 200);
+      try {
+        const next = renderSlides(data, o, art);
+        setSlides(next);
+        setCurrent((c) => Math.min(c, next.length - 1));
+      } catch (e) {
+        setNote(`Couldn't draw that: ${(e as Error).message}`);
+      }
+    }, 120);
     return () => clearTimeout(t);
-  }, [art, preset, brand, data]);
+  }, [art, o, data, opened]);
 
-  const download = () => {
-    slides?.forEach((c, i) => {
-      c.toBlob((blob) => {
-        if (!blob) return;
-        const a = document.createElement("a");
-        a.href = URL.createObjectURL(blob);
-        a.download = `${slugify(data.title)}-${preset}${slides.length > 1 ? `-${i + 1}` : ""}.png`;
-        a.click();
-        setTimeout(() => URL.revokeObjectURL(a.href), 2000);
-      }, "image/png");
-    });
+  useEffect(() => {
+    const c = slides[current];
+    if (c && stage.current) {
+      c.setAttribute("aria-label", `Preview, slide ${current + 1} of ${slides.length}`);
+      c.setAttribute("role", "img");
+      stage.current.replaceChildren(c);
+    }
+  }, [slides, current]);
+
+  const thumbs = useMemo(() => slides.map((c) => c.toDataURL("image/jpeg", 0.5)), [slides]);
+
+  /** Full-quality slides (double size when asked). */
+  const exportSlides = () => (o.scale === 2 && art ? renderSlides(data, { ...o, w: o.w * 2, h: o.h * 2 }, art) : slides);
+  const fileName = (i: number, n: number) => `${slugify(data.title)}-${o.w}x${o.h}${n > 1 ? `-${i + 1}` : ""}.${o.format === "jpeg" ? "jpg" : "png"}`;
+
+  const download = async () => {
+    setBusy(true);
+    const list = exportSlides();
+    for (let i = 0; i < list.length; i++) {
+      const blob = await blobOf(list[i], o);
+      if (!blob) continue;
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = fileName(i, list.length);
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 3000);
+    }
+    setBusy(false);
+    setNote(list.length > 1 ? `Downloaded ${list.length} images.` : "Downloaded.");
   };
+  const copy = async () => {
+    try {
+      const c = exportSlides()[current];
+      const blob = await new Promise<Blob | null>((r) => c.toBlob(r, "image/png"));
+      if (!blob) throw new Error("no image");
+      await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
+      setNote("Copied. Paste it straight into Discord, X or a message.");
+    } catch {
+      setNote("This browser won't copy images. Use Download instead.");
+    }
+  };
+  const share = async () => {
+    try {
+      const list = exportSlides();
+      const files = (await Promise.all(list.map((c) => blobOf(c, o)))).map((b, i) => new File([b!], fileName(i, list.length), { type: b!.type }));
+      if (!navigator.canShare?.({ files })) throw new Error("no");
+      await navigator.share({ files, title: data.title });
+    } catch (e) {
+      if ((e as Error).name !== "AbortError") setNote("Sharing files isn't supported here. Use Download or Copy.");
+    }
+  };
+  const upload = (f: File | undefined) => {
+    if (!f) return;
+    const reader = new FileReader();
+    reader.onload = async () => {
+      const img = await loadImage(String(reader.result));
+      if (img) {
+        setArt((a) => (a ? { ...a, upload: img } : a));
+        set({ bg: "image", ...(luminance(o.text) < 0.4 ? { text: "#ffffff", accent: "#f5c518" } : {}) });
+      }
+    };
+    reader.readAsDataURL(f);
+  };
+  const pickPalette = (key: string) => {
+    const p = PALETTES.find((x) => x.key === key)!;
+    set({ bg: "palette", palette: key, text: p.text, accent: p.accent });
+  };
+  const pickLayout = (key: ShareOptions["layout"]) => set({ layout: key, align: key === "minimal" || key === "hero" ? "center" : key === "classic" ? "left" : o.align });
+  const platforms = [...new Set(SIZE_PRESETS.map((p) => p.platform))];
+  const ratio = o.w / o.h;
 
   return (
     <>
-      <button className="btn" onClick={() => { setOpened(true); ref.current?.showModal(); }}>Make Instagram image</button>
-      <dialog ref={ref} className="modal wide" aria-labelledby="share-h" onClose={() => setOpened(false)}>
-        <div className="share-layout">
-          <div className="stack tight">
-            <h2 id="share-h">Instagram image</h2>
-            <div className="share-previews" ref={holder} />
-          </div>
-          <div className="stack tight">
-            <label className="field">
-              <span>Size</span>
-              <select className="select" value={preset} onChange={(e) => setPreset(e.target.value as keyof typeof PRESETS)}>
-                {Object.entries(PRESETS).map(([k, v]) => (
-                  <option key={k} value={k}>{v.label}</option>
+      <button className="btn" onClick={() => { setOpened(true); ref.current?.showModal(); }}>
+        <span aria-hidden="true">↗</span> Share
+      </button>
+      <dialog ref={ref} className="modal share-modal" aria-labelledby="share-h" onClose={() => setOpened(false)}>
+        <div className="share-studio">
+          <div className="share-stage-col">
+            <div className="share-top">
+              <h2 id="share-h">Share</h2>
+              <span className="hint">{o.w} × {o.h}{o.scale === 2 ? ` (exports at ${o.w * 2} × ${o.h * 2})` : ""}</span>
+              <button type="button" className="btn small ghost push-left" onClick={() => ref.current?.close()} aria-label="Close">✕</button>
+            </div>
+            <div className="share-stage" style={{ aspectRatio: `${o.w} / ${o.h}`, maxWidth: `min(100%, calc(66vh * ${ratio.toFixed(3)}))`, ["--r" as string]: ratio.toFixed(3) }}>
+              <div ref={stage} className="share-canvas" />
+              {!art && <div className="share-loading">Loading artwork…</div>}
+            </div>
+            {slides.length > 1 && (
+              <div className="share-thumbs" role="tablist" aria-label="Slides">
+                {thumbs.map((t, i) => (
+                  <button key={i} type="button" role="tab" aria-selected={i === current} onClick={() => setCurrent(i)}>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={t} alt={`Slide ${i + 1}`} />
+                  </button>
                 ))}
-              </select>
-            </label>
-            <label className="field">
-              <span>Footer text</span>
-              <input className="input" value={brand} maxLength={40} onChange={(e) => setBrand(e.target.value)} />
-            </label>
-            {data.spoiler && <div className="notice warn">This review is marked as containing spoilers.</div>}
-            {slides && slides.length > 1 && (
-              <p className="hint">The full review didn&apos;t fit on one image, so it continues across {slides.length} slides for a carousel post.</p>
+              </div>
             )}
-            <p className="hint">The image is made on this device and downloaded. Nothing is posted or uploaded anywhere.</p>
-            <div className="actions">
-              <button className="btn ghost" onClick={() => ref.current?.close()}>Close</button>
-              <button className="btn primary" onClick={download} disabled={!slides}>
-                Download {slides && slides.length > 1 ? `${slides.length} PNGs` : "PNG"}
+          </div>
+
+          <div className="share-panel">
+            <div className="share-tabs" role="tablist" aria-label="Settings">
+              {TABS.map((t) => (
+                <button key={t.key} type="button" role="tab" aria-selected={tab === t.key} onClick={() => setTab(t.key)}>{t.label}</button>
+              ))}
+            </div>
+
+            <div className="share-tab-body">
+              {tab === "size" && (
+                <>
+                  {platforms.map((pf) => (
+                    <div key={pf} className="share-group">
+                      <span className="share-group-h">{pf}</span>
+                      <div className="share-sizes">
+                        {SIZE_PRESETS.filter((p) => p.platform === pf).map((p) => (
+                          <button key={p.key} type="button" aria-pressed={o.sizeKey === p.key} onClick={() => set({ w: p.w, h: p.h, sizeKey: p.key })}>
+                            <span className="ratio-box" aria-hidden="true" style={{ aspectRatio: `${p.w} / ${p.h}`, [p.w >= p.h ? "width" : "height"]: 26 }} />
+                            <span>{p.label}<small>{p.w}×{p.h}</small></span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                  <div className="share-group">
+                    <span className="share-group-h">Custom</span>
+                    <div className="share-custom">
+                      <label>W<input className="input" type="number" min={SIZE_MIN} max={SIZE_MAX} value={o.w} onChange={(e) => set({ w: clampSize(Number(e.target.value)), sizeKey: "custom" })} /></label>
+                      <button type="button" className="btn small ghost" title="Swap width and height" onClick={() => set({ w: o.h, h: o.w, sizeKey: "custom" })}>⇄</button>
+                      <label>H<input className="input" type="number" min={SIZE_MIN} max={SIZE_MAX} value={o.h} onChange={(e) => set({ h: clampSize(Number(e.target.value)), sizeKey: "custom" })} /></label>
+                    </div>
+                    <p className="hint">Any size from {SIZE_MIN} to {SIZE_MAX} px. Everything rearranges to fit.</p>
+                  </div>
+                </>
+              )}
+
+              {tab === "layout" && (
+                <>
+                  <div className="share-layouts">
+                    {LAYOUTS.map((l) => (
+                      <button key={l.key} type="button" aria-pressed={o.layout === l.key} onClick={() => pickLayout(l.key)}>
+                        <span className={`layout-thumb lt-${l.key}`} aria-hidden="true"><i /><b /><em /></span>
+                        <span>{l.label}<small>{l.hint}</small></span>
+                      </button>
+                    ))}
+                  </div>
+                  <Seg label="Alignment" value={o.align} options={[["left", "Left"], ["center", "Centre"]]} onChange={(v) => set({ align: v as ShareOptions["align"] })} />
+                  <Range label="Margins" value={o.margin} min={0.5} max={2} step={0.05} fmt={(v) => `${Math.round(v * 100)}%`} onChange={(v) => set({ margin: v })} />
+                  <Range label="Poster corners" value={o.posterRadius} min={0} max={60} step={1} fmt={(v) => `${v}px`} onChange={(v) => set({ posterRadius: v })} />
+                  <Check label="Poster shadow" checked={o.posterShadow} onChange={(v) => set({ posterShadow: v })} />
+                  <Check label="Poster outline (accent colour)" checked={o.posterBorder} onChange={(v) => set({ posterBorder: v })} />
+                  <span className="share-group-h">If the review is long</span>
+                  <Seg label="Long reviews" value={o.reviewMode} options={[["fit", "Shrink to fit"], ["carousel", "Carousel"], ["excerpt", "Excerpt"]]} onChange={(v) => set({ reviewMode: v as ShareOptions["reviewMode"] })} />
+                  {o.reviewMode === "excerpt" && <Range label="Excerpt length" value={o.excerpt} min={60} max={1200} step={20} fmt={(v) => `${v} characters`} onChange={(v) => set({ excerpt: v })} />}
+                  {o.reviewMode === "carousel" && <p className="hint">The review continues across extra slides, ready for an Instagram carousel or a thread.</p>}
+                </>
+              )}
+
+              {tab === "bg" && (
+                <>
+                  <div className="share-chips">
+                    {BG_KINDS.map((b) => (
+                      <button key={b.key} type="button" aria-pressed={o.bg === b.key} onClick={() => (b.key === "palette" ? pickPalette(o.palette) : set({ bg: b.key, ...(b.key !== "solid" && b.key !== "gradient" && luminance(o.text) < 0.4 ? { text: "#ffffff", accent: "#f5c518" } : {}) }))}>{b.label}</button>
+                    ))}
+                  </div>
+                  {o.bg === "palette" && (
+                    <div className="share-palettes">
+                      {PALETTES.map((p) => (
+                        <button key={p.key} type="button" aria-pressed={o.palette === p.key} onClick={() => pickPalette(p.key)} title={p.label} style={{ background: `linear-gradient(135deg, ${p.c1}, ${p.c2})`, color: p.text }}>
+                          <span>{p.label}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  {(o.bg === "solid" || o.bg === "gradient") && (
+                    <div className="share-colors">
+                      <Color label={o.bg === "solid" ? "Colour" : "From"} value={o.color1} onChange={(v) => set({ color1: v })} />
+                      {o.bg === "gradient" && <Color label="To" value={o.color2} onChange={(v) => set({ color2: v })} />}
+                      <button type="button" className="btn small ghost" onClick={() => set({ text: readableOn(o.color1, o.bg === "gradient" ? o.color2 : o.color1) })}>Readable text</button>
+                    </div>
+                  )}
+                  {(o.bg === "gradient" || o.bg === "palette") && <Range label="Gradient angle" value={o.angle} min={0} max={360} step={5} fmt={(v) => `${v}°`} onChange={(v) => set({ angle: v })} />}
+                  {(o.bg === "blur" || o.layout === "cinematic") && (
+                    <Seg label="Artwork" value={o.art} options={[["poster", "Poster"], ["backdrop", data.backdropUrl ? "Backdrop still" : "Backdrop (none)"]]} onChange={(v) => set({ art: v as ShareOptions["art"] })} />
+                  )}
+                  {o.bg === "image" && (
+                    <label className="share-upload">
+                      <input type="file" accept="image/*" onChange={(e) => upload(e.target.files?.[0])} />
+                      <span>{art?.upload ? "Change image…" : "Choose an image…"}</span>
+                      <small>Stays on this device. Nothing is uploaded.</small>
+                    </label>
+                  )}
+                  {(o.bg === "blur" || o.bg === "image") && <Range label="Blur" value={o.blur} min={o.bg === "blur" ? 0.35 : 0} max={1} step={0.05} fmt={(v) => `${Math.round(v * 100)}%`} onChange={(v) => set({ blur: v })} />}
+                  {(o.bg === "auto" || o.bg === "blur" || o.bg === "image" || o.layout === "cinematic") && <Range label="Darken" value={o.dim} min={0} max={0.9} step={0.05} fmt={(v) => `${Math.round(v * 100)}%`} onChange={(v) => set({ dim: v })} />}
+                  <Check label="Film grain" checked={o.grain} onChange={(v) => set({ grain: v })} />
+                  <Check label="Vignette (darker edges)" checked={o.vignette} onChange={(v) => set({ vignette: v })} />
+                </>
+              )}
+
+              {tab === "type" && (
+                <>
+                  <span className="share-group-h">Font</span>
+                  <div className="share-fonts">
+                    {(Object.keys(FONTS) as (keyof typeof FONTS)[]).map((k) => (
+                      <button key={k} type="button" aria-pressed={o.font === k} onClick={() => set({ font: k })} style={{ fontFamily: FONTS[k].head }}>
+                        <b>Aa</b>
+                        <small>{FONTS[k].label}</small>
+                      </button>
+                    ))}
+                  </div>
+                  <Range label="Text size" value={o.textScale} min={0.7} max={1.5} step={0.05} fmt={(v) => `${Math.round(v * 100)}%`} onChange={(v) => set({ textScale: v })} />
+                  <Swatches label="Text colour" value={o.text} onChange={(v) => set({ text: v })} />
+                  <Swatches label="Accent (stars, heading, quote)" value={o.accent} onChange={(v) => set({ accent: v })} />
+                  <Check label="Soft shadow behind text" checked={o.shadowText} onChange={(v) => set({ shadowText: v })} />
+                  <Check label="Big quote mark before the review" checked={o.quote} onChange={(v) => set({ quote: v })} />
+                  <label className="field">
+                    <span>Small heading</span>
+                    <input className="input" value={o.kicker} maxLength={60} placeholder="e.g. My review, Hot take, Rewatch" onChange={(e) => set({ kicker: e.target.value })} />
+                  </label>
+                  <label className="field">
+                    <span>Footer</span>
+                    <input className="input" value={o.footer} maxLength={80} placeholder="Optional: your @handle, a hashtag…" onChange={(e) => set({ footer: e.target.value })} />
+                  </label>
+                </>
+              )}
+
+              {tab === "show" && (
+                <div className="share-toggles">
+                  {SHOW_LABELS.map(([k, label]) => (
+                    <label key={k} className={`share-toggle${o.show[k] ? " on" : ""}`}>
+                      <input type="checkbox" checked={o.show[k]} onChange={(e) => setShow(k, e.target.checked)} />
+                      {label}
+                    </label>
+                  ))}
+                  {o.layout === "cinematic" && <p className="hint">Cinematic uses the artwork as the whole background, so there&apos;s no separate poster.</p>}
+                  {o.layout === "minimal" && <p className="hint">Minimal is type only: the poster stays off.</p>}
+                </div>
+              )}
+
+              {tab === "export" && (
+                <>
+                  <Seg label="Format" value={o.format} options={[["png", "PNG (sharpest)"], ["jpeg", "JPEG (smaller)"]]} onChange={(v) => set({ format: v as ShareOptions["format"] })} />
+                  {o.format === "jpeg" && <Range label="JPEG quality" value={o.quality} min={0.5} max={1} step={0.02} fmt={(v) => `${Math.round(v * 100)}%`} onChange={(v) => set({ quality: v })} />}
+                  <Seg label="Resolution" value={String(o.scale)} options={[["1", `1× (${o.w}×${o.h})`], ["2", `2× (${o.w * 2}×${o.h * 2})`]]} onChange={(v) => set({ scale: Number(v) })} />
+                  <p className="hint">Made on this device. Nothing is posted or uploaded anywhere.</p>
+                </>
+              )}
+            </div>
+
+            {data.spoiler && o.show.review && <div className="notice warn">This review is marked as containing spoilers.</div>}
+            {note && <p className="hint share-note" role="status">{note}</p>}
+            <div className="share-actions">
+              <button type="button" className="btn ghost small" onClick={() => setO({ ...DEFAULT_OPTIONS, w: o.w, h: o.h, sizeKey: o.sizeKey })} title="Back to the default look (keeps the size)">Reset look</button>
+              <button type="button" className="btn" onClick={copy} disabled={!slides.length}>Copy</button>
+              {canShareFiles && <button type="button" className="btn" onClick={share} disabled={!slides.length}>Share…</button>}
+              <button type="button" className="btn primary" onClick={download} disabled={!slides.length || busy}>
+                Download{slides.length > 1 ? ` ${slides.length}` : ""} {o.format === "jpeg" ? "JPEG" : "PNG"}
               </button>
             </div>
           </div>
         </div>
       </dialog>
     </>
+  );
+}
+
+/* ---------------- little controls ---------------- */
+
+function Seg({ label, value, options, onChange }: { label: string; value: string; options: [string, string][]; onChange: (v: string) => void }) {
+  return (
+    <div className="share-seg" role="radiogroup" aria-label={label}>
+      {options.map(([k, l]) => (
+        <button key={k} type="button" role="radio" aria-checked={value === k} onClick={() => onChange(k)}>{l}</button>
+      ))}
+    </div>
+  );
+}
+
+function Range({ label, value, min, max, step, fmt, onChange }: { label: string; value: number; min: number; max: number; step: number; fmt: (v: number) => string; onChange: (v: number) => void }) {
+  return (
+    <label className="share-range">
+      <span>{label}<b>{fmt(value)}</b></span>
+      <input type="range" min={min} max={max} step={step} value={value} onChange={(e) => onChange(Number(e.target.value))} />
+    </label>
+  );
+}
+
+function Check({ label, checked, onChange }: { label: string; checked: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <label className="check">
+      <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} />
+      {label}
+    </label>
+  );
+}
+
+function Color({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
+  return (
+    <label className="share-color">
+      <input type="color" value={value} onChange={(e) => onChange(e.target.value)} />
+      <span>{label}<small>{value}</small></span>
+    </label>
+  );
+}
+
+function Swatches({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
+  return (
+    <div className="share-swatches">
+      <span className="share-group-h">{label}</span>
+      <div>
+        {SWATCHES.map((c) => (
+          <button key={c} type="button" aria-pressed={value.toLowerCase() === c} aria-label={c} style={{ background: c }} onClick={() => onChange(c)} />
+        ))}
+        <label className="swatch-custom" title="Any colour">
+          <input type="color" value={value} onChange={(e) => onChange(e.target.value)} aria-label={`${label}: any colour`} />
+        </label>
+      </div>
+    </div>
   );
 }

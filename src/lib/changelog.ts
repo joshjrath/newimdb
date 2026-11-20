@@ -12,6 +12,20 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    id: "2026-11-20-share-studio",
+    date: "2026-11-20",
+    title: "Share: a whole new image studio",
+    items: [
+      "\"Make Instagram image\" is now Share, a full studio with a big live preview. The old specular.blog footer is gone, and the footer is empty unless you add one.",
+      "Any size: one-tap presets for Instagram (post, square, story), X, Discord, YouTube, TikTok, Threads, Bluesky, Facebook, Pinterest, Reddit and wallpapers, or type your own width and height.",
+      "Five layouts (Classic, Poster hero, Cinematic, Big score, Minimal) that rearrange to fit any shape.",
+      "Backgrounds from the poster, blurred artwork, 12 palettes, your own gradient or solid colour, or your own image (it stays on your device). Darken, blur, grain and vignette controls.",
+      "Four fonts, text size, text and accent colours, alignment, margins, poster corners, shadow and outline.",
+      "Choose what shows: poster, heading, title, year, genres, stars, score, rating words, status, IMDb, where/when watched, who with, review, spoiler tag.",
+      "Long reviews: shrink to fit, an excerpt, or a carousel of slides. Export as PNG or JPEG at 1× or 2×, copy to the clipboard, or share straight from your phone. Your style is remembered.",
+    ],
+  },
+  {
     id: "2026-11-19-tiers-d",
     date: "2026-11-19",
     title: "Tier lists: a D tier and bigger posters",
